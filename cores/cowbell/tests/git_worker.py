@@ -232,6 +232,8 @@ def run(bin_dir, core_dir):
                     core,
                     "--import-format",
                     "objdef",
+                    "--baseline-objdef-dir",
+                    core,
                     *[
                         arg
                         for name, address in sockets.items()
@@ -332,6 +334,8 @@ def run(bin_dir, core_dir):
             check_changes(
                 client, url, package, incoming, git, fetch_started, fetch_release
             )
+            daemon_log = processes[0][1].read_text()
+            assert "Task aborted, time exceeded" not in daemon_log, daemon_log[-8000:]
             print(
                 "PASS Cowbell Git capabilities, refs, tree, snapshot, binary data, commit pin, and errors",
                 flush=True,
@@ -458,7 +462,14 @@ def check_changes(client, url, package, incoming, git, fetch_started, fetch_rele
             scenario + "_REJECTED",
         )
 
-    # Stage the real Cowbell subtree with its installed bindings and local upstream override.
+    # Change one real verb while fetching and validating the complete Cowbell subtree.
+    entry = package.parent / "cores/cowbell/src/git/git_entry.moo"
+    original = entry.read_text()
+    header = "  method has_content owner: HACKER\n"
+    assert original.count(header) == 1
+    entry.write_text(original.replace(header, header + '    "Upstream fixture revision.";\n'))
+    git("add", ".")
+    git("commit", "-m", "Update a Cowbell verb")
     check(
         f'$change_manager:command({{"upstream", "git", {json.dumps(url)}, "refs/heads/main", "cores/cowbell/src"}}); '
         '#0.git_review = $change_manager:stage("cowbell");',
@@ -469,12 +480,17 @@ def check_changes(client, url, package, incoming, git, fetch_started, fetch_rele
         'const page = $change_manager:review($git_review["review_id"], 1); '
         'for diagnostic in ($change_manager.pending[$git_review["review_id"]]["report"]["diagnostics"]) diagnostic["code"] in {"property_fields_unmanaged", "definition_fields_unmanaged"} || raise(E_ASSERT, toliteral(diagnostic)); endfor '
         'for row in ($change_manager.pending[$git_review["review_id"]]["report"]["rows"]) '
-        'row["classification"] == "unchanged" || raise(E_ASSERT, toliteral(row)); endfor '
+        'const expected = row["object"] == $git_entry && row["names"] == {"has_content"} ? "upstream" | "unchanged"; '
+        'row["classification"] == expected || raise(E_ASSERT, toliteral(row)); endfor '
+        'page["counts"]["upstream"] == 1 || raise(E_ASSERT); '
         '$change_manager:apply($git_review["review_id"], 1);',
         "CORE_APPLY_STARTED",
     )
     wait_for("complete")
     check(
+        'const receipt = $change_manager:status($git_review["review_id"]); '
+        'receipt["decision_count"] == 1 && receipt["decisions"][1]["effect"] == "program" || raise(E_ASSERT); '
+        'verb_code($git_entry, "has_content")[1] == "\\\"Upstream fixture revision.\\\";" || raise(E_ASSERT); '
         f'$change_manager:packages()["packages"]["cowbell"]["upstream"]["repository"] == {json.dumps(url)} || raise(E_ASSERT);',
         "LOCAL_UPSTREAM_PRESERVED",
     )

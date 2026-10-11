@@ -216,7 +216,7 @@ object CHANGE_TOOLS [
     except failure (ANY)
       const detail = typeof(failure[3]) == TYPE_MAP ? this:_json(failure[3]) | [];
       const code = `detail["code"] ! E_RANGE => failure[1] == E_PERM ? "permission_denied" | failure[1] == E_QUOTA ? "limit_exceeded" | "invalid_request"';
-      const recovery = code == "permission_denied" ? "Use an authorized administrator identity. Do not retry with a forged actor." | code in {"stale_generation", "stale_preparation", "stale_cursor", "stale_review"} ? "Read status, refresh if live contents changed, and inspect the affected decisions." | code == "active_review" ? "Read packages and resume or finish the active review." | "Read the error details and correct the request. Do not bypass the change service.";
+      const recovery = code == "permission_denied" ? "Use an authorized administrator identity. Do not retry with a forged actor." | code in {"stale_generation", "stale_preparation", "stale_cursor", "stale_review"} ? "Read status, refresh if live contents changed, and inspect the affected decisions." | code == "active_review" ? (maphaskey(detail, "review_id") ? "Read status using the review_id in details, then resume or finish that review." | "Read packages and resume or finish the active review.") | "Read the error details and correct the request. Do not bypass the change service.";
       return ["schema" -> 1, "ok" -> false, "error" -> ["code" -> code, "message" -> tostr(failure[2]), "details" -> detail, "recovery" -> recovery]];
     endtry
   endmethod

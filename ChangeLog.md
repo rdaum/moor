@@ -336,6 +336,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Cowbell change reviews avoid duplicate whole-core comparisons during fetch and apply. Comparisons
+  skip property values outside the update, and apply formats receipts only for applied changes.
+  Repeating `@changes fetch` now links to the existing review or its status.
+- Cowbell's bare `@changes` command opens its overview instead of reporting "Invalid argument". Help
+  links for commands without argument placeholders now use the complete command directly.
 - Change reviews account for inherited permissions when comparing value-only property overrides,
   avoiding false local edits after import.
 - Meadow can refresh a stale change comparison against the running MOO. Refreshing asks for

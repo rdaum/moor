@@ -248,7 +248,15 @@ fn names(names: &[Symbol]) -> Var {
 /// Identify the live state relevant to one saved decision. Review-wide evidence still
 /// guards apply; this narrower revision lets callers retain unaffected decisions after
 /// refreshing another member or changing group policy. Detail text is not part of it.
-fn member_revision(report: Var, guards: &[Var], context: &[Var]) -> Result<Var, ReviewError> {
+fn member_revision(
+    report: Var,
+    guards: &[Var],
+    context: &[Var],
+    include_revision: bool,
+) -> Result<Var, ReviewError> {
+    if !include_revision {
+        return Ok(report);
+    }
     let map = report.as_map().unwrap();
     let revision = digest(&v_list(&[
         v_list(guards),
@@ -323,6 +331,7 @@ pub(crate) fn analyze(
     options: &CompileOptions,
     sources: &Var,
     request: &Var,
+    for_preview: bool,
 ) -> Result<Analysis, ReviewError> {
     let req = fields(
         request,
@@ -587,6 +596,7 @@ pub(crate) fn analyze(
                 report,
                 &guards[guard_start..],
                 &member_context,
+                for_preview,
             )?);
             if proposed || blocked {
                 continue;
@@ -673,6 +683,7 @@ pub(crate) fn analyze(
                     report,
                     &guards[guard_start..],
                     &object_context,
+                    for_preview,
                 )?);
                 rows.push(row);
                 continue;
@@ -720,7 +731,11 @@ pub(crate) fn analyze(
                 blockers.push(v_str("object_identity_mismatch"));
             }
             let live_hash = program_fingerprint(&live)?;
-            let incoming_hash = program_fingerprint(&verb.program)?;
+            let incoming_hash = if crate::fingerprint::same_compiled_program(&live, &verb.program) {
+                live_hash.clone()
+            } else {
+                program_fingerprint(&verb.program)?
+            };
             let classification = classify(base.as_deref(), &live_hash, &incoming_hash);
             if !adoption && base.is_none() {
                 blockers.push(v_str("adoption_required"));
@@ -768,142 +783,155 @@ pub(crate) fn analyze(
                     _ => "defer",
                 }
             };
-            let mut output = vec![
-                ("id", v_str(&id)),
-                ("object", v_obj(object)),
-                ("field", v_str("program")),
-                ("names", names(&verb.names)),
-                ("source", v_str(label)),
-                ("classification", v_str(classification)),
-                (
-                    "base",
-                    base.as_deref().map(v_str).unwrap_or_else(|| v_list(&[])),
-                ),
-                ("live", v_str(&live_hash)),
-                ("incoming", v_str(&incoming_hash)),
-                ("eligible", v_bool(eligible)),
-                ("default", v_str(default)),
-                ("blockers", v_list(&blockers)),
-                (
-                    "choices",
-                    v_list(&if !eligible {
-                        vec![v_str("defer")]
-                    } else if adoption {
-                        vec![v_str("incoming"), v_str("defer")]
-                    } else {
-                        vec![
-                            v_str("incoming"),
-                            v_str("local"),
-                            v_str("edited"),
-                            v_str("defer"),
-                        ]
-                    }),
-                ),
-            ];
-            if selected_details.contains(&id) {
-                if let Some(source) = raw_base
-                    .as_ref()
-                    .and_then(Var::as_map)
-                    .and_then(|value| value.get(&v_str("source")).ok())
-                {
-                    // Retrieval hints are never evidence that historical source is correct.
-                    output.push(("base_source", source));
-                }
-                let live_text = program_text(&live)?;
-                let incoming_text = program_text(&verb.program)?;
-                detail_bytes +=
-                    live_text.as_string().unwrap().len() + incoming_text.as_string().unwrap().len();
-                if detail_bytes > MAX_SOURCE_BYTES {
-                    return Err("selected details exceed 16 MiB".to_string().into());
-                }
-                output.push(("live_text", live_text));
-                output.push(("incoming_text", incoming_text));
-                // Both comparison panes are decompiled. File coordinates refer only to source_text.
-                output.push((
-                    "text_coordinates",
-                    record(&[
-                        ("kind", v_str("decompiled")),
-                        ("line", v_int(1)),
-                        ("column", v_int(1)),
-                    ]),
-                ));
-                let base_text = base_set
-                    .as_ref()
-                    .map(|set| {
-                        let expected = base.as_deref().ok_or_else(|| {
-                            ReviewError::Invalid("selected member has no accepted baseline".into())
-                        })?;
-                        let (_, historical) = set
-                            .graph()
-                            .object_definitions()
-                            .get(&object)
-                            .ok_or_else(|| {
-                                ReviewError::Invalid("historical object is missing".into())
-                            })?;
-                        if let Some((_, identity)) = historical
-                            .metadata
-                            .iter()
-                            .find(|(key, _)| *key == Symbol::mk("import_export_id"))
-                        {
-                            let live_identity = world.get_object_metadata(
-                                permissions,
-                                &object,
-                                Symbol::mk("import_export_id"),
-                            )?;
-                            if live_identity.as_ref().map(digest).transpose()?.as_deref()
-                                != Some(digest(identity)?.as_str())
-                            {
-                                return Err(ReviewError::Invalid(
-                                    "historical object identity mismatch".into(),
-                                ));
-                            }
-                        }
-                        let matching = historical
-                            .verbs
-                            .iter()
-                            .filter(|candidate| {
-                                candidate.names == verb.names && candidate.argspec == verb.argspec
-                            })
-                            .collect::<Vec<_>>();
-                        if matching.len() != 1
-                            || program_fingerprint(&matching[0].program)? != expected
-                        {
-                            return Err(ReviewError::Invalid(
-                                "historical member does not match the accepted baseline".into(),
-                            ));
-                        }
-                        program_text(&matching[0].program)
-                    })
-                    .transpose()?;
-                output.push(("base_text_available", v_bool(base_text.is_some())));
-                if let Some(text) = base_text {
-                    detail_bytes += text.as_string().unwrap().len();
+            if for_preview || selected_details.contains(&id) {
+                let mut output = vec![
+                    ("id", v_str(&id)),
+                    ("object", v_obj(object)),
+                    ("field", v_str("program")),
+                    ("names", names(&verb.names)),
+                    ("source", v_str(label)),
+                    ("classification", v_str(classification)),
+                    (
+                        "base",
+                        base.as_deref().map(v_str).unwrap_or_else(|| v_list(&[])),
+                    ),
+                    ("live", v_str(&live_hash)),
+                    ("incoming", v_str(&incoming_hash)),
+                    ("eligible", v_bool(eligible)),
+                    ("default", v_str(default)),
+                    ("blockers", v_list(&blockers)),
+                    (
+                        "choices",
+                        v_list(&if !eligible {
+                            vec![v_str("defer")]
+                        } else if adoption {
+                            vec![v_str("incoming"), v_str("defer")]
+                        } else {
+                            vec![
+                                v_str("incoming"),
+                                v_str("local"),
+                                v_str("edited"),
+                                v_str("defer"),
+                            ]
+                        }),
+                    ),
+                ];
+                if selected_details.contains(&id) {
+                    if let Some(source) = raw_base
+                        .as_ref()
+                        .and_then(Var::as_map)
+                        .and_then(|value| value.get(&v_str("source")).ok())
+                    {
+                        // Retrieval hints are never evidence that historical source is correct.
+                        output.push(("base_source", source));
+                    }
+                    let live_text = program_text(&live)?;
+                    let incoming_text = program_text(&verb.program)?;
+                    detail_bytes += live_text.as_string().unwrap().len()
+                        + incoming_text.as_string().unwrap().len();
                     if detail_bytes > MAX_SOURCE_BYTES {
                         return Err("selected details exceed 16 MiB".to_string().into());
                     }
-                    output.push(("base_text", text));
-                }
-                if let Some(source) = &verb.source {
-                    detail_bytes += source.text.len();
-                    if detail_bytes > MAX_SOURCE_BYTES {
-                        return Err("selected details exceed 16 MiB".to_string().into());
-                    }
-                    output.push(("source_text", v_str(&source.text)));
+                    output.push(("live_text", live_text));
+                    output.push(("incoming_text", incoming_text));
+                    // Both comparison panes are decompiled. File coordinates refer only to source_text.
                     output.push((
-                        "source_location",
+                        "text_coordinates",
                         record(&[
-                            ("label", v_str(label)),
-                            ("line", v_int(source.line as i64)),
-                            ("column", v_int(source.column as i64)),
+                            ("kind", v_str("decompiled")),
+                            ("line", v_int(1)),
+                            ("column", v_int(1)),
                         ]),
                     ));
+                    let base_text = base_set
+                        .as_ref()
+                        .map(|set| {
+                            let expected = base.as_deref().ok_or_else(|| {
+                                ReviewError::Invalid(
+                                    "selected member has no accepted baseline".into(),
+                                )
+                            })?;
+                            let (_, historical) = set
+                                .graph()
+                                .object_definitions()
+                                .get(&object)
+                                .ok_or_else(|| {
+                                    ReviewError::Invalid("historical object is missing".into())
+                                })?;
+                            if let Some((_, identity)) = historical
+                                .metadata
+                                .iter()
+                                .find(|(key, _)| *key == Symbol::mk("import_export_id"))
+                            {
+                                let live_identity = world.get_object_metadata(
+                                    permissions,
+                                    &object,
+                                    Symbol::mk("import_export_id"),
+                                )?;
+                                if live_identity.as_ref().map(digest).transpose()?.as_deref()
+                                    != Some(digest(identity)?.as_str())
+                                {
+                                    return Err(ReviewError::Invalid(
+                                        "historical object identity mismatch".into(),
+                                    ));
+                                }
+                            }
+                            let matching = historical
+                                .verbs
+                                .iter()
+                                .filter(|candidate| {
+                                    candidate.names == verb.names
+                                        && candidate.argspec == verb.argspec
+                                })
+                                .collect::<Vec<_>>();
+                            if matching.len() != 1
+                                || program_fingerprint(&matching[0].program)? != expected
+                            {
+                                return Err(ReviewError::Invalid(
+                                    "historical member does not match the accepted baseline".into(),
+                                ));
+                            }
+                            program_text(&matching[0].program)
+                        })
+                        .transpose()?;
+                    output.push(("base_text_available", v_bool(base_text.is_some())));
+                    if let Some(text) = base_text {
+                        detail_bytes += text.as_string().unwrap().len();
+                        if detail_bytes > MAX_SOURCE_BYTES {
+                            return Err("selected details exceed 16 MiB".to_string().into());
+                        }
+                        output.push(("base_text", text));
+                    }
+                    if let Some(source) = &verb.source {
+                        detail_bytes += source.text.len();
+                        if detail_bytes > MAX_SOURCE_BYTES {
+                            return Err("selected details exceed 16 MiB".to_string().into());
+                        }
+                        output.push(("source_text", v_str(&source.text)));
+                        output.push((
+                            "source_location",
+                            record(&[
+                                ("label", v_str(label)),
+                                ("line", v_int(source.line as i64)),
+                                ("column", v_int(source.column as i64)),
+                            ]),
+                        ));
+                    }
                 }
+                report_rows.push(member_revision(
+                    record(&output),
+                    &guards[guard_start..],
+                    &object_context,
+                    for_preview,
+                )?);
+            } else {
+                // Apply still checks every guard and policy rule, but does not need
+                // the display fields used by the preview UI.
+                report_rows.push(record(&[
+                    ("classification", v_str(classification)),
+                    ("blockers", v_list(&blockers)),
+                ]));
             }
-            report_rows.push(member_revision(
-                record(&output),
-                &guards[guard_start..],
-                &object_context,
-            )?);
             rows.push(ChangeRow {
                 id,
                 eligible,
@@ -951,19 +979,8 @@ pub(crate) fn analyze(
                 .iter()
                 .any(|field| field.as_string() == Some("property"))
         {
-            let local = crate::collect_object_definitions(world, permissions, &[object])
-                .map_err(|error| error.to_string())?
-                .remove(0);
-            let context = properties::Context {
-                world,
-                permissions,
-                object,
-                trusted,
-                identity_matches,
-                trusted_owners: &trusted_owners,
-                policy: &policy,
-                local: &local,
-            };
+            let local_properties = world.properties(permissions, &object)?;
+            let mut local = None;
             for property in &incoming.property_definitions {
                 let member = properties::member_key(object, property.name);
                 // Existing data stays in inspection unless the administrator explicitly
@@ -973,14 +990,30 @@ pub(crate) fn analyze(
                     Err(WorldStateError::PropertyNotFound(_, _))
                 );
                 if !absent
-                    && local
-                        .property_definitions
-                        .iter()
-                        .any(|p| p.name == property.name)
+                    && local_properties.iter().any(|p| p.name() == property.name)
                     && !policy.initialization.contains_key(&member)
                 {
                     continue;
                 }
+                // Existing properties outside initialization groups need no value
+                // comparison. Collect full state only when a row needs that evidence.
+                if local.is_none() {
+                    local = Some(
+                        crate::collect_object_definitions(world, permissions, &[object])
+                            .map_err(|error| error.to_string())?
+                            .remove(0),
+                    );
+                }
+                let context = properties::Context {
+                    world,
+                    permissions,
+                    object,
+                    trusted,
+                    identity_matches,
+                    trusted_owners: &trusted_owners,
+                    policy: &policy,
+                    local: local.as_ref().unwrap(),
+                };
                 let guard_start = guards.len();
                 let (row, report) = context.analyze(
                     label,
@@ -1001,6 +1034,7 @@ pub(crate) fn analyze(
                     report,
                     &guards[guard_start..],
                     &object_context,
+                    for_preview,
                 )?);
             }
         }
@@ -1087,7 +1121,7 @@ pub fn preview(
     request: &Var,
     choices: Option<&Var>,
 ) -> Result<Var, ReviewError> {
-    let analysis = analyze(world, permissions, options, sources, request)?;
+    let analysis = analyze(world, permissions, options, sources, request, true)?;
     let validation = validate_choices(&analysis, options, choices)?;
     let mut output = analysis.report.as_map().unwrap().iter().collect::<Vec<_>>();
     output.push((v_str("validation"), v_list(&validation)));
@@ -1228,7 +1262,9 @@ pub fn apply(
     {
         return Err(ReviewError::World(WorldStateError::VerbPermissionDenied).into());
     }
-    let analysis = analyze(world, permissions, options, sources, request)?;
+    // Apply uses the complete evidence guard. Per-member revisions exist only for
+    // preserving choices in a later preview and do not participate in this check.
+    let analysis = analyze(world, permissions, options, sources, request, false)?;
     if analysis
         .report
         .as_map()
@@ -1414,6 +1450,8 @@ pub fn apply(
         ("evidence", analysis.evidence),
         ("decisions", v_list(&decisions)),
         ("created", v_list(&created)),
+        // Let callers describe edited-program effects without running preview again.
+        ("validation", v_list(&validation)),
     ]);
     write_actions(world, permissions, actions)?;
     Ok(receipt)

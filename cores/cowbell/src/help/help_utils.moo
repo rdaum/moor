@@ -92,6 +92,9 @@ object HELP_UTILS [
       fields[slot] = ["label" -> label:capitalize(), "expectedKind" -> "text"];
     endfor
     index(template, "<") && return usage;
+    if (!fields)
+      return $format.annotation:command(usage, $format.code:inline(usage));
+    endif
     "Unconstrained verbs consume free text; a parser slot alone does not imply an object.";
     if (argspec == {"any", "any", "any"})
       return $format.annotation:command_template(template, fields, $format.code:inline(usage));

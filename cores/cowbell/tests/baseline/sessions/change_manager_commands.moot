@@ -48,12 +48,29 @@ true
 ~~* Discard failed review
 ~~@changes discard 1 1
 
+% @changes fetch
+~~Changes
+=
+~~Review 1 already exists for cowbell. Use @changes status 1 to check its progress or recover it.
+~~Check existing review
+~~@changes status 1
+
 % @changes discard 1 1
 ~~Review 1 discarded.
 
 // Native service calls keep returning structured values; terminal apply gets a completion notice.
 ; load_object({"object #9500", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", "endobject"}); $change_manager:configure("probe", {#9500}, []); const review = $change_manager:stage("probe", {["label" -> "probe.moo", "text" -> dump_object(#9500)]}, "adopt"); return {review["review_id"], review["status"]};
 {2, "ready"}
+
+% @changes fetch probe
+~~Changes
+=
+~~Review 2 already exists for probe. Use @changes diff 2 to open it.
+~~Open existing review
+~~@changes diff 2
+
+; try $change_manager:stage("probe"); except failure (E_INVARG) return {failure[3]["code"], failure[3]["review_id"], failure[3]["generation"], failure[3]["status"]}; endtry
+{"active_review", 2, 1, "ready"}
 
 % @changes apply 2 1
 ~~probe · Review 2

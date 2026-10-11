@@ -138,6 +138,42 @@ pub fn program_fingerprint(program: &ProgramType) -> Result<String, String> {
     Ok(format!("{PROGRAM_SCHEMA}:{}", digest(&projection)?))
 }
 
+/// Conservatively identify identical compiled programs before normalizing both of them.
+/// Program equality alone is insufficient: MOO literals compare strings without case
+/// and can equate distinct numeric types, while float equality loses signed zero.
+pub(crate) fn same_compiled_program(left: &ProgramType, right: &ProgramType) -> bool {
+    use moor_var::program::{opcode::Op, program::Program};
+
+    fn exact_payloads(left: &Program, right: &Program) -> bool {
+        let left_literals = encode_var_cbor(&v_list(&left.0.literals));
+        let right_literals = encode_var_cbor(&v_list(&right.0.literals));
+        if !matches!((left_literals, right_literals), (Ok(a), Ok(b)) if a == b) {
+            return false;
+        }
+        fn ops(program: &Program) -> impl Iterator<Item = &Op> {
+            program
+                .0
+                .main_vector
+                .iter()
+                .chain(program.0.fork_vectors.iter().flat_map(|(_, ops)| ops))
+        }
+        if !ops(left).zip(ops(right)).all(|(a, b)| match (a, b) {
+            (Op::ImmFloat(a), Op::ImmFloat(b)) => a.to_bits() == b.to_bits(),
+            _ => true,
+        }) {
+            return false;
+        }
+        left.0
+            .lambda_programs
+            .iter()
+            .zip(&right.0.lambda_programs)
+            .all(|(a, b)| exact_payloads(a, b))
+    }
+
+    let (ProgramType::MooR(left), ProgramType::MooR(right)) = (left, right);
+    left == right && exact_payloads(left, right)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +190,36 @@ mod tests {
         assert_ne!(hash("return \"Hello\";"), hash("return \"hello\";"));
         assert_ne!(hash("return 0.0;"), hash("return -0.0;"));
         assert_eq!(hash("return 'CaseProbe;"), hash("return 'caseprobe;"));
+    }
+    #[test]
+    fn compiled_program_reuse_preserves_exact_literals_and_float_bits() {
+        let program =
+            |source| ProgramType::MooR(moor_compiler::compile(source, Default::default()).unwrap());
+        for source in ["return 1;", "return fn() return {\"Case\", 1.0}; endfn;"] {
+            assert!(same_compiled_program(&program(source), &program(source)));
+        }
+        for (left, right) in [
+            ("return \"Case\";", "return \"case\";"),
+            ("return 1;", "return 1.0;"),
+            ("return 0.0;", "return -0.0;"),
+            ("return {1};", "return {1.0};"),
+            (
+                "return fn() return \"Case\"; endfn;",
+                "return fn() return \"case\"; endfn;",
+            ),
+            (
+                "fork (0) return 0.0; endfork",
+                "fork (0) return -0.0; endfork",
+            ),
+        ] {
+            let left = program(left);
+            let right = program(right);
+            assert!(!same_compiled_program(&left, &right));
+            assert_ne!(
+                program_fingerprint(&left).unwrap(),
+                program_fingerprint(&right).unwrap()
+            );
+        }
     }
     #[test]
     fn normalization_covers_empty_scopes_and_lambdas() {

@@ -512,7 +512,7 @@ fn edited_choice_installs_result_but_accepts_incoming() {
         )
         .is_err()
     );
-    apply_report(
+    let receipt = apply_report(
         world.as_mut(),
         &incoming,
         "update",
@@ -520,6 +520,7 @@ fn edited_choice_installs_result_but_accepts_incoming() {
         &choice("return \"Result\";"),
     )
     .unwrap();
+    assert_eq!(get(&receipt, "validation"), v_list(&[validation]));
     let updated = world
         .get_verb(&permissions(), &ROOT, Symbol::mk("test"))
         .unwrap();
@@ -3102,6 +3103,7 @@ fn object_creation_conflicts_and_late_failures_publish_no_partial_group() {
         &CompileOptions::default(),
         &incoming,
         &req,
+        false,
     )
     .unwrap();
     let object = analysis

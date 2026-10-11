@@ -1012,6 +1012,13 @@ object WIZ_FEATURES [
       lines = {$format.title:mk("Changes", 3), $format.paragraph:mk(failure[2])};
       if (typeof(failure[3]) == TYPE_MAP && `failure[3]["code"] ! E_RANGE => ""' == "missing_review")
         lines = {@lines, $format.list:actions({$format.annotation:command("@changes packages", $format.paragraph:inline("Find active reviews", "\n", $format.code:inline("@changes packages")))})};
+      elseif (typeof(failure[3]) == TYPE_MAP && `failure[3]["code"] ! E_RANGE => ""' == "active_review" && maphaskey(failure[3], "review_id"))
+        const details = failure[3];
+        const ready = details["status"] in {"ready", "partial", "rejected"};
+        const label = ready ? "Open existing review" | "Check existing review";
+        const content = $format.paragraph:inline(label, "\n", $format.code:inline(details["command"]));
+        const link = ready ? $format.annotation:mk(content, ["kind" -> "change", "provider" -> $url_utils:to_curie_str($change_manager), "review" -> details["review_id"], "generation" -> details["generation"]]) | $format.annotation:command(details["command"], content);
+        lines = {@lines, $format.list:actions({link})};
       endif
     endtry
     length(lines) || return;

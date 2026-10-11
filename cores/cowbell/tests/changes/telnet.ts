@@ -66,6 +66,10 @@ try {
     const actor = { mooId: "test", playerId: "wizard" };
     let terminal = await Telnet.connect(fixture.telnetPort);
     connections.push(terminal);
+    const overview = await terminal.command("@changes", "Command reference");
+    assert.ok(overview.includes("Check for updates"), overview);
+    assert.ok(overview.includes("@changes preview"), overview);
+    assert.ok(!overview.includes("Invalid argument"), overview);
     await terminal.command("@changes package acceptance #9500 #9501", "configured at generation");
     const git = process.argv.includes("--git");
     const review = git ? 2 : 1;
@@ -113,6 +117,9 @@ try {
     terminal = await Telnet.connect(fixture.telnetPort);
     connections.push(terminal);
     await terminal.command("@changes drafts", "2 lines.");
+    const duplicate = await terminal.command("@changes fetch acceptance", "Open existing review");
+    assert.ok(duplicate.includes(`Review ${review} already exists`), duplicate);
+    assert.ok(duplicate.includes(`@changes diff ${review}`), duplicate);
     await terminal.command(`@changes diff ${review}`, "Discard review");
     await terminal.command("@changes edit 6", "Prefix a literal dot with another dot.");
     await terminal.command(".", "The edited program compiles.");

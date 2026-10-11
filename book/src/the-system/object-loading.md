@@ -255,6 +255,9 @@ uncommitted until the calling task commits. If a write fails, the whole task rol
 applications must save their completion record in that same transaction and abort if that
 bookkeeping fails.
 
+The builtin receipt also includes `validation`, with the draft fingerprints and validation tokens
+used during apply. Callers can use these results without running another preview.
+
 ### Add verbs with explicit change groups
 
 Cowbell can add a verb to an existing managed object. The new verb uses the supplied owner, flags,

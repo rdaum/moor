@@ -277,8 +277,10 @@ object CHANGE_MANAGER [
   method _error owner: ARCH_WIZARD
     "Raise a versioned service error.";
     caller == this || raise(E_PERM);
-    const {code, message} = args;
-    raise(E_INVARG, message, ["schema" -> 1, "code" -> code]);
+    let {code, message, ?details = []} = args;
+    details["schema"] = 1;
+    details["code"] = code;
+    raise(E_INVARG, message, details);
   endmethod
 
   method _entry owner: ARCH_WIZARD
@@ -595,7 +597,13 @@ object CHANGE_MANAGER [
     operation in {"adopt", "update"} || raise(E_INVARG);
     maphaskey(this.packages, name) || this:_error("missing_package", "Configure package bindings first.");
     const package = this.packages[name];
-    package["active"] == 0 || this:_error("active_review", "A review already exists. Refresh or discard it explicitly.");
+    if (package["active"])
+      const existing = this:status(package["active"]);
+      const id = existing["review_id"];
+      const ready = existing["status"] in {"ready", "partial", "rejected"};
+      const command = tostr(ready ? "@changes diff " | "@changes status ", id);
+      this:_error("active_review", tostr("Review ", id, " already exists for ", name, ". Use ", command, " to ", ready ? "open it." | "check its progress or recover it."), ["review_id" -> id, "generation" -> existing["generation"], "package" -> name, "status" -> existing["status"], "command" -> command]);
+    endif
     length(this.pending) < 8 || raise(E_QUOTA);
     typeof(sources) == TYPE_LIST || raise(E_TYPE);
     if (!sources && !package["upstream"])
@@ -1028,6 +1036,11 @@ object CHANGE_MANAGER [
     let recovery = `record["recovery"] ! E_RANGE => []';
     let bases = [];
     const previous = `record["report"]["rows"] ! E_RANGE => {}';
+    if (!previous)
+      record["report"] = report;
+      record["group_validation"] = report["group_validation"];
+      return record;
+    endif
     let members = [];
     for current in (report["rows"])
       const candidates = `members[current["member"]] ! E_RANGE => {}';
@@ -1065,7 +1078,7 @@ object CHANGE_MANAGER [
     record["choices"] = choices;
     record["recovery"] = recovery;
     record["base_sources"] = bases;
-    const validated = preview_objdef_changes(record["sources"], record["request"], choices);
+    const validated = choices ? preview_objdef_changes(record["sources"], record["request"], choices) | report;
     for validation in (validated["validation"])
       if (validation["valid"])
         record["choices"][validation["id"]]["validation"] = validation["validation"];
@@ -1268,7 +1281,7 @@ object CHANGE_MANAGER [
   method _effects owner: ARCH_WIZARD
     "Describe every member's outcome, including defaults on pages the administrator has not opened.";
     caller == this || raise(E_PERM);
-    const {record, validation} = args;
+    const {record, validation, ?applied = 0} = args;
     let effects = {};
     const names = this:_command_names();
     let checked = [];
@@ -1276,6 +1289,9 @@ object CHANGE_MANAGER [
       checked[item["id"]] = item;
     endfor
     for row in (record["report"]["rows"])
+      if (typeof(applied) == TYPE_MAP && !maphaskey(applied, row["id"]))
+        continue;
+      endif
       const saved = `record["choices"][row["id"]] ! E_RANGE => []';
       const kind = saved ? saved["choice"] | row["default"];
       const operation = `row["operation"] ! E_RANGE => "program"';
@@ -1335,10 +1351,13 @@ object CHANGE_MANAGER [
     set_task_perms(record["authority"]);
     let wrote = false;
     try
-      const preview = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
-      const effects = this:_effects(record, preview["validation"]);
       const result = apply_objdef_changes(record["sources"], record["request"], record["report"]["evidence"], record["choices"]);
       wrote = true;
+      let applied = [];
+      for decision in (result["decisions"])
+        applied[decision["id"]] = true;
+      endfor
+      const effects = this:_effects(record, result["validation"], applied);
       let members = `this.packages[record["package"]]["members"] ! E_RANGE => []';
       for created in (result["created"])
         members[created["member"]] = created;

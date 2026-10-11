@@ -159,6 +159,10 @@ object HEADLESS_EVENT_SCENARIOS
       endif
     endfor
     const speech = $help_utils:command_usage("say <message>", player, {"any", "any", "any"}).descriptor;
+    const shortcut = $help_utils:command_usage("@changes diff", player, {"any", "any", "any"}).descriptor;
+    $test_utils:assert_eq(shortcut, ["kind" -> "command", "command" -> "@changes diff"], "complete commands need no argument fields");
+    const look = $help_utils:command_usage("look", player, {"none", "none", "none"}).descriptor;
+    $test_utils:assert_eq(look, ["kind" -> "command", "command" -> "look"], "argument-free verbs remain executable help links");
     $test_utils:assert_eq(speech["arguments"]["dobj"]["expectedKind"], "text", "unconstrained speech takes free text");
     $test_utils:assert_false(maphaskey(speech["arguments"]["dobj"], "suggestions"), "speech does not suggest objects");
     const plain = event:transform_for(player, 'text_plain);

@@ -27,6 +27,9 @@
 ; const sources = {["label" -> "tools.moo", "text" -> {"object #9500", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 2;", "endverb", "endobject"}]}; const result = $change_tools:changes_check(["package" -> "tools", "sources" -> sources], player); #0.tool_probe = result["result"]; const page = $change_tools:changes_review(["review" -> #0.tool_probe["review_id"], "generation" -> 1], player); #0.tool_probe["row"] = page["result"]["rows"][1]["id"]; return {result["ok"], page["ok"], page["result"]["rows"][1]["object"]};
 {true, true, "#9500"}
 
+; const error = $change_tools:changes_check(["package" -> "tools"], player)["error"]; return {error["code"], error["details"]["review_id"] == #0.tool_probe["review_id"], error["details"]["generation"], error["details"]["status"]};
+{"active_review", true, 1, "ready"}
+
 ; const result = $change_tools:changes_resolve(["review" -> #0.tool_probe["review_id"], "generation" -> 1, "member" -> #0.tool_probe["row"], "choice" -> "edited", "program" -> "return (;"], player); return {result["ok"], result["result"]["validation"][1]["valid"], #9500:test()};
 {true, false, 1}
 
