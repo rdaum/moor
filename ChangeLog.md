@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell change reviews can verify historical objdefs from an upload or the accepted Git commit.
+  Meadow shows the accepted baseline beside local and upstream code, with a separate edited result.
+  Accepted program baselines retain source provenance, including when local or edited code is kept.
+
 - Meadow change reviews show source provenance, unsupported changes, and committed outcomes.
   Compiler markers return when an invalid saved draft is reopened. Review controls follow service
   capabilities, and reconnect preserves unsaved drafts while checking current review state.

@@ -1386,3 +1386,266 @@ endobject
         }
     }
 }
+
+fn with_field(value: &Var, key: &str, field: &Var) -> Var {
+    value.as_map().unwrap().set(&v_str(key), field).unwrap()
+}
+
+#[test]
+fn historical_details_verify_member_identity_and_hash_without_changing_evidence() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let definition = world
+        .get_verb(&permissions(), &ROOT, Symbol::mk("test"))
+        .unwrap();
+    world
+        .update_verb_with_id(
+            &permissions(),
+            &ROOT,
+            definition.uuid(),
+            VerbAttrs {
+                definer: None,
+                owner: None,
+                names: None,
+                flags: None,
+                args_spec: None,
+                program: Some(ProgramType::MooR(
+                    compile("return \"Local\";", Default::default()).unwrap(),
+                )),
+            },
+        )
+        .unwrap();
+    world.commit().unwrap();
+    let world = db.new_world_state().unwrap();
+    let incoming = sources(&SOURCE.replace("Base", "Incoming"));
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request("update"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&row(&report), "classification"), v_str("conflict"));
+    let details = with_field(
+        &request("update"),
+        "details",
+        &v_list(&[get(&row(&report), "id")]),
+    );
+    let historical = with_field(&details, "base_sources", &sources(SOURCE));
+    let verified = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &historical,
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&verified, "evidence"), get(&report, "evidence"));
+    assert_eq!(get(&row(&verified), "base_text_available"), v_bool(true));
+    assert_eq!(get(&row(&verified), "base_text"), v_str("return \"Base\";"));
+    assert_eq!(
+        get(&row(&verified), "live_text"),
+        v_str("return \"Local\";")
+    );
+    assert_eq!(
+        get(&row(&verified), "incoming_text"),
+        v_str("return \"Incoming\";")
+    );
+    for bad in [
+        SOURCE.replace("Base", "Wrong"),
+        SOURCE.replace("verb test", "verb other"),
+        SOURCE.replace("review_root", "wrong_identity"),
+        SOURCE.replace("object #1", "object #2"),
+    ] {
+        let request = with_field(&details, "base_sources", &sources(&bad));
+        assert!(
+            preview(
+                world.as_ref(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &request,
+                None
+            )
+            .is_err()
+        );
+    }
+    let invalid_scope = with_field(&request("update"), "base_sources", &sources(SOURCE));
+    assert!(
+        preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &invalid_scope,
+            None
+        )
+        .is_err()
+    );
+    assert!(matches!(
+        world.commit().unwrap(),
+        CommitResult::Success {
+            mutations_made: false,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn accepted_baselines_retain_incoming_provenance_for_each_decision() {
+    for decision in ["incoming", "local", "edited", "defer"] {
+        let db = database();
+        let mut world = db.new_world_state().unwrap();
+        let origin = record(&[
+            ("transport", v_str("git")),
+            ("commit", v_str("ancestor")),
+            ("label", v_str("untrusted label")),
+        ]);
+        let adopt = with_field(&request("adopt"), "provenance", &origin);
+        let initial = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &sources(SOURCE),
+            &adopt,
+            None,
+        )
+        .unwrap();
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &sources(SOURCE),
+            &adopt,
+            &get(&initial, "evidence"),
+            &v_map(&[]),
+        )
+        .unwrap();
+        let id = get(&row(&initial), "id");
+        let incoming = sources(&SOURCE.replace("Base", "Incoming"));
+        let next_origin = with_field(&origin, "commit", &v_str("incoming"));
+        let update = with_field(&request("update"), "provenance", &next_origin);
+        let report = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &update,
+            None,
+        )
+        .unwrap();
+        let mut selected = record(&[("choice", v_str(decision))]);
+        if decision == "edited" {
+            selected = with_field(&selected, "program", &v_str("return \"Edited\";"));
+            let validation = preview(
+                world.as_ref(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &update,
+                Some(&v_map(&[(id.clone(), selected.clone())])),
+            )
+            .unwrap();
+            let valid = get(&validation, "validation")
+                .as_list()
+                .unwrap()
+                .iter()
+                .next()
+                .unwrap();
+            selected = with_field(&selected, "validation", &get(&valid, "validation"));
+        }
+        // Provenance is part of the reviewed write, even if the program input is unchanged.
+        let changed = with_field(&update, "provenance", &origin);
+        assert!(
+            apply(
+                world.as_mut(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &changed,
+                &get(&report, "evidence"),
+                &v_map(&[(id.clone(), selected.clone())])
+            )
+            .is_err()
+        );
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &update,
+            &get(&report, "evidence"),
+            &v_map(&[(id.clone(), selected)]),
+        )
+        .unwrap();
+        world.commit().unwrap();
+        let world = db.new_world_state().unwrap();
+        let details = with_field(&request("update"), "details", &v_list(&[id]));
+        let report = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &details,
+            None,
+        )
+        .unwrap();
+        let row = row(&report);
+        let source = get(&row, "base_source");
+        assert_eq!(
+            get(&source, "commit"),
+            v_str(if decision == "defer" {
+                "ancestor"
+            } else {
+                "incoming"
+            })
+        );
+        assert_eq!(get(&source, "label"), v_str("root.moo"));
+        let accepted = if decision == "defer" {
+            sources(SOURCE)
+        } else {
+            incoming.clone()
+        };
+        assert_eq!(get(&source, "digest"), v_str(&digest(&accepted).unwrap()));
+        let verified = with_field(&details, "base_sources", &accepted);
+        assert!(
+            preview(
+                world.as_ref(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &verified,
+                None
+            )
+            .is_ok()
+        );
+        if decision == "edited" {
+            assert_eq!(get(&row, "live_text"), v_str("return \"Edited\";"));
+            assert_eq!(get(&row, "base"), get(&row, "incoming"));
+        }
+    }
+}
+
+#[test]
+fn provenance_is_bounded_and_requires_a_map() {
+    let db = database();
+    let world = db.new_world_state().unwrap();
+    for invalid in [v_str("git"), record(&[("text", v_str(&"x".repeat(8193)))])] {
+        let request = with_field(&request("adopt"), "provenance", &invalid);
+        assert!(
+            preview(
+                world.as_ref(),
+                &permissions(),
+                &CompileOptions::default(),
+                &sources(SOURCE),
+                &request,
+                None
+            )
+            .is_err()
+        );
+    }
+}

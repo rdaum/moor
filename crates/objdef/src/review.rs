@@ -20,6 +20,9 @@
 //! Object addresses are installation-local bindings; supplied export identities must
 //! agree with live metadata. Evidence binds the exact input and compilation profile
 //! to the reviewed definitions, authority, live programs, and accepted baselines.
+//! Optional `provenance` supplies bounded retrieval hints for accepted incoming programs.
+//! `base_sources` supplies historical objdefs for selected `details` rows only. These
+//! read-only sources must match each selected member's accepted program fingerprint.
 
 #[path = "review_inspection.rs"]
 pub(crate) mod inspection;
@@ -33,7 +36,8 @@ use moor_common::model::{
 };
 use moor_compiler::{CompileOptions, compile, program_to_tree, unparse};
 use moor_var::{
-    Associative, Symbol, Var, program::ProgramType, v_bool, v_int, v_list, v_map, v_obj, v_str,
+    Associative, ByteSized, Symbol, Var, program::ProgramType, v_bool, v_int, v_list, v_map, v_obj,
+    v_str,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -201,6 +205,7 @@ pub(crate) struct ProgramRow {
     pub uuid: uuid::Uuid,
     pub incoming: ProgramType,
     pub incoming_hash: String,
+    pub incoming_source: Option<Var>,
     pub live_hash: String,
     pub default: &'static str,
 }
@@ -296,6 +301,8 @@ pub(crate) fn analyze(
             "constants",
             "details",
             "trusted_owners",
+            "provenance",
+            "base_sources",
         ],
     )?;
     if required(&req, "schema")?.as_integer() != Some(1) {
@@ -397,6 +404,28 @@ pub(crate) fn analyze(
                 .ok_or_else(|| ReviewError::Invalid("detail IDs must be strings".into()))
         })
         .collect::<Result<_, _>>()?;
+    let provenance = req.get("provenance");
+    if provenance.is_some_and(|value| value.as_map().is_none() || value.size_bytes() > 8192) {
+        return Err("provenance must be a map of at most 8192 bytes"
+            .to_string()
+            .into());
+    }
+    let base_set = req
+        .get("base_sources")
+        .map(|sources| {
+            if selected_details.is_empty() || operation == "inspect" {
+                return Err(ReviewError::Invalid(
+                    "base_sources requires selected program details".into(),
+                ));
+            }
+            Ok(ObjDefSet::parse_sources(
+                options,
+                None,
+                constants.as_ref(),
+                decode_sources(sources)?,
+            )?)
+        })
+        .transpose()?;
     let units = decode_sources(sources)?;
     let set = ObjDefSet::parse_sources(options, None, constants.as_ref(), units)?;
     let work = set
@@ -432,7 +461,7 @@ pub(crate) fn analyze(
     let source_digest = digest(sources)?;
     let request_identity = record(
         &req.iter()
-            .filter(|(k, _)| k.as_str() != "details")
+            .filter(|(k, _)| !matches!(k.as_str(), "details" | "base_sources"))
             .map(|(k, v)| (k.as_str(), v.clone()))
             .collect::<Vec<_>>(),
     );
@@ -576,7 +605,7 @@ pub(crate) fn analyze(
                         .into(),
                 ),
                 v_str(&live_hash),
-                raw_base.unwrap_or_else(|| v_list(&[])),
+                raw_base.clone().unwrap_or_else(|| v_list(&[])),
             ]));
             let default = if !eligible {
                 "defer"
@@ -622,6 +651,14 @@ pub(crate) fn analyze(
                 ),
             ];
             if selected_details.contains(&id) {
+                if let Some(source) = raw_base
+                    .as_ref()
+                    .and_then(Var::as_map)
+                    .and_then(|value| value.get(&v_str("source")).ok())
+                {
+                    // Retrieval hints are never evidence that historical source is correct.
+                    output.push(("base_source", source));
+                }
                 let live_text = program_text(&live)?;
                 let incoming_text = program_text(&verb.program)?;
                 detail_bytes +=
@@ -640,7 +677,62 @@ pub(crate) fn analyze(
                         ("column", v_int(1)),
                     ]),
                 ));
-                output.push(("base_text_available", v_bool(false)));
+                let base_text = base_set
+                    .as_ref()
+                    .map(|set| {
+                        let expected = base.as_deref().ok_or_else(|| {
+                            ReviewError::Invalid("selected member has no accepted baseline".into())
+                        })?;
+                        let (_, historical) = set
+                            .graph()
+                            .object_definitions()
+                            .get(&object)
+                            .ok_or_else(|| {
+                                ReviewError::Invalid("historical object is missing".into())
+                            })?;
+                        if let Some((_, identity)) = historical
+                            .metadata
+                            .iter()
+                            .find(|(key, _)| *key == Symbol::mk("import_export_id"))
+                        {
+                            let live_identity = world.get_object_metadata(
+                                permissions,
+                                &object,
+                                Symbol::mk("import_export_id"),
+                            )?;
+                            if live_identity.as_ref().map(digest).transpose()?.as_deref()
+                                != Some(digest(identity)?.as_str())
+                            {
+                                return Err(ReviewError::Invalid(
+                                    "historical object identity mismatch".into(),
+                                ));
+                            }
+                        }
+                        let matching = historical
+                            .verbs
+                            .iter()
+                            .filter(|candidate| {
+                                candidate.names == verb.names && candidate.argspec == verb.argspec
+                            })
+                            .collect::<Vec<_>>();
+                        if matching.len() != 1
+                            || program_fingerprint(&matching[0].program)? != expected
+                        {
+                            return Err(ReviewError::Invalid(
+                                "historical member does not match the accepted baseline".into(),
+                            ));
+                        }
+                        program_text(&matching[0].program)
+                    })
+                    .transpose()?;
+                output.push(("base_text_available", v_bool(base_text.is_some())));
+                if let Some(text) = base_text {
+                    detail_bytes += text.as_string().unwrap().len();
+                    if detail_bytes > MAX_SOURCE_BYTES {
+                        return Err("selected details exceed 16 MiB".to_string().into());
+                    }
+                    output.push(("base_text", text));
+                }
                 if let Some(source) = &verb.source {
                     detail_bytes += source.text.len();
                     if detail_bytes > MAX_SOURCE_BYTES {
@@ -665,6 +757,17 @@ pub(crate) fn analyze(
                 uuid: definition.uuid(),
                 incoming: verb.program.clone(),
                 incoming_hash,
+                incoming_source: provenance.map(|value| {
+                    value
+                        .as_map()
+                        .unwrap()
+                        .set(&v_str("label"), &v_str(label))
+                        .unwrap()
+                        .as_map()
+                        .unwrap()
+                        .set(&v_str("digest"), &v_str(&source_digest))
+                        .unwrap()
+                }),
                 live_hash,
                 default,
             });
@@ -958,14 +1061,18 @@ pub fn apply(
         } else {
             None
         };
+        let mut baseline = vec![
+            ("schema", v_str(PROGRAM_SCHEMA)),
+            ("program", v_str(&row.incoming_hash)),
+        ];
+        if let Some(source) = row.incoming_source {
+            baseline.push(("source", source));
+        }
         actions.push(ProgramAction {
             object: row.object,
             uuid: row.uuid,
             program,
-            baseline: record(&[
-                ("schema", v_str(PROGRAM_SCHEMA)),
-                ("program", v_str(&row.incoming_hash)),
-            ]),
+            baseline: record(&baseline),
         });
         decisions.push(record(&[
             ("id", v_str(&row.id)),

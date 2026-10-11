@@ -335,7 +335,7 @@ object CHANGE_MANAGER [
     "Describe the versioned review API and its limits.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
+    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "base_source", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
   endmethod
 
   method packages owner: ARCH_WIZARD
@@ -518,6 +518,7 @@ object CHANGE_MANAGER [
     set_task_perms(record["authority"]);
     const package = this.packages[record["package"]];
     package["generation"] == record["package_generation"] && package["active"] == record["id"] || this:_error("stale_package", "Package settings changed during staging.");
+    record["request"]["provenance"] = maphaskey(provenance, "digest") ? mapdelete(provenance, "digest") | provenance;
     const report = preview_objdef_changes(sources, record["request"]);
     provenance["digest"] = report["source_digest"];
     record["sources"] = sources;
@@ -795,7 +796,7 @@ object CHANGE_MANAGER [
   endmethod
 
   method details owner: ARCH_WIZARD
-    "Return selected live/incoming text only while original review evidence still matches.";
+    "Return selected programs and verified historical text while original evidence still matches.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
     const {id, generation, row_id} = args;
@@ -807,12 +808,17 @@ object CHANGE_MANAGER [
     const record = this:_get(auth, id, generation);
     let request = record["request"];
     request["details"] = {row_id};
+    const bases = `record["base_sources"] ! E_RANGE => []';
+    if (maphaskey(bases, row_id))
+      request["base_sources"] = bases[row_id];
+    endif
     const current = preview_objdef_changes(record["sources"], request, record["choices"]);
     current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before reading details.");
     for selected in (current["rows"])
       let row = selected;
       if (row["id"] == row_id)
         row["label"] = this:_command_label(row["object"], this:_command_names(), row["names"][1]);
+        row["base_fetch_available"] = auth[1].wizard && `row["base_source"]["transport"] == "git" ! E_RANGE => false';
         row["choice"] = `record["choices"][row_id] ! E_RANGE => []';
         if (row["choice"])
           row["choice"]["validated"] = maphaskey(row["choice"], "validation");
@@ -823,6 +829,44 @@ object CHANGE_MANAGER [
       endif
     endfor
     this:_error("missing_row", "No such review row.");
+  endmethod
+
+  method base_source owner: ARCH_WIZARD
+    "Verify uploaded or pinned Git source against one member's baseline and retain it only in this review.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    let {id, generation, row_id, ?sources = {}} = args;
+    let record = this:_get(auth, id, generation);
+    record["status"] in {"ready", "partial", "rejected"} || this:_error("not_ready", "Review is not ready.");
+    typeof(sources) == TYPE_LIST || raise(E_TYPE);
+    const row = this:details(id, generation, row_id)["row"];
+    typeof(row["base"]) == TYPE_STR || this:_error("missing_base", "This member has no accepted baseline.");
+    if (!sources)
+      auth[1].wizard || raise(E_PERM, "Git retrieval requires wizard authority.");
+      const origin = `row["base_source"] ! E_RANGE => []';
+      `origin["transport"] == "git" ! E_RANGE => false' || this:_error("missing_base_source", "Upload the objdefs for this member's accepted baseline.");
+      const upstream = this:_upstream(["transport" -> "git", "repository" -> origin["repository"], "revision" -> ["commit" -> origin["commit"]], "path" -> origin["path"]]);
+      const repository = $git:repository(upstream["repository"], ['max_entries -> 4096, 'max_file_bytes -> 4194304, 'max_total_bytes -> 4194304]);
+      const snapshot = repository:snapshot(upstream["revision"], upstream["path"]);
+      record = this:_get(auth, id, generation);
+      auth[1].wizard || raise(E_PERM, "Git retrieval requires wizard authority.");
+      sources = this:_git_sources(snapshot);
+    endif
+    value_bytes(sources) <= 4194304 || raise(E_QUOTA, "Historical source exceeds the service limit.");
+    const package = this.packages[record["package"]];
+    package["generation"] == record["package_generation"] && package["active"] == id || this:_error("stale_package", "Package settings changed during retrieval.");
+    let request = record["request"];
+    request["details"] = {row_id};
+    request["base_sources"] = sources;
+    const verified = preview_objdef_changes(record["sources"], request);
+    verified["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before loading historical source.");
+    let bases = `record["base_sources"] ! E_RANGE => []';
+    bases[row_id] = sources;
+    record["base_sources"] = bases;
+    record["generation"] = generation + 1;
+    value_bytes(this.pending) + value_bytes(record) <= 33554432 || raise(E_QUOTA, "Pending review storage is full.");
+    this.pending[id] = record;
+    return this:details(id, generation + 1, row_id);
   endmethod
 
   method resolve owner: ARCH_WIZARD
@@ -862,6 +906,7 @@ object CHANGE_MANAGER [
     !(record["status"] in {"fetching", "applying"}) || this:_error("busy", "Task is still running.");
     length(record["sources"]) > 0 || this:_error("missing_source", "Discard this failed fetch and stage again.");
     record["choices"] = [];
+    record["base_sources"] = [];
     record["generation"] = generation + 1;
     return this:_save_ready(record, record["sources"], record["provenance"]);
   endmethod
@@ -918,6 +963,7 @@ object CHANGE_MANAGER [
       record["generation"] = generation + 1;
       record["task"] = 0;
       record["choices"] = [];
+      record["base_sources"] = [];
       record["error"] = [];
       if (deferred)
         record["status"] = "partial";
@@ -1331,7 +1377,7 @@ object CHANGE_MANAGER [
       return this:_command_overview();
     endif
     const action = words[1];
-    action in {"packages", "package", "upstream", "fetch", "stage", "adopt", "status", "diff", "details", "source", "apply", "refresh", "discard", "resolve"} || raise(E_INVARG, tostr("Unknown @changes command: ", action, ". Use help @changes."));
+    action in {"packages", "package", "upstream", "fetch", "stage", "adopt", "status", "diff", "details", "source", "base", "apply", "refresh", "discard", "resolve"} || raise(E_INVARG, tostr("Unknown @changes command: ", action, ". Use help @changes."));
     if (action == "upstream" && length(words) >= 2)
       const git_index = words[2] == "git" ? 2 | 3;
       if (length(words) >= git_index && words[git_index] == "git")
@@ -1411,9 +1457,16 @@ object CHANGE_MANAGER [
       raise(E_INVARG, "Use help @changes for command syntax.");
     endif
     const generation = toint(words[3]);
+    if (action == "base" && length(words) == 4)
+      this:base_source(id, generation, this:_command_row(auth, id, generation, words[4]));
+      return this:_command_status(this:status(id));
+    endif
     if (action == "source" && length(words) in {5, 6})
       const detail = this:details(id, generation, this:_command_row(auth, id, generation, words[4]));
-      words[5] in {"live", "incoming"} || raise(E_INVARG);
+      words[5] in {"live", "incoming", "base"} || raise(E_INVARG);
+      if (words[5] == "base")
+        detail["row"]["base_text_available"] || this:_error("missing_base_source", "Load accepted source before reading it.");
+      endif
       const lines = explode(detail["row"][tostr(words[5], "_text")], "\n", true);
       const offset = length(words) == 6 ? toint(words[6]) | 1;
       offset >= 1 && offset <= length(lines) || raise(E_INVARG);
@@ -1423,7 +1476,7 @@ object CHANGE_MANAGER [
         code = {@code, tostr(i, ": ", lines[i])};
       endfor
       const names = this:_command_names();
-      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local program" | "Upstream program"), 3), $format.paragraph:mk(this:_command_review_link(detail, this:_command_label(detail["row"]["object"], names, detail["row"]["names"][1]), detail["row"]["id"])), $format.code:mk(code, "moo")};
+      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local program" | words[5] == "base" ? "Accepted baseline" | "Upstream program"), 3), $format.paragraph:mk(this:_command_review_link(detail, this:_command_label(detail["row"]["object"], names, detail["row"]["names"][1]), detail["row"]["id"])), $format.code:mk(code, "moo")};
       if (offset + 50 <= length(lines))
         output = {@output, $format.list:actions({this:_command_action(tostr("@changes source ", id, " ", generation, " ", words[4], " ", words[5], " ", offset + 50), "More source")})};
       endif

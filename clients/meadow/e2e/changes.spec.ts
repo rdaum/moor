@@ -12,7 +12,7 @@
 
 import { expect, type Page, test } from "@playwright/test";
 import type {} from "./review";
-import { ChangesFixture } from "./changes-fixture";
+import { ChangesFixture, source } from "./changes-fixture";
 
 let fixture: ChangesFixture;
 test.beforeEach(async () => {
@@ -386,4 +386,140 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
     await expect(page.getByLabel("Bundle URL")).toHaveValue(fixture.httpUrl);
     const current = await page.evaluate(() => window.changes.invoke("packages", []));
     expect(current).toMatchObject({ packages: { workspace: { upstream: "https://example.org/newer.moo" } } });
+});
+
+async function historicalReview(page: Page) {
+    await configure(page, "git");
+    await page.evaluate(({ repository, commit }) =>
+        window.changes.evaluate(
+            `return $change_manager:upstream("acceptance", ["transport" -> "git", "repository" -> "${repository}", "revision" -> ["commit" -> "sha1:${commit}"], "path" -> "cores/sample/src"], $change_manager.packages["acceptance"]["generation"]);`,
+        ), { repository: fixture.gitUrl, commit: fixture.revisionA });
+    const adoption = await page.evaluate(async () =>
+        (await window.changes.invoke("stage", ["acceptance", [], "adopt"]) as { review_id: number }).review_id
+    );
+    await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), adoption)).toMatchObject({
+        status: "ready",
+    });
+    await page.evaluate(id => window.changes.client(id).apply(1), adoption);
+    await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), adoption)).toMatchObject({
+        status: "complete",
+    });
+    await page.evaluate(repository =>
+        window.changes.evaluate(
+            `return $change_manager:upstream("acceptance", ["transport" -> "git", "repository" -> "${repository}", "revision" -> ["ref" -> "refs/heads/main"], "path" -> "cores/sample/src"], $change_manager.packages["acceptance"]["generation"]);`,
+        ), fixture.gitUrl);
+    return stage(page);
+}
+
+test("historical source verifies uploads and pinned Git revisions, survives restart, and supports mixed baselines", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await login(page);
+    const review = await historicalReview(page);
+    await choose(page, review, "edited", "edited", "return 9;");
+    const generation = (await page.evaluate(id => window.changes.client(id).status(), review)).generation;
+    await page.evaluate(({ review, generation }) => window.changes.open(review, generation), { review, generation });
+    await page.getByRole("button", { name: /:edited, Verb/ }).click();
+    await page.getByLabel("Upload accepted objdefs").setInputFiles({
+        name: "wrong.moo",
+        mimeType: "text/plain",
+        buffer: Buffer.from(source("incoming")),
+    });
+    await expect(page.locator(".change-review-shell")).toContainText("does not match the accepted baseline");
+    expect((await page.evaluate(id => window.changes.client(id).status(), review)).generation).toBe(generation);
+    await page.getByRole("button", { name: "Fetch accepted source" }).click();
+    await expect(page.getByText("Accepted source verified against this verb's baseline.")).toBeVisible();
+    await expect(page.locator(".change-review-three-way")).toBeVisible();
+    for (const name of ["Accepted baseline", "Local", "Upstream"]) {
+        await expect(page.locator(".change-review-three-way").getByRole("region", { name, exact: true })).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
+    const editor = page.locator(".change-review-draft").getByRole("textbox", { name: "Editor content", exact: true });
+    await editor.focus();
+    await editor.press("End");
+    await editor.pressSequentially(" ");
+    await expect(page.getByRole("button", { name: "Fetch accepted source" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save proposed program" }).click();
+    await expect(page.getByText("Choice saved. Live code has not changed.")).toBeVisible();
+    await page.getByRole("button", { name: /:deferred, Verb/ }).click();
+    await page.getByLabel("Upload accepted objdefs").setInputFiles({
+        name: "ancestor.moo",
+        mimeType: "text/plain",
+        buffer: Buffer.from(source("base")),
+    });
+    await expect(page.getByText("Accepted source verified against this verb's baseline.")).toBeVisible();
+    await expect(
+        page.locator(".change-review-three-way").getByRole("region", { name: "Accepted baseline", exact: true })
+            .locator(".view-lines"),
+    ).toContainText("return 1;");
+    await fixture.restart();
+    await login(page);
+    const details = await page.evaluate(async id => {
+        const client = window.changes.client(id);
+        const status = await client.status();
+        const row = (await client.page(status.generation)).rows.find(row => row.memberLabel === ":edited")!;
+        return client.details(status.generation, row.id);
+    }, review);
+    expect(details).toMatchObject({
+        base_text: "return 1;",
+        live_text: "return 3;",
+        incoming_text: "return 2;",
+        choice: { choice: "edited", validated: true },
+    });
+    await choose(page, review, "conflict", "local");
+    await choose(page, review, "deferred", "defer");
+    await page.evaluate(async id => {
+        const client = window.changes.client(id);
+        await client.apply((await client.status()).generation);
+    }, review);
+    await expect.poll(() => page.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
+        status: "partial",
+    });
+    const mixed = await page.evaluate(async id => {
+        const client = window.changes.client(id);
+        const values = [];
+        for (const name of [":edited", ":deferred"]) {
+            const status = await client.status();
+            const row = (await client.page(status.generation)).rows.find(row => row.memberLabel === name)!;
+            values.push((await client.baseSource(status.generation, row.id)).row.base_text);
+        }
+        return values;
+    }, review);
+    expect(mixed).toEqual(["return 2;", "return 1;"]);
+    expect(await programs(page)).toEqual([2, 3, 3, 9, 3]);
+    expect(errors).toEqual([]);
+});
+
+test("historical Git retrieval rechecks authority after worker suspension", async ({ page, context }) => {
+    await login(page, "AcceptanceAdmin");
+    const review = await historicalReview(page);
+    const held = fixture.holdGit();
+    const fetching = page.evaluate(async id => {
+        const client = window.changes.client(id);
+        const row = (await client.page(1)).rows.find(row => row.memberLabel === ":conflict")!;
+        try {
+            await client.baseSource(1, row.id);
+            return "unexpected success";
+        } catch {
+            return "rejected";
+        }
+    }, review);
+    await held.arrived;
+    const administrator = await context.newPage();
+    await login(administrator);
+    await administrator.evaluate(() => window.changes.evaluate("#9502.wizard = false; return 1;"));
+    held.release();
+    expect(await fetching).toBe("rejected");
+    expect(await administrator.evaluate(id => window.changes.client(id).status(), review)).toMatchObject({
+        generation: 1,
+        status: "ready",
+    });
+    expect(
+        await administrator.evaluate(id =>
+            window.changes.evaluate(
+                `return maphaskey($change_manager.pending[${id}], "base_sources");`,
+            ), review),
+    ).toBe(false);
+    expect(await programs(administrator)).toEqual([1, 3, 3, 3, 3]);
+    await administrator.close();
 });

@@ -67,6 +67,7 @@ export interface ChangeRow {
     live_text?: string;
     incoming_text?: string;
     base_text?: string;
+    base_fetch_available?: boolean;
     read_only?: boolean;
     field?: string;
     live_present?: boolean;
@@ -187,10 +188,13 @@ export function decodeChangeRow(value: unknown, details = false): ChangeRow {
             }
             : {}),
         base: typeof row.base === "string" ? row.base : undefined,
+        base_fetch_available: row.base_fetch_available === true || row.base_fetch_available === 1,
         live: text(row.live),
         incoming: text(row.incoming),
         ...(details ? { live_text: text(row.live_text), incoming_text: text(row.incoming_text) } : {}),
-        ...(row.base_text_available === true && typeof row.base_text === "string" ? { base_text: row.base_text } : {}),
+        ...((row.base_text_available === true || row.base_text_available === 1) && typeof row.base_text === "string"
+            ? { base_text: row.base_text }
+            : {}),
     };
 }
 
@@ -207,7 +211,16 @@ export class ChangeReviewClient {
     constructor(private token: string, private target: ChangeTarget) {}
 
     private async invoke(
-        method: "status" | "review" | "details" | "inspection" | "diagnostics" | "resolve" | "apply" | "refresh",
+        method:
+            | "status"
+            | "review"
+            | "details"
+            | "base_source"
+            | "inspection"
+            | "diagnostics"
+            | "resolve"
+            | "apply"
+            | "refresh",
         args: StructuredArgument[],
     ) {
         const { result } = await invokeVerbFlatBuffer(
@@ -294,6 +307,14 @@ export class ChangeReviewClient {
             throw new Error("Review changed. Reload it before continuing.");
         }
         return detail;
+    }
+    async baseSource(generation: number, row: string, sources: { label: string; text: string }[] = []) {
+        const result = await this.invoke("base_source", [this.target.review, generation, row, sources]);
+        const detail = decodeChangeRow(result.row, true);
+        if (result.generation !== generation + 1 || detail.id !== row || detail.base_text === undefined) {
+            throw new Error("Unexpected historical source response. Reload the review.");
+        }
+        return { generation: result.generation as number, row: detail };
     }
     async inspection(generation: number, offset = 1, classification = "", revision = ""): Promise<InspectionPage> {
         const result = await this.invoke("inspection", [

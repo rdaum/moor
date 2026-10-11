@@ -55,6 +55,32 @@ describe("change review protocol", () => {
         expect(baselineText({ ...detail, base: detail.incoming })).toBe("return 2;");
         expect(baselineText({ ...detail, base: undefined })).toBeUndefined();
     });
+    it("accepts verified historical text and guards its generation and selected member", async () => {
+        const client = new ChangeReviewClient("token", target);
+        const base = { ...row, base_text_available: 1, base_text: "return 0;", base_fetch_available: true };
+        vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
+            result: { schema: 1, review_id: 1, generation: 8, row: base },
+            output: [],
+        });
+        const sources = [{ label: "ancestor.moo", text: "object #1\nendobject" }];
+        const result = await client.baseSource(7, row.id, sources);
+        expect(baselineText(result.row)).toBe("return 0;");
+        expect(result.row.base_fetch_available).toBe(true);
+        const call = vi.mocked(invokeVerbFlatBuffer).mock.calls.at(-1)!;
+        expect(call[2]).toBe("base_source");
+        expect(new MoorVar(Var.getRootAsVar(new ByteBuffer(call[3]!))).toJS()).toEqual([1, 7, row.id, sources]);
+        for (
+            const patch of [{ generation: 7 }, { row: { ...base, id: "another" } }, {
+                row: { ...base, base_text_available: false },
+            }]
+        ) {
+            vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
+                result: { schema: 1, review_id: 1, generation: 8, row: base, ...patch },
+                output: [],
+            });
+            await expect(client.baseSource(7, row.id)).rejects.toThrow("Unexpected historical source");
+        }
+    });
     it("rejects a response from another review generation before exposing its source", async () => {
         vi.mocked(invokeVerbFlatBuffer).mockResolvedValueOnce({
             result: { schema: 1, review_id: 1, generation: 8, row },

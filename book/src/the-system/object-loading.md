@@ -189,6 +189,19 @@ Optional `details` selects row IDs whose live and incoming program text the repo
 selection does not change review evidence. Clients must compare returned evidence with the saved
 review before showing newly read text under an old approval.
 
+Optional `base_sources` uses the same source-unit format as incoming objdefs. It requires selected
+program `details`. Each selected historical member must match the installed object binding, verb
+names, argument specification, and accepted program fingerprint. Supplied object identities must
+also match. A mismatch rejects the request. Verified details include `base_text` and
+`base_text_available`. Historical input does not change apply evidence or install source.
+
+Optional `provenance` is a map limited to 8192 bytes. It provides retrieval hints, which are part of
+the guarded request. Adoption and accepted update choices retain these hints in baseline `source`
+metadata. The native operation sets `label` and `digest` from the actual incoming source. Keeping
+local code or installing an edited result still accepts incoming provenance. Deferral preserves the
+previous baseline. Detail rows expose existing hints as `base_source`. These hints never replace
+fingerprint verification.
+
 The report's `evidence` binds the source, scope, compilation options, target identities, authority,
 live programs, and baselines. Evidence grants no permission. Property and definition fields remain
 unmanaged; diagnostics identify unsupported declarations and fields.
@@ -314,8 +327,26 @@ includes are not supported. Effective URL, ETag, and the source digest are saved
 `diff` lists stable row IDs, classifications, eligibility, choices, and blockers. Inspect a selected
 program with `@changes source ID GENERATION ROW live` or `incoming`. Add an offset to page through
 its decompiled lines. Both panes use decompiled coordinates. Structured details also contain exact
-incoming body text and its file position. Baselines contain hashes; historical base text is
-unavailable.
+incoming body text and its file position.
+
+Cowbell can retrieve historical objdefs from the accepted Git commit or accept an upload. Meadow
+offers **Fetch accepted source** when Git provenance and wizard authority are available. Use
+**Upload accepted objdefs** for other sources. Retrieval uses the saved commit and repository
+subtree, even if the configured branch now points elsewhere. The native operation verifies the
+selected member against its baseline before the service retains the source.
+
+The terminal commands are `@changes base ID GENERATION ROW` for Git retrieval and
+`@changes source ID GENERATION ROW base` to read verified historical text.
+
+Meadow then offers a three-way comparison of the accepted baseline, local code, and upstream code.
+The edited result remains separate. Save unsaved edits before loading historical source. If source
+is unavailable, the two-way comparison remains usable.
+
+The Cowbell service method `base_source(ID, GENERATION, ROW, SOURCES)` accepts uploaded source
+units. Omit `SOURCES` to retrieve the pinned Git source. The response contains verified details and
+the next generation. Saved choices remain intact. Each member can use a different baseline revision.
+Source remains in the pending review across restarts. Refresh, apply, and discard remove the
+historical cache. Completion receipts do not contain historical source.
 
 Resolve a row with `@changes resolve ID GENERATION ROW incoming`, `local`, or `defer`. For a short
 edited program, use `@changes resolve ID GENERATION ROW edited PROGRAM`. The service validates the

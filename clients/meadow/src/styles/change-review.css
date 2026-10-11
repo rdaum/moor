@@ -329,3 +329,41 @@
 .change-review-source dd {
   margin: 0;
 }
+
+.change-review-base-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+}
+
+.change-review-base-source label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.change-review-pane-labels[hidden] {
+  display: none;
+}
+
+.change-review-three-way {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  height: 100%;
+  overflow-x: auto;
+}
+
+.change-review-three-way > section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.change-review-three-way h4 {
+  margin: 0;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}

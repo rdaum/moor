@@ -307,6 +307,28 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
             }
         }
     };
+    const loadBase = async (files?: FileList | null) => {
+        if (!row || dirty || busy || !service?.supports("base_source")) return;
+        const request = ++sequence.current;
+        setBusy(true);
+        setError("");
+        try {
+            const units = Array.from(files ?? []);
+            if (units.reduce((sum, file) => sum + file.size, 0) > service.capabilities.maxSourceBytes) {
+                throw new Error("Historical source exceeds the service limit.");
+            }
+            const sources = await Promise.all(units.map(async file => ({ label: file.name, text: await file.text() })));
+            const result = await client.baseSource(generation, row.id, sources);
+            if (request !== sequence.current) return;
+            await load(result.generation, row.id, category);
+            setComparison("three-way");
+            setNotice("Accepted source verified against this verb's baseline.");
+        } catch (failure) {
+            if (request === sequence.current) fail(failure);
+        } finally {
+            if (request === sequence.current) setBusy(false);
+        }
+    };
     const apply = async () => {
         setConfirmation(null);
         const request = ++sequence.current;
@@ -597,6 +619,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                     <option value="local-upstream">Local → Upstream</option>
                                                     {baseline !== undefined && (
                                                         <>
+                                                            <option value="three-way">Three-way comparison</option>
                                                             <option value="baseline-local">
                                                                 Accepted baseline → Local
                                                             </option>
@@ -629,8 +652,41 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                 {baseline === undefined && (
                                                     <small>
                                                         {row.base
-                                                            ? "Accepted source wasn’t saved; only its hash is available."
+                                                            ? "Load the accepted source to compare all three versions."
                                                             : "This item has no accepted baseline."}
+                                                    </small>
+                                                )}
+                                            </div>
+                                        )}
+                                        {!row.read_only && row.base && service?.supports("base_source") && (
+                                            <div className="change-review-base-source">
+                                                {row.base_fetch_available && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={busy || dirty}
+                                                        onClick={() => void loadBase()}
+                                                    >
+                                                        Fetch accepted source
+                                                    </button>
+                                                )}
+                                                <label>
+                                                    Upload accepted objdefs
+                                                    <input
+                                                        type="file"
+                                                        multiple
+                                                        accept=".moo"
+                                                        disabled={busy || dirty}
+                                                        onChange={event => {
+                                                            if (event.currentTarget.files?.length) {
+                                                                void loadBase(event.currentTarget.files);
+                                                            }
+                                                            event.currentTarget.value = "";
+                                                        }}
+                                                    />
+                                                </label>
+                                                {dirty && (
+                                                    <small>
+                                                        Save your edited program before loading accepted source.
                                                     </small>
                                                 )}
                                             </div>
@@ -647,6 +703,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                         {row.inspection_error && <p role="status">{row.inspection_error}</p>}
                                         <div
                                             className="change-review-pane-labels"
+                                            hidden={comparison === "three-way"}
                                             data-layout={sideBySide ? "split" : "unified"}
                                         >
                                             <span>
@@ -666,7 +723,58 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             )}
                                         </div>
                                         <div className="change-review-diff">
-                                            {row.live_present === false || row.incoming_present === false
+                                            {comparison === "three-way" && baseline !== undefined
+                                                ? (
+                                                    <div className="change-review-three-way">
+                                                        {[{ label: "Accepted baseline", text: baseline }, {
+                                                            label: "Local",
+                                                            text: row.live_text ?? "",
+                                                        }, { label: "Upstream", text: row.incoming_text ?? "" }].map((
+                                                            pane,
+                                                            index,
+                                                        ) => (
+                                                            <section key={pane.label} aria-label={pane.label}>
+                                                                <h4>{pane.label}</h4>
+                                                                {index === 0
+                                                                    ? (
+                                                                        <Editor
+                                                                            defaultValue={pane.text}
+                                                                            language="moo"
+                                                                            theme={monacoThemeFor(theme)}
+                                                                            beforeMount={registerMooLanguage}
+                                                                            options={{
+                                                                                readOnly: true,
+                                                                                automaticLayout: true,
+                                                                                minimap: { enabled: false },
+                                                                                wordWrap: "on",
+                                                                                scrollBeyondLastLine: false,
+                                                                            }}
+                                                                        />
+                                                                    )
+                                                                    : (
+                                                                        <ReviewDiffEditor
+                                                                            original={baseline}
+                                                                            modified={pane.text}
+                                                                            language="moo"
+                                                                            theme={monacoThemeFor(theme)}
+                                                                            beforeMount={registerMooLanguage}
+                                                                            options={{
+                                                                                readOnly: true,
+                                                                                originalEditable: false,
+                                                                                automaticLayout: true,
+                                                                                minimap: { enabled: false },
+                                                                                renderSideBySide: false,
+                                                                                useInlineViewWhenSpaceIsLimited: false,
+                                                                                diffWordWrap: "on",
+                                                                                scrollBeyondLastLine: false,
+                                                                            }}
+                                                                        />
+                                                                    )}
+                                                            </section>
+                                                        ))}
+                                                    </div>
+                                                )
+                                                : row.live_present === false || row.incoming_present === false
                                                 ? (
                                                     <Editor
                                                         key={row.id}

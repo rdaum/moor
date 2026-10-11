@@ -182,3 +182,34 @@ true
 // Core-declared owner policy also covers system code intentionally owned by a non-wizard.
 ; load_object({"object #9501", tostr("owner: ", $hacker), tostr("verb test (this none this) owner: ", $hacker, " flags: \"rxd\""), "return 7;", "endverb", "endobject"}); const core = $change_manager:capabilities()["default_package"]; const owners = $change_manager:packages()["packages"][core]["trusted_owners"]; $change_manager:configure("system_probe", {#9501}, [], "", 0, owners); const staged = $change_manager:stage("system_probe", {["label" -> "system.moo", "text" -> dump_object(#9501)]}, "adopt"); const eligible = $change_manager:review(staged["review_id"], 1)["rows"][1]["eligible"]; $change_manager:discard(staged["review_id"], 1); return eligible;
 true
+
+// Historical objdefs are verified per member and retained only in the active review.
+@wizard
+; load_object({"object #9503", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 11;", "endverb", "endobject"}); add_property(#0, "changes_ancestor", dump_object(#9503), {player, ""}); $change_manager:configure("historical_probe", {#9503}, []); #0.changes_probe = $change_manager:stage("historical_probe", {["label" -> "ancestor.moo", "text" -> #0.changes_ancestor]}, "adopt"); return $change_manager:apply(#0.changes_probe["review_id"], 1)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return status["status"]; endif suspend(0.01); endfor return "timed out";
+"complete"
+
+; set_verb_code(#9503, "test", {"return 12;"}); const incoming = dump_object(#9503); set_verb_code(#9503, "test", {"return 13;"}); #0.changes_probe = $change_manager:stage("historical_probe", {["label" -> "incoming.moo", "text" -> incoming]}); const id = #0.changes_probe["review_id"]; const row = $change_manager:review(id, 1)["rows"][1]; #0.changes_probe["row"] = row["id"]; const details = $change_manager:details(id, 1, row["id"])["row"]; return {row["classification"], details["base_source"]["transport"], details["base_source"]["label"], details["base_text_available"]};
+{"conflict", "upload", "ancestor.moo", false}
+
+; const id = #0.changes_probe["review_id"]; const result = `$change_manager:base_source(id, 1, #0.changes_probe["row"], {["label" -> "wrong.moo", "text" -> dump_object(#9503)]}) ! ANY => "rejected"'; return {result, $change_manager:status(id)["generation"]};
+{"rejected", 1}
+
+; const id = #0.changes_probe["review_id"]; $change_manager:resolve(id, 1, #0.changes_probe["row"], "edited", "return 14;"); const result = $change_manager:base_source(id, 2, #0.changes_probe["row"], {["label" -> "ancestor.moo", "text" -> #0.changes_ancestor]}); const row = result["row"]; return {result["generation"], row["base_text"], row["live_text"], row["incoming_text"], row["choice"]["program"], row["choice"]["validated"]};
+{3, "return 11;", "return 13;", "return 12;", "return 14;", true}
+
+; return $change_manager:details(#0.changes_probe["review_id"], 3, #0.changes_probe["row"])["row"]["base_text_available"];
+true
+
+; return `$change_manager:base_source(#0.changes_probe["review_id"], 2, #0.changes_probe["row"], {["label" -> "ancestor.moo", "text" -> #0.changes_ancestor]}) ! ANY => "stale"';
+"stale"
+
+@nonprogrammer
+; return $change_manager:base_source(#0.changes_probe["review_id"], 3, #0.changes_probe["row"]);
+E_PERM
+
+@wizard
+; const id = #0.changes_probe["review_id"]; $change_manager:refresh(id, 3); const row = $change_manager:details(id, 4, #0.changes_probe["row"])["row"]; $change_manager:discard(id, 4); return {row["base_text_available"], #9503:test(), maphaskey($change_manager.pending, id)};
+{false, 13, false}

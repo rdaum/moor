@@ -147,7 +147,7 @@ it("opens a review-specific comparison and tells the truth about missing baselin
     open();
     expect(await screen.findByRole("heading", { name: "$test:verb" })).toBeTruthy();
     expect(screen.getByTestId("diff").textContent).toBe("return 1; → return 2;");
-    expect(screen.getByText("Accepted source wasn’t saved; only its hash is available.")).toBeTruthy();
+    expect(screen.getByText("Load the accepted source to compare all three versions.")).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Accepted baseline → Local" })).toBeNull();
     expect(screen.getByRole("button", { name: "Apply 0 choices" })).toHaveProperty("disabled", true);
 });

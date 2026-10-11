@@ -68,6 +68,9 @@ export class ChangesFixture {
     private bundleGate?: Promise<void>;
     private bundleArrived?: () => void;
     private releaseBundle?: () => void;
+    private gitGate?: Promise<void>;
+    private gitArrived?: () => void;
+    private releaseGit?: () => void;
     private gitChildren = new Set<ChildProcess>();
 
     async start() {
@@ -118,6 +121,8 @@ export class ChangesFixture {
                     response.end(source("incoming"));
                     return;
                 }
+                this.gitArrived?.();
+                await this.gitGate;
                 const input: Buffer[] = [];
                 for await (const chunk of request) input.push(Buffer.from(chunk));
                 const body = Buffer.concat(input);
@@ -255,6 +260,15 @@ export class ChangesFixture {
         });
         return { arrived, release: () => this.releaseBundle?.() };
     }
+    holdGit() {
+        this.gitGate = new Promise(done => {
+            this.releaseGit = done;
+        });
+        const arrived = new Promise<void>(done => {
+            this.gitArrived = done;
+        });
+        return { arrived, release: () => this.releaseGit?.() };
+    }
     async restart() {
         await stop(this.world);
         await this.startWorld();
@@ -264,6 +278,7 @@ export class ChangesFixture {
     }
     async close() {
         this.releaseBundle?.();
+        this.releaseGit?.();
         await stop(this.vite);
         await stop(this.world);
         await Promise.all([...this.gitChildren].map(stop));
