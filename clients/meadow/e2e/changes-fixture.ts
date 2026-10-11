@@ -20,7 +20,7 @@ import { resolve } from "node:path";
 
 export const workspace = resolve(import.meta.dirname, "../../..");
 export const members = ["unchanged", "upstream", "local", "converged", "conflict", "edited", "deferred", "unbased"];
-export function source(version: "base" | "live" | "incoming", extraMembers = 0) {
+export function source(version: "base" | "live" | "incoming", extraMembers = 0, additions = false) {
     const names = [...members, ...Array.from({ length: extraMembers }, (_, index) => `extra_${index + 1}`)];
     const values = names.map(name => {
         if (version === "base") return 1;
@@ -29,8 +29,16 @@ export function source(version: "base" | "live" | "incoming", extraMembers = 0) 
     });
     return `object #9500 [import_export_id -> "changes_acceptance"]\nname: "Acceptance package"\nowner: #2\nparent: #9501\noverride setting (owner: #2, flags: \"\") = 1;\n`
         + names.map((name, i) =>
-            `verb ${name} (this none this) owner: #2 flags: "rxd"\nreturn ${values[i]};\nendverb\n`
+            `verb ${name} (this none this) owner: #2 flags: "rxd"\n${
+                additions && version === "incoming" && name === "upstream"
+                    ? "return this:added_helper();"
+                    : `return ${values[i]};`
+            }\nendverb\n`
         ).join("")
+        + (additions && version === "incoming"
+            ? "property item_schema (owner: #2, flags: \"r\") = 42;\n"
+                + "verb added_helper (this none this) owner: #2 flags: \"rxd\"\nreturn this.item_schema;\nendverb\n"
+            : "")
         + "endobject\nobject #9501 [import_export_id -> \"acceptance_parent\"]\nowner: #2\nproperty setting (owner: #2, flags: \"rc\") = 1;\nendobject\n";
 }
 async function port(): Promise<number> {
@@ -67,6 +75,7 @@ export class ChangesFixture {
     private hosts: ChildProcess[] = [];
     private distributed = false;
     private extraMembers = 0;
+    private additions = false;
     httpFailure = false;
     rpcArgs: string[] = [];
     telnetPort = 0;
@@ -80,9 +89,12 @@ export class ChangesFixture {
     private releaseGit?: () => void;
     private gitChildren = new Set<ChildProcess>();
 
-    async start(options: { distributed?: boolean; browser?: boolean; extraMembers?: number } = {}) {
+    async start(
+        options: { distributed?: boolean; browser?: boolean; extraMembers?: number; additions?: boolean } = {},
+    ) {
         this.distributed = options.distributed ?? false;
         this.extraMembers = options.extraMembers ?? 0;
+        this.additions = options.additions ?? false;
         this.directory = await mkdtemp(resolve(tmpdir(), "moor-changes-"));
         try {
             this.apiPort = await port();
@@ -115,7 +127,10 @@ export class ChangesFixture {
                 }).trim();
             git("init", "-b", "main");
             for (const version of ["base", "incoming"] as const) {
-                await writeFile(resolve(repo, "cores/sample/src/probe.moo"), source(version, this.extraMembers));
+                await writeFile(
+                    resolve(repo, "cores/sample/src/probe.moo"),
+                    source(version, this.extraMembers, this.additions),
+                );
                 git("add", ".");
                 git("commit", "-m", version);
                 if (version === "base") this.revisionA = git("rev-parse", "HEAD");
@@ -132,7 +147,7 @@ export class ChangesFixture {
                     this.bundleArrived?.();
                     await this.bundleGate;
                     response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-                    response.end(source("incoming", this.extraMembers));
+                    response.end(source("incoming", this.extraMembers, this.additions));
                     return;
                 }
                 this.gitArrived?.();

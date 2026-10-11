@@ -11,6 +11,9 @@ object #90030
   property member (owner: ARCH_WIZARD, flags: "rc") = "";
   property backend (owner: ARCH_WIZARD, flags: "rc") = "";
   property expect_denied (owner: ARCH_WIZARD, flags: "rc") = false;
+  property revoke_before_apply (owner: ARCH_WIZARD, flags: "rc") = false;
+  property recover_after_edit (owner: ARCH_WIZARD, flags: "rc") = false;
+  property recovered (owner: ARCH_WIZARD, flags: "rc") = false;
   property inspect_only (owner: ARCH_WIZARD, flags: "rc") = false;
   property package (owner: ARCH_WIZARD, flags: "rc") = "";
   property source (owner: ARCH_WIZARD, flags: "rc") = {};
@@ -28,6 +31,9 @@ object #90030
       this.seen = {@this.seen, last};
       if (this.expect_denied)
         !last["ok"] && last["error"]["code"] == "permission_denied" || raise(E_INVARG, "Unprivileged requester gained tool authority.");
+        if (this.revoke_before_apply)
+          player.wizard = true;
+        endif
         this.phase = 9;
         last = ["ok" -> true, "result" -> []];
       endif
@@ -63,11 +69,23 @@ object #90030
       input["program"] = "const label = \"#9500\";\nreturn {label, 42};";
     elseif (phase == 4)
       last["result"]["validation"][1]["valid"] || raise(E_INVARG, "Multiline draft was lost.");
-      name = "changes_prepare_apply";
+      if (this.recover_after_edit && !this.recovered)
+        set_verb_code(#9500, "probe", {"return 99;"});
+        suspend(0.01);
+        name = "changes_refresh";
+        this.phase = 9;
+      else
+        name = "changes_prepare_apply";
+      endif
     elseif (phase == 5)
       last["result"]["can_apply"] || raise(E_INVARG, "Prepared apply was blocked.");
       name = "changes_apply";
       input["prepared"] = last["result"]["prepared"];
+      if (this.revoke_before_apply)
+        player.wizard = false;
+        this.expect_denied = true;
+        suspend(0.01);
+      endif
     elseif (phase == 6)
       name = "changes_status";
       input = ["review" -> this.review];
@@ -82,10 +100,23 @@ object #90030
       last["result"]["decision_count"] > 0 || raise(E_INVARG, "Missing committed decisions.");
       name = "changes_history";
       input = ["package" -> this.package];
+    elseif (phase == 10)
+      last["result"]["recovery_count"] == 1 || raise(E_INVARG, "Refresh lost the saved draft.");
+      name = "changes_recovery";
+    elseif (phase == 11)
+      const items = last["result"]["items"];
+      length(items) == 1 && items[1]["reason"] != "" || raise(E_INVARG, "Changed live code did not preserve a draft for review.");
+      items[1]["id"] == this.member || raise(E_INVARG, "Recovery changed the member identity.");
+      name = "changes_resolve";
+      input["member"] = this.member;
+      input["choice"] = "edited";
+      input["program"] = items[1]["choice"]["program"];
+      this.recovered = true;
+      this.phase = 3;
     else
       if (this.backend == "rlm")
         name = "report_finding";
-        input = ["subject" -> "Change review", "content" -> this.inspect_only ? "Updates inspected. Live code remains unchanged." | "Edited program installed and result checked.", "final" -> true];
+        input = ["subject" -> "Change review", "content" -> this.expect_denied ? "Change management denied. No updates applied." | this.inspect_only ? "Updates inspected. Live code remains unchanged." | "Edited program installed and result checked.", "final" -> true];
       else
         return ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "Change review finished."]]}];
       endif
@@ -96,7 +127,8 @@ object #90030
 
   method run_scenario owner: ARCH_WIZARD
     "Exercise actual room orchestration with a deterministic model and no external credentials.";
-    const {backend, inspect_only} = args;
+    const {backend, inspect_only, ?revoke = false, ?recover = false} = args;
+    player.wizard || raise(E_PERM);
     set_task_perms(player);
     const room = create(backend == "rlm" ? $agent_room | $agentic.coding_room, player, 2);
     const model = create(this, player, 2);
@@ -115,6 +147,8 @@ object #90030
       endwhile
       model.backend = backend;
       model.inspect_only = inspect_only;
+      model.revoke_before_apply = revoke;
+      model.recover_after_edit = recover;
       model.package = package;
       model.source = source;
       model.source[4] = "return 2;";
@@ -124,19 +158,29 @@ object #90030
       let task = ['player -> player, 'query -> inspect_only ? "Find out what is new." | "Find out what is new and merge it in. Use the edited program from the fixture."];
       task["authorization"] = $agent_room:_authorize_task(room, task);
       room:execute_fixture(task);
-      const expected = inspect_only ? 1 | {"#9500", 42};
+      !recover || model.recovered || raise(E_INVARG, "Room did not recover its saved draft.", {model.phase, model.seen[$]});
+      const expected = (inspect_only || revoke) ? 1 | {"#9500", 42};
       #9500:probe() == expected || raise(E_INVARG, "Room did not preserve the requested effects.", room.history);
-      length(model.seen) >= (inspect_only ? 2 | 8) || raise(E_INVARG, "Room bypassed tool workflow.", room.history);
-      if (inspect_only)
+      length(model.seen) >= (inspect_only ? 2 | revoke ? 7 | 8) || raise(E_INVARG, "Room bypassed tool workflow.", room.history);
+      if (inspect_only || revoke)
         const status = $change_manager:status(model.review);
         $change_manager:discard(model.review, status["generation"]);
       endif
       return true;
     finally
+      if (revoke)
+        this:restore_requester(player);
+      endif
       valid(room) && recycle(room);
       valid(model) && recycle(model);
     endtry
   endmethod
+  method restore_requester owner: ARCH_WIZARD
+    "Restore the isolated fixture requester even if its room execution failed.";
+    caller == this || raise(E_PERM);
+    args[1].wizard = true;
+  endmethod
+
   method run_denied owner: ARCH_WIZARD
     "Room and model ownership must not grant their requester administrator permissions.";
     const {backend} = args;

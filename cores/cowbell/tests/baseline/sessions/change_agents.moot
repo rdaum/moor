@@ -8,6 +8,16 @@ true
 true
 ; return #90030:run_scenario("agentic", false);
 true
+// A model reply arrives after the requester loses wizard authority.
+; return #90030:run_scenario("rlm", false, true);
+true
+; return #90030:run_scenario("agentic", false, true);
+true
+// Saved edits remain usable after a concurrent live edit and comparison refresh.
+; return #90030:run_scenario("rlm", false, false, true);
+true
+; return #90030:run_scenario("agentic", false, false, true);
+true
 @programmer
 ; return #90030:run_denied("rlm");
 true

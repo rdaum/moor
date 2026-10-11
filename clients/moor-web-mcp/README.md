@@ -57,3 +57,21 @@ The catalog and guide come from the default configured character's world. Refres
 `moo_refresh_dynamic_tools` after changing the core. See the
 [administrator workflow](../../book/src/the-system/object-loading.md#review-updates-with-an-agent)
 for decisions, permissions, and recovery.
+
+For a dedicated change-management connection, set `defaultCharacter` to the administrator's account
+ID. For a separate configured administrator account, select `wizard: true` in tool arguments. Git
+access and new object creation require an actual wizard.
+
+A request to find updates permits inspection and review preparation. A request to merge updates
+permits guarded application within the requested scope. Local conflicts and property initialization
+can still require a policy decision.
+
+Start with `changes_packages`, then `changes_check` and `changes_status`. Read review pages and save
+decisions through `changes_resolve`. Use `changes_prepare_apply` to inspect all effects before
+application. Pass its `prepared` handle unchanged to `changes_apply`. Use `changes_finish` to close
+a partial review without accepting deferred changes.
+
+The
+[acceptance instructions](../../cores/cowbell/RUNTIME_TESTING.md#change-tools-and-agent-workflows)
+run both MCP hosts against isolated HTTP and Git sources. The tests include saved drafts, additions,
+restart, permission loss, and recovery after a lost reply. They require no paid model access.

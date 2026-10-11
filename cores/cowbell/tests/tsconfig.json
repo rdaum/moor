@@ -1,0 +1,15 @@
+{
+  "extends": "../../../clients/moor-web-mcp/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"],
+    "typeRoots": ["../../../node_modules/@types"]
+  },
+  "include": [
+    "mcp/**/*.ts",
+    "changes/**/*.ts",
+    "../../../clients/moor-web-mcp/src/compat.d.ts"
+  ]
+}

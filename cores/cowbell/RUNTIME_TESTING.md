@@ -175,18 +175,33 @@ or Git hosting account is required.
 ```sh
 cargo build -p moor-daemon -p moor-web-host -p moor-telnet-host \
   -p moor-mcp-host -p moor-git-worker -p moor-curl-worker
+node tools/tsc.mjs --noEmit -p cores/cowbell/tests/tsconfig.json
 node --import tsx cores/cowbell/tests/mcp/changes.ts
 ```
 
 Run these commands from the repository root. The test drives review changes through real MCP stdio
 requests. It checks catalog discovery, the guide, argument errors, compiler errors, edited source,
-application, and retained results through both MCP hosts and both source transports.
+historical source, declared additions, and prepared application through both hosts and both source
+transports. The fixture contains 73 existing verbs, a new helper, and a new property. Review pages,
+effect pages, and result pages must include the complete set.
+
+The test restarts the persistent world before apply and after finish. It drops an apply reply at the
+client boundary, starts another MCP process, and recovers the committed result. It also revokes the
+requester's wizard authority during worker suspension. A native-host timeout probe verifies that a
+committed mutation executes only once. Independent assertions check installed programs and retained
+property data and permissions. A separate uploaded review binds a new object to an explicit address
+and installs its contents without calling an initialization verb.
+
+Use `--web-only` for a focused run of the TypeScript host. The full acceptance run must cover both
+hosts.
 
 The `change_tools.moot` scenario checks the shared provider and requester permissions.
 `change_agents.moot` uses a deterministic model to exercise actual RLM and agentic room execution.
 Its inspection request leaves live code unchanged. Its update request validates and applies a
 multiline edited program through the shared tools. The session runner creates an ephemeral signing
-key so room authorization uses the normal capability checks.
+key so room authorization uses the normal capability checks. Both room paths also test a denied
+programmer, authority loss between preview and apply, and draft recovery after a live edit. Model
+responses are deterministic; no external model account is required.
 
 ## Plain-telnet change reviews
 
@@ -198,8 +213,38 @@ node --import tsx cores/cowbell/tests/changes/telnet.ts --git
 The test uses the same isolated world and local sources as the MCP test. It sends ordinary telnet
 commands without GMCP or HTML. It covers multiple review pages, comparisons, multiline editing,
 cancellation, reconnect, a concurrent review change, compiler repair, apply, result pagination,
-finish, history, and another review. The HTTP run also exercises failed-fetch retry.
-Independent assertions check the installed programs. They do not drive the administrator workflow.
+finish, history, and another review. The HTTP run also exercises failed-fetch retry. Independent
+assertions check the installed programs. They do not drive the administrator workflow.
 
 The `change_terminal.moot` scenario checks displayed-row guards, prepared selection invalidation,
 group removal, and recovery of saved decisions after live code changes.
+
+## Complete change-management checks
+
+Run the shared native tests and browser acceptance suite from the repository root:
+
+```sh
+cargo test -p moor-objdef
+cargo test -p moor-mcp-host
+cargo build -p moor
+npm run test:changes --prefix clients/meadow
+```
+
+The browser suite includes history repair, dependency groups, explicit object bindings, live edits
+after preview, rollback, restart, and response loss. Its large-review case exercises search,
+keyboard navigation, narrow layout, complete effect and result pages, and preserved editor text.
+
+Prepare the headless core, then run each focused service and agent scenario:
+
+```sh
+make -C cores/cowbell runtime-headless-src MOORC_TYPE=direct
+for scenario in change_manager_preservation change_manager_results change_tools change_agents change_terminal; do
+  cores/snore/tools/session-runner/target/debug/snore-session-runner \
+    --cowbell --core-dir cores/cowbell/.runtime-headless-src \
+    --moot "cores/cowbell/tests/baseline/sessions/$scenario.moot" \
+    --wizard 90100 --programmer 90101 --nonprogrammer 90102
+done
+```
+
+Build the session runner as described above before this command. These fixtures use temporary
+worlds. They do not use the development database or require a live GitHub connection.
