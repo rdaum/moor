@@ -531,7 +531,7 @@ test("historical Git retrieval rechecks authority after worker suspension", asyn
     expect(
         await administrator.evaluate(id =>
             window.changes.evaluate(
-                `return length($change_manager.pending[${id}]["base_sources"]) == 0;`,
+                `let record = $change_manager.pending[${id}]; return !maphaskey(record, "base_sources") || length(record["base_sources"]) == 0;`,
             ), review),
     ).toBe(true);
     expect(await programs(administrator)).toEqual([1, 3, 3, 3, 3]);
@@ -559,13 +559,13 @@ test("a declared group installs a helper and property with its caller through Me
     await expect(page.getByRole("region", { name: "Property initialization" })).toContainText(
         "Existing data stays unchanged",
     );
-    await page.getByRole("button", { name: "Permit initialization", exact: true }).click();
-    await expect(page.getByText("Absent-only initialization is already permitted.")).toBeVisible();
+    await page.getByRole("button", { name: "Allow property creation", exact: true }).click();
+    await expect(page.getByText("Creation of this new property is allowed.")).toBeVisible();
     await expect(page.getByRole("button", { name: /:added_helper, Verb/ })).toHaveCount(1);
     await page.getByRole("button", { name: /:added_helper, Verb/ }).click();
     await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Owner: #2");
     await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Flags: rxd");
-    await expect(page.getByText("Declare which changes must be installed together before selecting this program."))
+    await expect(page.getByText("This change needs a group before you can install it.", { exact: false }))
         .toBeVisible();
     await page.getByRole("button", { name: "Create group", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "Create group", exact: true });
@@ -679,15 +679,36 @@ test(
         ).toBeVisible();
         await expect(page.getByRole("button", { name: /^Groups/ })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "Create group", exact: true })).toHaveCount(0);
+        const minimize = page.getByRole("button", { name: "Minimize review", exact: true });
+        await expect(page.locator(".dialog-sheet-header").getByRole("button", { name: "Minimize review" }))
+            .toBeVisible();
+        await expect(page.locator(".change-review-toolbar").getByRole("button", { name: "Minimize review" }))
+            .toHaveCount(0);
+        const assertCompactRows = async () => {
+            const dimensions = await page.locator(".change-review-item:has(small)").evaluateAll(items =>
+                items.map(item => {
+                    const name = item.querySelector("code")!.getBoundingClientRect();
+                    const badge = item.querySelector("small")!.getBoundingClientRect();
+                    return { height: item.getBoundingClientRect().height, offset: Math.abs(name.y - badge.y) };
+                })
+            );
+            expect(dimensions.length).toBeGreaterThan(0);
+            for (const item of dimensions) {
+                expect(item.height).toBeLessThan(36);
+                expect(item.offset).toBeLessThan(8);
+            }
+        };
+        await assertCompactRows();
+        await page.screenshot({ path: testInfo.outputPath("review-list-desktop.png") });
         const search = page.getByRole("searchbox", { name: "Find an object or member" });
         await search.fill("extra_63");
-        await expect(page.getByRole("button", { name: /:extra_63, Verb/ })).toContainText("Automatic: Use upstream");
+        await expect(page.getByRole("button", { name: /:extra_63, Verb/ })).toContainText("Use upstream");
         await search.fill("");
         await page.getByRole("button", { name: /:conflict, Verb/ }).click();
         await page.getByRole("button", { name: "Keep my code", exact: true }).click();
-        await expect(page.getByRole("button", { name: /:conflict, Verb/ })).toContainText("Saved: Keep my code");
+        await expect(page.getByRole("button", { name: /:conflict, Verb/ })).toContainText("Keep local");
         await page.getByRole("button", { name: /:deferred, Verb/ }).click();
-        await page.getByRole("button", { name: "Decide later", exact: true }).click();
+        await page.getByRole("button", { name: "Skip for now", exact: true }).click();
         await page.getByRole("button", { name: /:edited, Verb/ }).click();
         await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
         const editor = page.locator(".change-review-draft").getByRole("textbox", {
@@ -697,22 +718,27 @@ test(
         await editor.focus();
         await editor.press("ControlOrMeta+A");
         await editor.pressSequentially("return 42;");
-        await page.getByRole("button", { name: "Consult the world", exact: true }).focus();
+        await minimize.focus();
         await page.keyboard.press("Enter");
         await expect(page.locator(".change-review-shell")).toBeHidden();
         await page.getByLabel("World command").fill("look");
         await page.getByRole("button", { name: "Return to change review — unsaved draft", exact: true }).focus();
         await page.keyboard.press("Enter");
-        await expect(page.getByRole("button", { name: "Consult the world", exact: true })).toBeFocused();
+        await expect(page.getByRole("button", { name: "Minimize review", exact: true })).toBeFocused();
         await expect(page.locator(".change-review-draft .view-lines")).toContainText("return 42;");
         await page.getByRole("button", { name: "Save proposed program", exact: true }).click();
-        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Use edited");
         await expect(page.locator(".change-review-diff")).toContainText("return 3;");
         await expect(page.locator(".change-review-diff")).toContainText("return 2;");
         await page.screenshot({ path: testInfo.outputPath("review-desktop.png") });
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator(".change-review-pane-labels")).toHaveAttribute("data-layout", "unified");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.getByRole("button", { name: "Browse changes", exact: true }).click();
+        await assertCompactRows();
+        await page.screenshot({ path: testInfo.outputPath("review-list-mobile.png") });
+        await page.getByRole("button", { name: "Selected item", exact: true }).click();
+
         await page.locator(".change-review-diff").scrollIntoViewIfNeeded();
         await expect(page.locator(".change-review-diff")).toContainText("return 3;");
         await expect(page.locator(".change-review-diff")).toContainText("return 2;");
@@ -737,7 +763,7 @@ test(
         await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
         await expect(page.locator(".change-review-error")).toContainText("Review choices changed");
         await page.getByRole("button", { name: "Reload review", exact: true }).click();
-        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+        await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Use edited");
         await page.getByRole("button", { name: "Review planned effects", exact: true }).click();
         await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
         const result = page.getByRole("region", { name: "Committed results" });
@@ -769,12 +795,12 @@ test("refresh exposes saved work and restores its edited program without install
         review,
         generation: status.generation,
     });
-    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Use edited");
     // Simulate another administrator changing this member while the review is open.
     await page.evaluate(() => window.changes.evaluate("return set_verb_code(#9500, \"edited\", {\"return 4;\"});"));
     await page.getByRole("button", { name: "Refresh comparison", exact: true }).click();
     await page.getByRole("button", { name: "Confirm refresh", exact: true }).click();
-    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Check saved work");
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Review again");
     await page.getByRole("button", { name: "Saved work", exact: true }).click();
     const saved = page.getByRole("region", { name: "Saved work", exact: true });
     await expect(saved).toContainText("contents or permissions changed");
@@ -784,6 +810,6 @@ test("refresh exposes saved work and restores its edited program without install
     await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
     await expect(page.locator(".change-review-draft .view-lines")).toContainText("return 42;");
     await page.getByRole("button", { name: "Save proposed program", exact: true }).click();
-    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Saved: Use my edited code");
+    await expect(page.getByRole("button", { name: /:edited, Verb/ })).toContainText("Use edited");
     expect(await page.evaluate(() => window.changes.evaluate("return #9500:edited();"))).toBe(4);
 });

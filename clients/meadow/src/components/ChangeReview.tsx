@@ -54,22 +54,24 @@ const choices: Record<Choice, string> = {
     incoming: "Use upstream",
     local: "Keep my code",
     edited: "Use my edited code",
-    defer: "Decide later",
+    defer: "Skip for now",
     unresolved: "Choose a version",
 };
 const blockers: Record<string, string> = {
     untrusted_target_authority: "Ownership or permissions prevent updating this verb.",
     object_identity_mismatch: "The installed object and upstream object have different identities.",
     adoption_required:
-        "The accepted upstream version is unknown, so local edits cannot be identified reliably. Repair history with the original upstream source before applying. Adoption records history; it does not merge code.",
-    change_group_required: "Declare which changes must be installed together before selecting this program.",
-    change_group_member_missing: "This group requires a member that is missing from the supplied source.",
+        "There is no record of the upstream version you started from. Local edits cannot be identified without it. Use history repair with that original source to record it.",
+    change_group_required: "Create a group for this change and the code that needs it.",
+    change_group_member_missing:
+        "A change in this group is missing from the fetched source. Check the group and fetch the missing source.",
     verb_name_collision:
         "A local or inherited verb already uses a conflicting name. Choose a distinct name and review again.",
-    initialization_required: "Review the initial value and permissions, then permit initialization below.",
+    initialization_required:
+        "Check the new property’s value and permissions below, then choose Allow property creation.",
     initial_value_required: "Supply an explicit initial value for the new property, then stage the source again.",
     inherited_effects_require_approval:
-        "This object has descendants. Permit their inherited property explicitly before applying.",
+        "Child objects will inherit this new property. Select the checkbox below to allow this.",
     property_name_collision:
         "A property with this name already exists on this object, an ancestor, or a descendant. Creation is blocked.",
     object_address_occupied:
@@ -94,7 +96,7 @@ const rowLabels: Record<Classification, string> = {
     upstream: "Upstream",
     local: "Local",
     converged: "Match",
-    unbased: "History unknown",
+    unbased: "Missing history",
     unchanged: "Unchanged",
     local_only: "Local only",
     incoming_only: "Upstream only",
@@ -548,16 +550,36 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         if (item.operation === "add_verb" && selected === "incoming") return "Add verb";
         return choices[selected];
     };
+    const itemStatus = (item: ChangeRow) => {
+        if (item.read_only) return rowLabels[item.classification];
+        if (item.needsReview) return "Review again";
+        if (item.choice?.choice === "defer") return "Skipped";
+        if (!item.eligible) {
+            if (item.blockers.includes("adoption_required")) return "Missing history";
+            if (item.blockers.includes("change_group_required")) return "Needs group";
+            if (item.blockers.includes("initialization_required")) return "Review value";
+            if (item.blockers.includes("inherited_effects_require_approval")) return "Check children";
+            if (
+                item.blockers.includes("untrusted_target_authority")
+                || item.blockers.includes("creation_requires_wizard")
+            ) return "No permission";
+            return "Needs repair";
+        }
+        const choice = item.choice?.choice ?? item.default;
+        if (choice === "unresolved") return "Choose version";
+        if (item.choice || choice === "incoming" || choice === "edited") {
+            if (choice === "local") return "Keep local";
+            if (choice === "edited") return "Use edited";
+            if (choice === "defer") return "Skipped";
+            return choiceLabel(item, choice);
+        }
+        return rowLabels[item.classification];
+    };
     const itemButton = (item: ChangeRow, object = false) => {
-        const blocked = !item.read_only && !item.eligible;
-        const description = `${item.label}, ${fieldLabels[item.field ?? "program"]}, ${rowLabels[item.classification]}${
-            blocked ? ", Cannot apply" : ""
-        }${
-            item.read_only
-                ? ""
-                : item.needsReview
-                ? ", Check saved work"
-                : `, ${item.choice ? "Saved" : "Automatic"}: ${choiceLabel(item, item.choice?.choice ?? item.default)}`
+        const label = itemStatus(item);
+        const classification = rowLabels[item.classification];
+        const description = `${item.label}, ${fieldLabels[item.field ?? "program"]}, ${classification}${
+            label === classification ? "" : `, ${label}`
         }`;
         return (
             <button
@@ -573,20 +595,28 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                     })}
             >
                 <code>{object ? item.objectLabel : item.memberLabel}</code>
-                {(category === "all" || blocked) && (
-                    <small>{blocked ? "Cannot apply" : rowLabels[item.classification]}</small>
-                )}
-                {!item.read_only && (
-                    <small className="change-review-saved-choice">
-                        {item.needsReview ? "Check saved work" : item.choice
-                            ? `Saved: ${choiceLabel(item, item.choice.choice)}`
-                            : item.default === "unresolved"
-                            ? "Choose a version"
-                            : `Automatic: ${choiceLabel(item, item.default)}`}
-                    </small>
-                )}
+                <small>{label}</small>
             </button>
         );
+    };
+    const applyDescription = (item: ChangeRow) => {
+        if (item.needsReview) return "Review your saved choice again before applying.";
+        if (item.choice?.choice === "defer") {
+            return "Skipped for now. Your code and its recorded upstream version will stay unchanged.";
+        }
+        if (!item.eligible) return "Not selected. Resolve the issue above to include this item.";
+        switch (item.choice?.choice ?? item.default) {
+            case "incoming":
+                return `On apply: ${choiceLabel(item, "incoming")}.`;
+            case "local":
+                return "On apply: keep your code and record this upstream version as reviewed.";
+            case "edited":
+                return "On apply: install your saved edit.";
+            case "defer":
+                return "Skipped for now. Your code and its recorded upstream version will stay unchanged.";
+            case "unresolved":
+                return "Choose a version or skip this item.";
+        }
     };
     const counts: Partial<Record<Classification, number>> = { ...page?.counts };
     for (const [classification, count] of Object.entries(inspection?.counts ?? {})) {
@@ -597,6 +627,10 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
         (sum, [key, count]) => key === "unchanged" ? sum : sum + (count ?? 0),
         0,
     );
+    const rowBlockers =
+        row?.blockers.filter(reason =>
+            reason !== "change_group_required" || !service?.supports("set_group") || Boolean(row.group)
+        ) ?? [];
     const baseline = row ? baselineText(row) : undefined;
     const original = comparison === "local-upstream" ? row?.live_text : baseline;
     const modified = comparison === "baseline-local" ? row?.live_text : row?.incoming_text;
@@ -653,38 +687,39 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                     titleId={id}
                     onCancel={() => navigate(onClose)}
                     maxWidth="1440px"
-                >
-                    <div className="change-review-toolbar">
-                        <span role="status">
-                            {statusText === "Compare local contents with the fetched source." ? "" : statusText}
-                        </span>
-                        <button
-                            type="button"
-                            ref={hideButton}
-                            onClick={() => {
-                                setMinimized(true);
-                                requestAnimationFrame(() => {
-                                    if (
-                                        originFocus.current?.isConnected && !originFocus.current.closest("[hidden]")
-                                    ) originFocus.current.focus();
-                                    else resumeButton.current?.focus();
-                                });
-                            }}
-                        >
-                            Consult the world
-                        </button>
-                        {service?.supports("refresh") && status
-                            && ["ready", "partial", "rejected", "interrupted"].includes(status.status) && (
+                    headerActions={
+                        <div className="change-review-window-actions">
                             <button
                                 type="button"
-                                disabled={busy}
-                                onClick={() => setConfirmation("refresh")}
+                                ref={hideButton}
+                                aria-label="Minimize review"
+                                title="Minimize review — keep your unsaved draft"
+                                onClick={() => {
+                                    setMinimized(true);
+                                    requestAnimationFrame(() => {
+                                        if (
+                                            originFocus.current?.isConnected && !originFocus.current.closest("[hidden]")
+                                        ) originFocus.current.focus();
+                                        else resumeButton.current?.focus();
+                                    });
+                                }}
                             >
-                                Refresh comparison
+                                <span aria-hidden="true">−</span>
                             </button>
-                        )}
-                        <button type="button" onClick={() => navigate(onClose)}>Close</button>
-                    </div>
+                            <button
+                                type="button"
+                                aria-label="Close"
+                                title="Close review"
+                                onClick={() => navigate(onClose)}
+                            >
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        </div>
+                    }
+                >
+                    {statusText !== "Compare local contents with the fetched source." && (
+                        <p className="change-review-notice" role="status">{statusText}</p>
+                    )}
                     {error && (
                         <div role="alert" className="change-review-error">
                             {error}
@@ -718,11 +753,6 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                     <strong>{allRows.filter(item => item.operation?.startsWith("add_")).length}</strong>
                                     {" "}
                                     additions
-                                </span>
-                            )}
-                            {page.decision_counts.blocked > 0 && (
-                                <span>
-                                    <strong>{page.decision_counts.blocked}</strong> cannot apply
                                 </span>
                             )}
                         </div>
@@ -774,6 +804,17 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                 onClick={() => setView("recovery")}
                             >
                                 Saved work
+                            </button>
+                        )}
+                        {service?.supports("refresh") && status
+                            && ["ready", "partial", "rejected", "interrupted"].includes(status.status) && (
+                            <button
+                                type="button"
+                                className="change-review-refresh"
+                                disabled={busy}
+                                onClick={() => setConfirmation("refresh")}
+                            >
+                                Refresh comparison
                             </button>
                         )}
                     </nav>
@@ -851,7 +892,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                     blocked: "Required changes are missing or cannot apply",
                                                     needs_review: "Saved decisions need another check",
                                                     selected: "Selected",
-                                                    deferred: "Decide later",
+                                                    deferred: "Skipped",
                                                     partial: "Some members selected",
                                                 })[group.status] ?? group.status}
                                                 <small>{group.selected} of {group.count} selected</small>
@@ -1040,10 +1081,13 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                 >
                                                     <p>
                                                         This item belongs to{" "}
-                                                        <strong>{row.group}</strong>. Its required members apply
-                                                        together.
+                                                        <strong>{row.group}</strong>. All changes in this group must be
+                                                        installed together.
                                                     </p>
-                                                    <button type="button" onClick={() => setView("groups")}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setView("groups")}
+                                                    >
                                                         Review group requirements
                                                     </button>
                                                 </section>
@@ -1056,8 +1100,8 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                     aria-label="Required group"
                                                 >
                                                     <p>
-                                                        Declare this item and the programs that need it in one group
-                                                        before applying. The service cannot infer dependencies.
+                                                        This change needs a group before you can install it. Include the
+                                                        code that uses it so both arrive in the same update.
                                                     </p>
                                                     <button
                                                         type="button"
@@ -1070,7 +1114,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             )}
                                             {row.operation === "add_object" && (
                                                 <section aria-label="New object definition">
-                                                    <h4>Create at the chosen object ID</h4>
+                                                    <h4>New object</h4>
                                                     <p>
                                                         Review the full definition below, including owners, flags,
                                                         initial properties, overrides, and programs.
@@ -1096,7 +1140,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             )}
                                             {row.operation === "add_property" && (
                                                 <section aria-label="Property initialization">
-                                                    <h4>Initial value, only if absent</h4>
+                                                    <h4>New property</h4>
                                                     <p>
                                                         Review the value, owner, flags, and metadata below. Apply uses
                                                         them only to create this property. Existing data stays
@@ -1132,11 +1176,11 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                                 || ((row.descendants ?? 0) > 0 && !allowDescendants)}
                                                             onClick={() => void initializeProperty()}
                                                         >
-                                                            Permit initialization
+                                                            Allow property creation
                                                         </button>
                                                     )}
                                                     {row.initialization_approved && (
-                                                        <p>Absent-only initialization is already permitted.</p>
+                                                        <p>Creation of this new property is allowed.</p>
                                                     )}
                                                 </section>
                                             )}
@@ -1161,9 +1205,9 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                     </p>
                                                 </section>
                                             )}
-                                            {!row.read_only && !row.eligible && (
+                                            {!row.read_only && !row.eligible && rowBlockers.length > 0 && (
                                                 <p role="status">
-                                                    {row.blockers.map(reason => blockers[reason] ?? reason).join(" ")}
+                                                    {rowBlockers.map(reason => blockers[reason] ?? reason).join(" ")}
                                                 </p>
                                             )}
                                             {row.live_present !== false && row.incoming_present !== false && (
@@ -1411,14 +1455,15 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                         <details className="change-review-choice-help">
                                                             <summary>What each choice does</summary>
                                                             <p>
-                                                                Use upstream replaces the program. Keep my code
-                                                                preserves it and acknowledges this upstream version.
-                                                                Decide later preserves both code and accepted history.
+                                                                Use upstream replaces the program. Keep my code keeps
+                                                                your program and records this upstream version as
+                                                                reviewed. Skip for now leaves both unchanged, so you can
+                                                                return to this update later.
                                                             </p>
                                                         </details>
                                                     )}
                                                     <span>
-                                                        On apply: {choiceLabel(row, row.choice?.choice ?? row.default)}
+                                                        {applyDescription(row)}
                                                     </span>
                                                     {row.choices.filter(value =>
                                                         value !== "edited"

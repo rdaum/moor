@@ -127,8 +127,8 @@ export const effectLabels: Record<string, string> = {
     add_object: "Create object",
     baseline: "Acknowledge upstream; keep live contents",
     retained: "Keep live contents",
-    deferred: "Decide later; keep contents and baseline",
-    blocked: "Cannot apply",
+    deferred: "Skip; keep code and recorded upstream version",
+    blocked: "Not ready to install",
 };
 export interface ReviewEffect {
     id: string;

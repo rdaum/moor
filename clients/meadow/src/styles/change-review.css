@@ -16,25 +16,43 @@
 }
 
 .change-review-shell .dialog-sheet-header {
-  padding: 8px 12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.change-review-window-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.change-review-shell .change-review-window-actions > button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
 }
 .change-review-shell .dialog-sheet-header h2 {
   margin: 0;
   font-size: 1.1rem;
 }
 
-.change-review-toolbar, .change-review-footer, .change-review-comparison, .change-review-resolution {
+.change-review-footer, .change-review-comparison, .change-review-resolution {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.change-review-toolbar > span, .change-review-footer > small {
+.change-review-footer > small {
   flex: 1;
 }
 
-.change-review-toolbar, .change-review-footer {
+.change-review-footer {
   flex-shrink: 0;
 }
 
@@ -113,6 +131,7 @@
   flex-shrink: 0;
   color: var(--color-text-secondary);
   font-size: 0.75em;
+  white-space: nowrap;
 }
 
 .change-review-object button.change-review-item:hover,
@@ -312,7 +331,7 @@
   font-weight: 600;
 }
 
-.change-review-nav > .change-review-new-group {
+.change-review-nav > .change-review-new-group, .change-review-nav > .change-review-refresh {
   margin-left: auto;
 }
 
@@ -487,14 +506,6 @@
 .change-review-effect-counts dd {
   font-weight: bold;
   margin: 0;
-}
-.change-review-saved-choice {
-  display: block;
-  width: 100%;
-  text-align: left;
-}
-.change-review-item {
-  flex-wrap: wrap;
 }
 .change-review-inline-group {
   border-left: 3px solid var(--color-border-medium);

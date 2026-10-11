@@ -20,9 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Meadow starts configured change management with **Check for updates**. Reviews support search
-  across all pages, attention-first navigation, visible saved decisions, and a separate code view on
-  narrow screens. Administrators can consult the world without losing an unsaved draft. Apply
-  confirmation shows exact effects for the entire review. Results include every decision, and
+  across all pages, compact rows with one status per item, and a separate code view on narrow
+  screens. Minimize and close controls sit in the title bar. Minimizing preserves unsaved drafts.
+  Apply confirmation shows exact effects for the entire review. Results include every decision, and
   partial reviews can finish without accepting deferred changes.
 
 - Cowbell supports the complete change-review workflow over plain telnet. Commands remember the

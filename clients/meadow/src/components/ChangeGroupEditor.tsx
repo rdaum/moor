@@ -98,12 +98,8 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
         >
             <div className="change-group-editor" aria-busy={busy}>
                 <p>
-                    A group contains changes that must be installed together. Include each new member and every program
-                    that needs it.
-                </p>
-                <p>
-                    The review cannot discover all dependencies from program text. You must identify them. Missing
-                    declarations block new additions.
+                    Select the changes that need each other. For example, select a new helper verb and the verb that
+                    calls it. They will be installed together.
                 </p>
                 {error && <p role="alert">{error}</p>}
                 <label>

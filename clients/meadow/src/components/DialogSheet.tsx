@@ -17,6 +17,7 @@ interface DialogSheetProps {
     modal?: boolean;
     title: string;
     titleId: string;
+    headerActions?: React.ReactNode;
     onCancel: () => void;
     children: React.ReactNode;
     maxWidth?: string;
@@ -36,6 +37,7 @@ export const DialogSheet: React.FC<DialogSheetProps> = ({
     modal = true,
     title,
     titleId,
+    headerActions,
     onCancel,
     children,
     maxWidth = "520px",
@@ -129,6 +131,7 @@ export const DialogSheet: React.FC<DialogSheetProps> = ({
             >
                 <div className="dialog-sheet-header">
                     <h2 id={titleId}>{title}</h2>
+                    {headerActions}
                 </div>
                 {children}
             </div>

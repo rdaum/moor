@@ -329,7 +329,7 @@ In Meadow:
 1. Select the proposed property in the review.
 2. Read its initial value, owner, flags, and metadata.
 3. If the object has descendants, decide whether they can inherit this new property.
-4. Select **Permit initialization**.
+4. Select **Allow property creation**.
 5. Add the property and all dependent programs to a change group.
 6. Select the group, then apply it.
 
@@ -391,7 +391,7 @@ narrow screens, **Browse changes** and **Selected item** switch between the list
 Narrow comparisons use a unified diff.
 
 **Use upstream** replaces the program. **Keep my code** preserves it and acknowledges the incoming
-version for future comparisons. **Decide later** preserves both live code and its accepted history.
+version for future comparisons. **Skip for now** preserves both live code and its accepted history.
 Edited programs must compile before apply. Properties and object additions show their separate
 rules.
 
@@ -414,7 +414,7 @@ Known history without loaded source differs from unknown accepted history. **Sav
 when changed or missing members have retained decisions that need another check. Their earlier
 edited programs remain readable and never move silently to another member.
 
-**Consult the world** hides the panel and preserves its unsaved draft. **Return to change review**
+**Minimize review** hides the panel and preserves its unsaved draft. **Return to change review**
 restores the panel. Edited drafts show compiler errors in the editor. Reopening an invalid saved
 draft restores its diagnostics. Changing the draft clears markers for the previous text.
 
