@@ -583,3 +583,60 @@ test("a declared group installs a helper and property with its caller through Me
     ).toEqual([42, 42, 2]);
     expect(browserErrors).toEqual([]);
 });
+
+test("workspace binds a new object before preview and installs it without initialization calls", async ({ page }) => {
+    const browserErrors: string[] = [];
+    page.on("pageerror", error => browserErrors.push(error.message));
+    await login(page);
+    await page.evaluate(() => window.changes.workspace());
+    await page.getByRole("button", { name: "New package", exact: true }).click();
+    await page.getByLabel("Package name", { exact: true }).fill("new-objects");
+    await page.getByRole("button", { name: "Save configuration", exact: true }).click();
+    await page.getByRole("button", { name: "Object bindings and source scope", exact: true }).click();
+    await page.getByLabel("Proposed object bindings").fill("HELPER = #9600");
+    await page.getByLabel("Source lists every member of each managed object").check();
+    await page.getByRole("button", { name: "Save configuration", exact: true }).click();
+    await expect(page.getByText("Source scope: complete.", { exact: false })).toBeVisible();
+    expect(await page.evaluate(() => window.changes.evaluate("return valid(#9600);"))).toBe(false);
+    const source = "object HELPER\nowner: #2\nname: \"New helper\"\n"
+        + "property counter (owner: #2, flags: \"r\") = 42;\n"
+        + "method run owner: #2\nreturn this.counter;\nendmethod\n"
+        + "method initialize owner: #2\nthis.counter = 999;\nendmethod\nendobject";
+    await page.getByLabel("Upload objdef files").setInputFiles({
+        name: "helper.moo",
+        mimeType: "text/plain",
+        buffer: Buffer.from(source),
+    });
+    await page.getByRole("button", { name: "Review uploaded source", exact: true }).click();
+    await page.getByRole("button", { name: "Open review", exact: true }).click();
+    await expect(page.getByRole("region", { name: "New object definition" })).toContainText(
+        "does not run initialization verbs",
+    );
+    expect(await page.evaluate(() => window.changes.evaluate("return valid(#9600);"))).toBe(false);
+    await page.getByRole("button", { name: "Create a change group", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Create a change group", exact: true });
+    await editor.getByLabel("Group name").fill("install-helper");
+    await editor.getByRole("checkbox", { name: "#9600 — new object and contents", exact: true }).check();
+    await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();
+    await page.getByRole("button", { name: "Select install-helper", exact: true }).click();
+    await page.getByRole("button", { name: "Apply 1 choice", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
+    await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
+    expect(
+        await page.evaluate(() =>
+            window.changes.evaluate(
+                "return {#9600:run(), length($change_manager.packages[\"new-objects\"][\"members\"])};",
+            )
+        ),
+    ).toEqual([42, 4]);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByLabel("Upload objdef files").setInputFiles({
+        name: "helper.moo",
+        mimeType: "text/plain",
+        buffer: Buffer.from(source),
+    });
+    await page.getByRole("button", { name: "Review uploaded source", exact: true }).click();
+    await page.getByRole("button", { name: "Open review", exact: true }).click();
+    await expect(page.getByText("3 unchanged members.", { exact: true })).toBeVisible();
+    expect(browserErrors).toEqual([]);
+});

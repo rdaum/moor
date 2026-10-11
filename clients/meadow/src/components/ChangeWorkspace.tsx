@@ -63,11 +63,12 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
     const [review, setReview] = useState<ChangeTarget | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
-    const [editor, setEditor] = useState<"new" | "upstream" | null>(null);
+    const [editor, setEditor] = useState<"new" | "upstream" | "bindings" | null>(null);
     const [expectedGeneration, setExpectedGeneration] = useState(0);
     const [name, setName] = useState("");
     const [objects, setObjects] = useState("");
     const [bindings, setBindings] = useState("");
+    const [complete, setComplete] = useState(false);
     const [owners, setOwners] = useState("");
     const [transport, setTransport] = useState("upload");
     const [url, setUrl] = useState("");
@@ -150,7 +151,7 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
             setBusy(false);
         }
     };
-    const edit = (kind: "new" | "upstream") => {
+    const edit = (kind: "new" | "upstream" | "bindings") => {
         setEditor(kind);
         setExpectedGeneration(kind === "new" ? 0 : item?.generation ?? 0);
         setDirty(false);
@@ -168,7 +169,13 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
         setPath(typeof upstream === "string" ? "" : upstream.path);
         setName("");
         setObjects("");
-        setBindings("");
+        setBindings(
+            kind === "bindings"
+                ? Object.entries(item?.proposedBindings ?? {}).map(([name, reference]) => `${name} = ${reference}`)
+                    .join("\n")
+                : "",
+        );
+        setComplete(Boolean(item?.objects.length && item.complete.length === item.objects.length));
         setOwners("");
     };
     const upstream = (): Upstream =>
@@ -190,6 +197,8 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                     upstream: upstream(),
                 });
                 setSelected(name);
+            } else if (item && editor === "bindings") {
+                await service.proposeObjects(item.name, expectedGeneration, bindingArguments(bindings), complete);
             } else if (item) {
                 await service.upstream(item.name, expectedGeneration, upstream());
             }
@@ -272,7 +281,51 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                 onChange={() => setDirty(true)}
                             >
                                 <fieldset disabled={busy}>
-                                    <legend>{editor === "new" ? "New package" : "Upstream configuration"}</legend>
+                                    <legend>
+                                        {editor === "new"
+                                            ? "New package"
+                                            : editor === "bindings"
+                                            ? "Object bindings and source scope"
+                                            : "Upstream configuration"}
+                                    </legend>
+                                    {editor === "bindings" && (
+                                        <>
+                                            <p>
+                                                Choose an explicit numeric ID for each new object. Preview reserves
+                                                nothing. Apply stops if an ID is occupied. It never chooses another
+                                                address for you.
+                                            </p>
+                                            <label>
+                                                Proposed object bindings<textarea
+                                                    placeholder="HELPER = #9600"
+                                                    value={bindings}
+                                                    onChange={event => setBindings(event.target.value)}
+                                                />
+                                            </label>
+                                            <p>
+                                                Use one NAME = #ID per line. The name supplies an existing objdef
+                                                constant. Each new object uses its reviewed initial contents only when
+                                                the address is absent. No initialization verb runs automatically.
+                                            </p>
+                                            <label>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={complete}
+                                                    onChange={event => setComplete(event.target.checked)}
+                                                />
+                                                Source lists every member of each managed object
+                                            </label>
+                                            <p>
+                                                Leave this unchecked for partial source. Omitted members then carry no
+                                                removal request. Complete source reports omissions as unsupported
+                                                removals. Neither mode deletes anything.
+                                            </p>
+                                            <p>
+                                                Save these rules before fetching source. Then review the new objects and
+                                                their dependent programs in change groups.
+                                            </p>
+                                        </>
+                                    )}
                                     {editor === "new" && (
                                         <>
                                             <label>
@@ -285,7 +338,6 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                             </label>
                                             <label>
                                                 Managed objects<textarea
-                                                    required
                                                     placeholder="#9500 #9501"
                                                     value={objects}
                                                     onChange={event => setObjects(event.target.value)}
@@ -312,58 +364,62 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                             <p>Only add owners whose code this package is allowed to update.</p>
                                         </>
                                     )}
-                                    <label>
-                                        Source<select
-                                            value={transport}
-                                            onChange={event => setTransport(event.target.value)}
-                                        >
-                                            {capabilities.transports.includes("upload") && (
-                                                <option value="upload">Upload only</option>
-                                            )}
-                                            {capabilities.transports.includes("http") && (
-                                                <option value="http">HTTP bundle</option>
-                                            )}
-                                            {capabilities.transports.includes("git") && (
-                                                <option value="git">Git repository</option>
-                                            )}
-                                        </select>
-                                    </label>
-                                    {transport !== "upload" && (
-                                        <label>
-                                            {transport === "git" ? "Repository URL" : "Bundle URL"}
-                                            <input
-                                                required
-                                                type="url"
-                                                value={url}
-                                                onChange={event => setUrl(event.target.value)}
-                                            />
-                                        </label>
-                                    )}
-                                    {transport === "git" && (
+                                    {editor !== "bindings" && (
                                         <>
                                             <label>
-                                                Revision type<select
-                                                    value={revisionKind}
-                                                    onChange={event => setRevisionKind(event.target.value)}
+                                                Source<select
+                                                    value={transport}
+                                                    onChange={event => setTransport(event.target.value)}
                                                 >
-                                                    <option value="ref">Full ref</option>
-                                                    <option value="commit">Commit</option>
+                                                    {capabilities.transports.includes("upload") && (
+                                                        <option value="upload">Upload only</option>
+                                                    )}
+                                                    {capabilities.transports.includes("http") && (
+                                                        <option value="http">HTTP bundle</option>
+                                                    )}
+                                                    {capabilities.transports.includes("git") && (
+                                                        <option value="git">Git repository</option>
+                                                    )}
                                                 </select>
                                             </label>
-                                            <label>
-                                                Revision<input
-                                                    required
-                                                    value={revision}
-                                                    onChange={event => setRevision(event.target.value)}
-                                                />
-                                            </label>
-                                            <label>
-                                                Repository subdirectory<input
-                                                    value={path}
-                                                    onChange={event => setPath(event.target.value)}
-                                                    placeholder="cores/cowbell/src"
-                                                />
-                                            </label>
+                                            {transport !== "upload" && (
+                                                <label>
+                                                    {transport === "git" ? "Repository URL" : "Bundle URL"}
+                                                    <input
+                                                        required
+                                                        type="url"
+                                                        value={url}
+                                                        onChange={event => setUrl(event.target.value)}
+                                                    />
+                                                </label>
+                                            )}
+                                            {transport === "git" && (
+                                                <>
+                                                    <label>
+                                                        Revision type<select
+                                                            value={revisionKind}
+                                                            onChange={event => setRevisionKind(event.target.value)}
+                                                        >
+                                                            <option value="ref">Full ref</option>
+                                                            <option value="commit">Commit</option>
+                                                        </select>
+                                                    </label>
+                                                    <label>
+                                                        Revision<input
+                                                            required
+                                                            value={revision}
+                                                            onChange={event => setRevision(event.target.value)}
+                                                        />
+                                                    </label>
+                                                    <label>
+                                                        Repository subdirectory<input
+                                                            value={path}
+                                                            onChange={event => setPath(event.target.value)}
+                                                            placeholder="cores/cowbell/src"
+                                                        />
+                                                    </label>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                     <div className="change-workspace-actions">
@@ -380,6 +436,22 @@ export function ChangeWorkspace({ service, authToken, isWizard, onClose, connect
                                 <p>
                                     {item.objects.length} managed objects · Configuration generation {item.generation}
                                 </p>
+                                <p>
+                                    Source scope: {item.complete.length === item.objects.length && item.objects.length
+                                        ? "complete"
+                                        : item.complete.length
+                                        ? "mixed"
+                                        : "partial"}. Omitted members stay unchanged.
+                                </p>
+                                {isWizard && service.supports("propose_objects") && (
+                                    <button
+                                        type="button"
+                                        disabled={busy || Boolean(item.active)}
+                                        onClick={() => navigate(() => edit("bindings"))}
+                                    >
+                                        Object bindings and source scope
+                                    </button>
+                                )}
                                 <p>
                                     Upstream: {typeof item.upstream === "string"
                                         ? item.upstream || "Upload only"

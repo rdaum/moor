@@ -15,7 +15,12 @@ import type { DiagnosticPage, ReviewStatus } from "../lib/change-review";
 const explanations: Record<string, string> = {
     missing_source: "No upstream definition was supplied for this object.",
     live_definition_unmatched: "No matching upstream verb definition. The live verb stays unchanged.",
-    unsupported_creation: "This upstream object does not exist locally. Object creation is not supported.",
+    unsupported_creation:
+        "This object needs an explicit proposed binding in package configuration before creation can be reviewed.",
+    outside_managed_scope:
+        "The source includes an object outside this package's managed scope. It cannot be installed by this review.",
+    unsupported_removal:
+        "Complete source omits this installed member. Removal is unsupported, so the member stays unchanged.",
     unsupported_or_ambiguous_definition:
         "The upstream verb cannot be matched to an existing definition. Definition changes are not supported.",
     definition_fields_unmanaged:
@@ -52,8 +57,8 @@ export function ReviewSourceDetails({ status, diagnostics, busy, onMore }: {
         <details className="change-review-source">
             <summary>Source and checks{diagnostics ? ` (${diagnostics.total})` : ""}</summary>
             <p>
-                Apply updates selected programs and installs declared verb and property additions. Grouping does not
-                establish compatibility with omitted structural changes.
+                Apply updates selected programs and installs declared object, verb, and property additions. Grouping
+                does not establish compatibility with omitted structural changes.
             </p>
             {provenance.length > 0 && (
                 <dl>

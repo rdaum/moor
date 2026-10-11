@@ -154,7 +154,7 @@ E_PERM
 @wizard
 // The installed core is configured by source; another package cannot claim its objects.
 ; const name = $change_manager:capabilities()["default_package"]; const package = $change_manager:packages()["packages"][name]; return {#0 in package["objects"] != 0, package["fields"], package["generation"]};
-{true, {"program", "property"}, 1}
+{true, {"program", "property", "object"}, 1}
 
 ; try $change_manager:configure("overlap", {#0}, []); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "overlapping_package"
@@ -293,3 +293,38 @@ E_PERM
 
 ; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9505:test()}; endif suspend(0.01); endfor return "timed out";
 {"complete", 99}
+
+// Proposed IDs and constants exist before preview. Creation never calls :initialize.
+@wizard
+; return $change_manager:configure("object_probe", {}, [])["generation"];
+1
+
+@nonprogrammer
+; return $change_manager:propose_objects("object_probe", 1, ["NEW_HELPER" -> #9510]);
+E_PERM
+
+@wizard
+; $change_manager:command({"bindings", "object_probe", "1", "NEW_HELPER=#9510", "complete"}); return {$change_manager.packages["object_probe"]["objects"], valid(#9510), $change_manager.packages["object_probe"]["policy"]["complete"]};
+{{#9510}, false, {#9510}}
+
+; return `$change_manager:propose_objects("object_probe", 1, ["NEW_HELPER" -> #9511]) ! ANY => "stale"';
+"stale"
+
+; const source = {"object NEW_HELPER", "name: \"New helper\"", tostr("owner: ", player), tostr("property counter (owner: ", player, ", flags: \"r\") = 42;"), tostr("method initialize owner: ", player), "this.counter = 999;", "endmethod", tostr("method run owner: ", player), "return this.counter;", "endmethod", "endobject"}; #0.changes_probe = $change_manager:stage("object_probe", {["label" -> "helper.moo", "text" -> source]}); const rows = $change_manager:review(#0.changes_probe["review_id"], 1)["rows"]; return {length(rows), rows[1]["operation"], valid(#9510)};
+{1, "add_object", false}
+
+; const id = #0.changes_probe["review_id"]; $change_manager:command({"group", tostr(id), "1", "install-helper", "1"}); $change_manager:resolve_group(id, 2, "install-helper", "incoming"); return $change_manager:apply(id, 3)["status"];
+"applying"
+
+; for i in [1..100] const status = $change_manager:status(#0.changes_probe["review_id"]); if (status["status"] != "applying") return {status["status"], #9510:run(), length($change_manager.packages["object_probe"]["members"]), $change_manager.packages["object_probe"]["proposed_bindings"]}; endif suspend(0.01); endfor return "timed out";
+{"complete", 42, 4, []}
+
+; #0.changes_probe = $change_manager:stage("object_probe", {["label" -> "helper.moo", "text" -> dump_object(#9510)]}); const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 1)["rows"]; $change_manager:discard(id, 1); return {rows[1]["operation"], {row["classification"] for row in (rows)}};
+{"retain_object", {"unchanged", "unchanged", "unchanged"}}
+
+// Scope can change without proposing another object. Installed bindings remain intact.
+; const package = $change_manager.packages["object_probe"]; $change_manager:command({"bindings", "object_probe", tostr(package["generation"])}); const current = $change_manager.packages["object_probe"]; return {current["policy"]["complete"], current["objects"], current["constants"]["NEW_HELPER"], current["generation"] == package["generation"] + 1};
+{{}, {#9510}, #9510, true}
+
+; $change_manager:configure("empty_probe", {}, []); $change_manager:propose_objects("empty_probe", 1, ["TEMP" -> #9511]); $change_manager:command({"bindings", "empty_probe", "2"}); const package = $change_manager.packages["empty_probe"]; return {package["objects"], package["constants"], package["proposed_bindings"], valid(#9511)};
+{{}, [], [], false}

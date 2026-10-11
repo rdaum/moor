@@ -16,7 +16,7 @@ use crate::ObjectDefinitionLoader;
 use moor_common::model::{CommitResult, VerbAttrs, WorldStateSource};
 use moor_common::util::BitEnum;
 use moor_db::{Database, DatabaseConfig, TxDB};
-use moor_var::Obj;
+use moor_var::{NOTHING, Obj};
 
 const ROOT: Obj = Obj::mk_id(1);
 const SOURCE: &str = r#"object #1 [import_export_id -> "review_root"]
@@ -991,7 +991,7 @@ fn bundled_cores_declare_complete_default_package_bindings() {
         assert_eq!(
             get(&package, "fields"),
             v_list(&if core == "cowbell" {
-                vec![v_str("program"), v_str("property")]
+                vec![v_str("program"), v_str("property"), v_str("object")]
             } else {
                 vec![v_str("program")]
             })
@@ -2608,4 +2608,607 @@ fn concurrent_property_creation_prevents_partial_group_publication() {
             .unwrap(),
         v_int(77)
     );
+}
+
+fn object_source() -> String {
+    format!(
+        "{}\nobject HELPER\nowner: #1\nname: \"Helper\"\nproperty counter (owner: #1, flags: \"r\") = 42;\nmethod run owner: #1\nreturn this.counter;\nendmethod\nmethod initialize owner: #1\nthis.counter = 999;\nendmethod\nendobject",
+        SOURCE.replace("return \"Base\";", "return HELPER:run();")
+    )
+}
+fn object_request() -> Var {
+    let req = with_field(
+        &request("update"),
+        "objects",
+        &v_list(&[v_obj(ROOT), v_obj(Obj::mk_id(2))]),
+    );
+    let req = with_field(
+        &req,
+        "fields",
+        &v_list(&[v_str("program"), v_str("property"), v_str("object")]),
+    );
+    let req = with_field(
+        &req,
+        "constants",
+        &record(&[("HELPER", v_obj(Obj::mk_id(2)))]),
+    );
+    with_field(
+        &req,
+        "policy",
+        &record(&[
+            ("schema", v_int(1)),
+            ("groups", v_list(&[])),
+            (
+                "creations",
+                v_list(&[record(&[
+                    ("object", v_obj(Obj::mk_id(2))),
+                    ("mode", v_str("absent")),
+                ])]),
+            ),
+        ]),
+    )
+}
+fn group_object_request(req: &Var, report: &Var) -> Var {
+    let groups = get(&get(&grouped_request(report), "policy"), "groups");
+    with_field(
+        req,
+        "policy",
+        &with_field(&get(req, "policy"), "groups", &groups),
+    )
+}
+#[test]
+fn object_bindings_create_initial_contents_without_running_initialize() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let incoming = sources(&object_source());
+    let req = object_request();
+    let first = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    assert!(!world.valid(&Obj::mk_id(2)).unwrap());
+    assert_eq!(get(&first, "rows").as_list().unwrap().len(), 2);
+    let req = group_object_request(&req, &first);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let receipt = apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &Obj::mk_id(2), Symbol::mk("counter"))
+            .unwrap(),
+        v_int(42)
+    );
+    let created = get(&receipt, "created")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|entry| get(entry, "field") == v_str("object"))
+        .unwrap();
+    let installed = with_field(
+        &get(&get(&req, "policy"), "creations")
+            .as_list()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
+        "installed",
+        &get(&created, "creation"),
+    );
+    let req = with_field(
+        &req,
+        "policy",
+        &with_field(&get(&req, "policy"), "creations", &v_list(&[installed])),
+    );
+    let next = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    for row in get(&next, "rows").as_list().unwrap().iter() {
+        assert_eq!(get(&row, "classification"), v_str("unchanged"));
+    }
+    world
+        .update_property(
+            &permissions(),
+            &Obj::mk_id(2),
+            Symbol::mk("counter"),
+            &v_int(73),
+        )
+        .unwrap();
+    let next = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&next, "evidence"),
+        &all_incoming(&next),
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &Obj::mk_id(2), Symbol::mk("counter"))
+            .unwrap(),
+        v_int(73)
+    );
+    world
+        .clear_object_metadata(&permissions(), &Obj::mk_id(2), Symbol::mk(BASE_KEY))
+        .unwrap();
+    let invalid = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let bound_rows: Vec<_> = get(&invalid, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .filter(|row| get(row, "object") == v_obj(Obj::mk_id(2)))
+        .collect();
+    assert_eq!(
+        bound_rows.len(),
+        1,
+        "missing creation identity must block every member update"
+    );
+    assert!(!get(&bound_rows[0], "eligible").is_true());
+}
+
+#[test]
+fn occupied_object_binding_never_updates_that_object() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let incoming = sources(&object_source());
+    let req = object_request();
+    let first = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let req = group_object_request(&req, &first);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    world
+        .create_object(
+            &permissions(),
+            &NOTHING,
+            &ROOT,
+            BitEnum::new(),
+            moor_common::model::ObjectKind::Objid(Obj::mk_id(2)),
+        )
+        .unwrap();
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            &get(&report, "evidence"),
+            &all_incoming(&report)
+        )
+        .is_err()
+    );
+    let current = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let object = get(&current, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "field") == v_str("object"))
+        .unwrap();
+    assert!(
+        get(&object, "blockers")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|blocker| blocker == v_str("object_address_occupied"))
+    );
+    assert!(
+        world
+            .verbs(&permissions(), &Obj::mk_id(2))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn new_objects_resolve_new_parent_properties_and_require_the_parent_selection() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    let source = object_source()
+        .replace("name: \"Helper\"", "name: \"Helper\"\nparent: #3")
+        .replace(
+            "property counter (owner: #1, flags: \"r\") = 42;",
+            "override counter = 7;",
+        )
+        + "\nobject #3\nowner: #1\nproperty counter (owner: #1, flags: \"r\") = 1;\nendobject";
+    let incoming = sources(&source);
+    let req = with_field(
+        &object_request(),
+        "objects",
+        &v_list(&[v_obj(ROOT), v_obj(Obj::mk_id(2)), v_obj(Obj::mk_id(3))]),
+    );
+    let policy = with_field(
+        &get(&req, "policy"),
+        "creations",
+        &v_list(
+            &[2, 3]
+                .map(|id| record(&[("object", v_obj(Obj::mk_id(id))), ("mode", v_str("absent"))])),
+        ),
+    );
+    let req = with_field(&req, "policy", &policy);
+    let first = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let separate_groups = get(&first, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            record(&[
+                ("name", v_str(&format!("group{index}"))),
+                ("members", v_list(&[get(&row, "member")])),
+                ("requires", v_list(&[])),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let separate = with_field(
+        &req,
+        "policy",
+        &with_field(&policy, "groups", &v_list(&separate_groups)),
+    );
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &separate,
+        None,
+    )
+    .unwrap();
+    let child = get(&report, "rows")
+        .as_list()
+        .unwrap()
+        .iter()
+        .find(|row| get(row, "object") == v_obj(Obj::mk_id(2)))
+        .unwrap();
+    let only_child = v_map(&[(get(&child, "id"), record(&[("choice", v_str("incoming"))]))]);
+    let previewed = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &separate,
+        Some(&only_child),
+    )
+    .unwrap();
+    assert!(
+        get(&previewed, "group_validation")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|issue| get(&issue, "code") == v_str("missing_object_prerequisite"))
+    );
+    assert!(
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &separate,
+            &get(&report, "evidence"),
+            &only_child
+        )
+        .is_err()
+    );
+    let req = group_object_request(&req, &first);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &Obj::mk_id(2), Symbol::mk("counter"))
+            .unwrap(),
+        v_int(7)
+    );
+    assert_eq!(
+        world
+            .retrieve_property(&permissions(), &Obj::mk_id(3), Symbol::mk("counter"))
+            .unwrap(),
+        v_int(1)
+    );
+}
+
+#[test]
+fn object_creation_conflicts_and_late_failures_publish_no_partial_group() {
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    stamp(world.as_mut());
+    world.commit().unwrap();
+    let mut world = db.new_world_state().unwrap();
+    let incoming = sources(&object_source());
+    let req = object_request();
+    let first = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let req = group_object_request(&req, &first);
+    let report = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    let mut other = db.new_world_state().unwrap();
+    other
+        .create_object(
+            &permissions(),
+            &NOTHING,
+            &ROOT,
+            BitEnum::new(),
+            moor_common::model::ObjectKind::Objid(Obj::mk_id(2)),
+        )
+        .unwrap();
+    assert!(matches!(
+        other.commit().unwrap(),
+        CommitResult::Success { .. }
+    ));
+    apply(
+        world.as_mut(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        &get(&report, "evidence"),
+        &all_incoming(&report),
+    )
+    .unwrap();
+    assert!(matches!(
+        world.commit().unwrap(),
+        CommitResult::ConflictRetry { .. }
+    ));
+    let mut fresh = db.new_world_state().unwrap();
+    assert!(
+        apply(
+            fresh.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            &get(&report, "evidence"),
+            &all_incoming(&report)
+        )
+        .is_err()
+    );
+    assert!(
+        fresh
+            .verbs(&permissions(), &Obj::mk_id(2))
+            .unwrap()
+            .is_empty()
+    );
+    drop(fresh);
+
+    let db = database();
+    let mut world = db.new_world_state().unwrap();
+    let analysis = analyze(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+    )
+    .unwrap();
+    let object = analysis
+        .rows
+        .into_iter()
+        .find(|row| matches!(row.target, ChangeTarget::AddObject(_)))
+        .unwrap();
+    let result = write_actions(
+        world.as_mut(),
+        &permissions(),
+        vec![
+            ChangeAction {
+                object: object.object,
+                target: object.target,
+                program: None,
+                baseline: record(&[("program", v_str(&object.incoming_hash))]),
+            },
+            ChangeAction {
+                object: ROOT,
+                target: ChangeTarget::Existing(uuid::Uuid::nil()),
+                program: None,
+                baseline: v_list(&[]),
+            },
+        ],
+    );
+    assert!(matches!(result, Err(ApplyError::Mutation(_))));
+    drop(world);
+    assert!(!db.new_world_state().unwrap().valid(&Obj::mk_id(2)).unwrap());
+}
+
+#[test]
+fn complete_scope_reports_unsupported_removals_and_partial_scope_preserves_omissions() {
+    let db = database();
+    let world = db.new_world_state().unwrap();
+    let incoming = sources("object #1\nowner: #1\nendobject");
+    let partial = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &request("update"),
+        None,
+    )
+    .unwrap();
+    assert!(
+        get(&partial, "diagnostics")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|row| get(&row, "code") == v_str("live_definition_unmatched"))
+    );
+    let req = with_field(
+        &request("update"),
+        "policy",
+        &record(&[
+            ("schema", v_int(1)),
+            ("groups", v_list(&[])),
+            ("complete", v_list(&[v_obj(ROOT)])),
+        ]),
+    );
+    let complete = preview(
+        world.as_ref(),
+        &permissions(),
+        &CompileOptions::default(),
+        &incoming,
+        &req,
+        None,
+    )
+    .unwrap();
+    assert!(
+        get(&complete, "diagnostics")
+            .as_list()
+            .unwrap()
+            .iter()
+            .any(|row| get(&row, "code") == v_str("unsupported_removal"))
+    );
+    assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+}
+
+#[test]
+fn new_object_review_rejects_invalid_relationships_owners_and_aliases() {
+    for (change, reason) in [
+        ("parent: #2", "invalid_object_parent"),
+        ("location: #2", "invalid_object_location"),
+        ("parent: #98765", "invalid_object_parent"),
+        (
+            "method initialize owner: #98765\nreturn 1;\nendmethod",
+            "untrusted_target_authority",
+        ),
+        (
+            "method run owner: #1\nreturn 0;\nendmethod",
+            "verb_name_collision",
+        ),
+    ] {
+        let db = database();
+        let world = db.new_world_state().unwrap();
+        let source =
+            object_source().replace("name: \"Helper\"", &format!("name: \"Helper\"\n{change}"));
+        let incoming = sources(&source);
+        let req = object_request();
+        let report = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &req,
+            None,
+        )
+        .unwrap();
+        let object = get(&report, "rows")
+            .as_list()
+            .unwrap()
+            .iter()
+            .find(|row| get(row, "field") == v_str("object"))
+            .unwrap();
+        assert!(
+            get(&object, "blockers")
+                .as_list()
+                .unwrap()
+                .iter()
+                .any(|blocker| blocker == v_str(reason)),
+            "{reason}"
+        );
+        assert!(!world.valid(&Obj::mk_id(2)).unwrap());
+    }
 }

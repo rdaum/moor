@@ -39,7 +39,7 @@ pub(super) fn member_key(object: Obj, verb: &ObjVerbDef) -> Result<String, Revie
     ))
 }
 
-fn overlap(left: Symbol, right: Symbol) -> bool {
+pub(super) fn overlap(left: Symbol, right: Symbol) -> bool {
     let left = left.to_folded_case();
     let right = right.to_folded_case();
     if !left.contains('*') && !right.contains('*') {

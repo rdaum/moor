@@ -15,7 +15,7 @@
 //! never inferred from program text or imported as authority from objdef metadata.
 
 use super::{Analysis, ChangeRow, MAX_ROWS, ReviewError, fields, record, required};
-use moor_var::{Associative, ByteSized, Var, v_bool, v_list, v_map, v_str};
+use moor_var::{Associative, ByteSized, Obj, Var, v_bool, v_list, v_map, v_str};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -24,6 +24,9 @@ pub(super) struct Policy {
     membership: BTreeMap<String, String>,
     /// Explicit absent-only property initialization, keyed by semantic member.
     pub initialization: BTreeMap<String, bool>,
+    /// A missing receipt means the explicitly bound address must still be vacant.
+    pub creations: BTreeMap<Obj, Option<String>>,
+    pub complete: BTreeSet<Obj>,
 }
 
 struct Group {
@@ -60,7 +63,16 @@ impl Policy {
         if input.size_bytes() > 1024 * 1024 {
             return Err("change policy exceeds 1 MiB".to_string().into());
         }
-        let input = fields(input, &["schema", "groups", "initialization"])?;
+        let input = fields(
+            input,
+            &[
+                "schema",
+                "groups",
+                "initialization",
+                "creations",
+                "complete",
+            ],
+        )?;
         if required(&input, "schema")?.as_integer() != Some(1) {
             return Err("unsupported change policy schema".to_string().into());
         }
@@ -71,6 +83,66 @@ impl Policy {
             return Err("at most 32 change groups are supported".to_string().into());
         }
         let mut policy = Self::default();
+        if let Some(complete) = input.get("complete") {
+            let objects = complete
+                .as_list()
+                .ok_or_else(|| ReviewError::Invalid("complete must be a list of objects".into()))?;
+            if objects.len() > 4096 {
+                return Err("too many complete scopes".to_owned().into());
+            }
+            for object in objects.iter() {
+                let object = object.as_object().ok_or_else(|| {
+                    ReviewError::Invalid("complete scope must name objects".into())
+                })?;
+                if !policy.complete.insert(object) {
+                    return Err("duplicate complete scope".to_owned().into());
+                }
+            }
+        }
+        if let Some(creations) = input.get("creations") {
+            let entries = creations
+                .as_list()
+                .ok_or_else(|| ReviewError::Invalid("creations must be a list".into()))?;
+            if entries.len() > 4096 {
+                return Err("too many object bindings".to_owned().into());
+            }
+            for entry in entries.iter() {
+                let entry = fields(&entry, &["object", "mode", "installed"])?;
+                let object = required(&entry, "object")?.as_object().ok_or_else(|| {
+                    ReviewError::Invalid("creation requires an object address".into())
+                })?;
+                if !object.is_oid()
+                    || object.id().0 < 0
+                    || required(&entry, "mode")?.as_string() != Some("absent")
+                {
+                    return Err(
+                        "object creation requires an explicit address and absent mode"
+                            .to_owned()
+                            .into(),
+                    );
+                }
+                let installed = entry
+                    .get("installed")
+                    .map(|value| {
+                        value.as_string().ok_or_else(|| {
+                            ReviewError::Invalid("installed creation receipt must be text".into())
+                        })
+                    })
+                    .transpose()?;
+                if installed.is_some_and(|hash| {
+                    hash.len() != 64 || !hash.bytes().all(|c| c.is_ascii_hexdigit())
+                }) {
+                    return Err("invalid installed creation receipt".to_owned().into());
+                }
+                if policy
+                    .creations
+                    .insert(object, installed.map(str::to_owned))
+                    .is_some()
+                {
+                    return Err("duplicate object creation binding".to_owned().into());
+                }
+            }
+        }
         if let Some(initialization) = input.get("initialization") {
             let entries = initialization
                 .as_list()
@@ -299,6 +371,44 @@ impl Policy {
             .filter_map(|member| self.group_for(member))
             .collect();
         let mut issues = Vec::new();
+        let creations: BTreeSet<_> = analysis
+            .rows
+            .iter()
+            .filter(|row| {
+                selected.contains(&row.member)
+                    && matches!(row.target, super::ChangeTarget::AddObject(_))
+            })
+            .map(|row| row.object)
+            .collect();
+        for row in analysis
+            .rows
+            .iter()
+            .filter(|row| selected.contains(&row.member))
+        {
+            let super::ChangeTarget::AddObject(object) = &row.target else {
+                continue;
+            };
+            let mut references = BTreeSet::from([object.parent, object.owner, object.location]);
+            references.extend(object.verbs.iter().map(|verb| verb.owner));
+            references.extend(
+                object
+                    .property_definitions
+                    .iter()
+                    .map(|property| property.perms.owner()),
+            );
+            references.extend(
+                object.property_overrides.iter().filter_map(|property| {
+                    property.perms_update.as_ref().map(|perms| perms.owner())
+                }),
+            );
+            for reference in references {
+                if self.creations.get(&reference).is_some_and(Option::is_none)
+                    && !creations.contains(&reference)
+                {
+                    issues.push(record(&[("code", v_str("missing_object_prerequisite")), ("message", v_str(&format!("Object {} requires new object {reference}. Select its group too, or skip this object.", object.oid)))]));
+                }
+            }
+        }
         for name in &selected_groups {
             let group = &self.groups[*name];
             if !group.members.is_subset(&selected) {

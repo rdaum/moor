@@ -48,6 +48,8 @@ export interface ChangePackage {
     trustedOwners: string[];
     upstream: Upstream;
     active: number;
+    proposedBindings: Record<string, string>;
+    complete: string[];
 }
 export interface CompletedReview {
     review: number;
@@ -114,6 +116,14 @@ function decodePackage(name: string, value: unknown): ChangePackage {
         trustedOwners: references(item.trusted_owners),
         upstream: decodeUpstream(item.upstream),
         active: integer(item.active),
+        proposedBindings: Object.fromEntries(
+            Object.entries(record(item.proposed_bindings ?? {})).map(([name, value]) => {
+                const reference = jsObjectRefToCurie(value);
+                if (!reference) throw new Error("Invalid proposed object binding.");
+                return [name, reference];
+            }),
+        ),
+        complete: references(record(item.policy ?? {}).complete ?? []),
     };
 }
 
@@ -199,6 +209,19 @@ export class ChangeServiceClient {
     }
     async upstream(name: string, generation: number, upstream: Upstream): Promise<ChangePackage> {
         return decodePackage(name, await this.invoke("upstream", [name, upstream, generation]));
+    }
+    async proposeObjects(
+        name: string,
+        generation: number,
+        bindings: Record<string, StructuredArgument>,
+        complete: boolean,
+    ): Promise<ChangePackage> {
+        const result = await this.invoke("propose_objects", [name, generation, bindings, complete ? 1 : 0]);
+        const configured = decodePackage(name, result);
+        if (configured.generation !== generation + 1) {
+            throw new Error("Package changed. Reload before changing object bindings.");
+        }
+        return configured;
     }
     async stage(name: string, sources: { label: string; text: string }[], operation: "update" | "adopt") {
         if (sources.length && !this.capabilities.transports.includes("upload")) {

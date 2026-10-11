@@ -66,6 +66,16 @@ const blockers: Record<string, string> = {
         "This object has descendants. Permit their inherited property explicitly before applying.",
     property_name_collision:
         "A property with this name already exists on this object, an ancestor, or a descendant. Creation is blocked.",
+    object_address_occupied:
+        "This object ID is occupied. Discard the review, choose another explicit binding, and fetch again.",
+    object_binding_changed:
+        "The installed object no longer matches its creation receipt. Inspect the object before changing package rules.",
+    creation_requires_wizard: "Creating an object requires wizard authority.",
+    invalid_object_parent: "A parent is missing or inheritance contains a cycle. Correct the source and review again.",
+    invalid_object_location:
+        "A location is missing or containment contains a cycle. Correct the source and review again.",
+    missing_inherited_property:
+        "An override names a property that no parent defines. Correct the source and review again.",
 };
 const fieldLabels: Record<string, string> = {
     program: "Verb",
@@ -561,7 +571,8 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                 {page && !applying && service?.supports("set_group") && page.operation !== "adopt" && (
                     <details
                         className="change-review-groups"
-                        open={rows.some(row => row.operation === "add_verb") || Boolean(page.groupValidation.length)}
+                        open={rows.some(row => row.operation?.startsWith("add_"))
+                            || Boolean(page.groupValidation.length)}
                     >
                         <summary>Changes that belong together ({page.groups.length} groups)</summary>
                         <p>
@@ -569,8 +580,8 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                             then review the choices before applying.
                         </p>
                         <p>
-                            New verbs appear only when you apply. A conflicting local or inherited name blocks creation.
-                            Existing property values stay unchanged.
+                            New objects and members appear only when you apply. A conflicting address or name blocks
+                            creation. Existing property values stay unchanged.
                         </p>
                         {page.groups.map(group => (
                             <div className="change-review-group" key={group.name}>
@@ -714,6 +725,31 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                             </h3>
                                             <span>{changeLabels[row.classification]}</span>
                                         </header>
+                                        {row.operation === "add_object" && (
+                                            <section aria-label="New object definition">
+                                                <h4>Create at the chosen object ID</h4>
+                                                <p>
+                                                    Review the full definition below, including owners, flags, initial
+                                                    properties, overrides, and programs.
+                                                </p>
+                                                <p>
+                                                    Apply creates this object only if its ID is still absent. It
+                                                    installs all these contents together. It does not run initialization
+                                                    verbs or choose another ID after a conflict.
+                                                </p>
+                                                <p>
+                                                    Include the object and every program that needs it in a change
+                                                    group. Required new parents, owners, and locations must apply too.
+                                                </p>
+                                            </section>
+                                        )}
+                                        {row.operation === "retain_object" && (
+                                            <p>
+                                                This object is already installed. Selecting this row keeps its structure
+                                                and creation receipt. Separate program rows control code updates.
+                                                Property data stays unchanged.
+                                            </p>
+                                        )}
                                         {row.operation === "add_property" && (
                                             <section aria-label="Property initialization">
                                                 <h4>Initial value, only if absent</h4>

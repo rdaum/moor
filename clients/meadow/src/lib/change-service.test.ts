@@ -44,6 +44,22 @@ const decode = (bytes: Uint8Array) => new MoorVar(Var.getRootAsVar(new ByteBuffe
 beforeEach(() => vi.resetAllMocks());
 
 describe("change service", () => {
+    it("keeps proposed addresses typed and rejects stale package replies", async () => {
+        reply({ ...capabilities, operations: [...capabilities.operations, "propose_objects"] });
+        const client = await ChangeServiceClient.connect("token", "oid:44");
+        const bindings = { HELPER: new ObjectArgument("oid:9600") };
+        reply({ ...packageValue, proposed_bindings: { HELPER: { oid: 9600 } }, policy: { complete: [{ oid: 12 }] } });
+        expect(await client.proposeObjects("test", 1, bindings, true)).toMatchObject({
+            generation: 2,
+            proposedBindings: { HELPER: "oid:9600" },
+            complete: ["oid:12"],
+        });
+        expect(decode(vi.mocked(invokeVerbFlatBuffer).mock.lastCall![3]!)).toEqual(["test", 1, {
+            HELPER: { oid: 9600 },
+        }, 1]);
+        reply({ ...packageValue, generation: 1 });
+        await expect(client.proposeObjects("test", 1, bindings, false)).rejects.toThrow("Package changed");
+    });
     it("keeps object arguments distinct from literal strings and maps", () => {
         expect(decode(buildStructuredArgs([new ObjectArgument("oid:12"), "oid:12", { curie: "oid:12" }]))).toEqual([
             { oid: 12 },

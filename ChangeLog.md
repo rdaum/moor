@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell change reviews can create objects at explicitly chosen IDs. Preview reserves no IDs, and
+  apply rejects occupied addresses. New objects and their initial contents commit with their change
+  groups without running initialization verbs. Package rules distinguish complete and partial
+  source. Omitted members remain installed.
+
 - Cowbell change groups can create properties with an explicitly approved initial value. Existing
   values stay unchanged. Adding a property to a parent requires permission for its descendants to
   inherit it. Meadow and terminal reviews show these choices before apply.

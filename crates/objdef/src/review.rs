@@ -28,6 +28,8 @@
 mod additions;
 #[path = "review_inspection.rs"]
 pub(crate) mod inspection;
+#[path = "review_objects.rs"]
+mod objects;
 #[path = "review_policy.rs"]
 mod policy;
 #[path = "review_properties.rs"]
@@ -209,6 +211,8 @@ pub(crate) enum ChangeTarget {
     AddVerb(moor_compiler::ObjVerbDef),
     AddProperty(moor_compiler::ObjPropDef),
     RetainProperty { accepted: String },
+    AddObject(Box<moor_compiler::ObjectDefinition>),
+    RetainObject { accepted: String },
 }
 
 pub(crate) struct ChangeRow {
@@ -353,9 +357,9 @@ pub(crate) fn analyze(
     } else if selected_fields.is_empty()
         || selected_fields
             .iter()
-            .any(|field| !matches!(field.as_string(), Some("program" | "property")))
+            .any(|field| !matches!(field.as_string(), Some("program" | "property" | "object")))
     {
-        return Err("update fields must be program or property"
+        return Err("update fields must be program, property, or object"
             .to_owned()
             .into());
     }
@@ -382,6 +386,18 @@ pub(crate) fn analyze(
         }
     }
     let mut trusted_owners = BTreeSet::new();
+    if !policy.complete.is_subset(&scope)
+        || policy
+            .creations
+            .keys()
+            .any(|object| !scope.contains(object))
+    {
+        return Err(
+            "object policy refers to an address outside the managed scope"
+                .to_owned()
+                .into(),
+        );
+    }
     if let Some(owners) = req.get("trusted_owners") {
         let owners = owners
             .as_list()
@@ -495,6 +511,17 @@ pub(crate) fn analyze(
     let mut report_rows = Vec::new();
     let mut rows = Vec::new();
     let mut diagnostics = Vec::new();
+    for object in set
+        .graph()
+        .object_definitions()
+        .keys()
+        .filter(|object| !scope.contains(object))
+    {
+        diagnostics.push(record(&[
+            ("object", v_obj(*object)),
+            ("code", v_str("outside_managed_scope")),
+        ]));
+    }
     let mut detail_bytes = 0usize;
     for object in scope {
         let Some((label, incoming)) = set.graph().object_definitions().get(&object) else {
@@ -504,6 +531,43 @@ pub(crate) fn analyze(
             ]));
             continue;
         };
+        if !adoption
+            && policy.creations.contains_key(&object)
+            && selected_fields
+                .iter()
+                .any(|field| field.as_string() == Some("object"))
+        {
+            let context = objects::Context {
+                world,
+                permissions,
+                set: &set,
+                policy: &policy,
+                trusted_owners: &trusted_owners,
+                provenance,
+                source_digest: &source_digest,
+            };
+            let (row, report) = context.analyze(
+                label,
+                incoming,
+                &mut guards,
+                selected_details.contains(&format!("object/{}", objects::member_key(object))),
+            )?;
+            for field in ["live_text", "incoming_text"] {
+                if let Ok(text) = report.as_map().unwrap().get(&v_str(field)) {
+                    detail_bytes += text.as_string().unwrap().len();
+                }
+            }
+            if detail_bytes > MAX_SOURCE_BYTES {
+                return Err("selected details exceed 16 MiB".to_owned().into());
+            }
+            let proposed = matches!(row.target, ChangeTarget::AddObject(_));
+            let blocked = !row.eligible;
+            rows.push(row);
+            report_rows.push(report);
+            if proposed || blocked {
+                continue;
+            }
+        }
         if !world.valid(&object)? {
             diagnostics.push(record(&[
                 ("object", v_obj(object)),
@@ -835,7 +899,14 @@ pub(crate) fn analyze(
                 diagnostics.push(record(&[
                     ("object", v_obj(object)),
                     ("names", names(definition.names())),
-                    ("code", v_str("live_definition_unmatched")),
+                    (
+                        "code",
+                        v_str(if policy.complete.contains(&object) {
+                            "unsupported_removal"
+                        } else {
+                            "live_definition_unmatched"
+                        }),
+                    ),
                 ]));
             }
         }
@@ -894,6 +965,21 @@ pub(crate) fn analyze(
             }
         }
         // Existing fields and overrides remain read-only.
+        if policy.complete.contains(&object) {
+            for property in world.properties(permissions, &object)?.iter() {
+                if !incoming
+                    .property_definitions
+                    .iter()
+                    .any(|incoming| incoming.name == property.name())
+                {
+                    diagnostics.push(record(&[
+                        ("object", v_obj(object)),
+                        ("names", names(&[property.name()])),
+                        ("code", v_str("unsupported_removal")),
+                    ]));
+                }
+            }
+        }
         if !incoming.property_definitions.is_empty() || !incoming.property_overrides.is_empty() {
             diagnostics.push(record(&[
                 ("object", v_obj(object)),
@@ -910,7 +996,7 @@ pub(crate) fn analyze(
     let has_additions = rows.iter().any(|row| {
         matches!(
             row.target,
-            ChangeTarget::AddVerb(_) | ChangeTarget::AddProperty(_)
+            ChangeTarget::AddVerb(_) | ChangeTarget::AddProperty(_) | ChangeTarget::AddObject(_)
         )
     });
     policy.annotate(&mut rows, &mut report_rows, has_additions)?;
@@ -1004,10 +1090,14 @@ fn validate_choices(
                 || (analysis.adoption && !matches!(kind, "incoming" | "defer"))
                 || (matches!(
                     row.target,
-                    ChangeTarget::AddVerb(_) | ChangeTarget::AddProperty(_)
+                    ChangeTarget::AddVerb(_)
+                        | ChangeTarget::AddProperty(_)
+                        | ChangeTarget::AddObject(_)
                 ) && !matches!(kind, "incoming" | "defer"))
-                || (matches!(row.target, ChangeTarget::RetainProperty { .. })
-                    && !matches!(kind, "local" | "defer"))
+                || (matches!(
+                    row.target,
+                    ChangeTarget::RetainProperty { .. } | ChangeTarget::RetainObject { .. }
+                ) && !matches!(kind, "local" | "defer"))
             {
                 return Err("choice is not allowed for this row".to_string().into());
             }
@@ -1232,8 +1322,38 @@ pub fn apply(
                 ("names", names(&[property.name])),
             ]));
         }
+        if let ChangeTarget::AddObject(object) = &row.target {
+            created.push(record(&[
+                ("member", v_str(&row.member)),
+                ("object", v_obj(row.object)),
+                ("field", v_str("object")),
+                ("names", v_list(&[v_str("")])),
+                ("creation", v_str(&row.incoming_hash)),
+            ]));
+            for verb in &object.verbs {
+                created.push(record(&[
+                    ("member", v_str(&additions::member_key(row.object, verb)?)),
+                    ("object", v_obj(row.object)),
+                    ("field", v_str("program")),
+                    ("names", names(&verb.names)),
+                ]));
+            }
+            for property in &object.property_definitions {
+                created.push(record(&[
+                    (
+                        "member",
+                        v_str(&properties::member_key(row.object, property.name)),
+                    ),
+                    ("object", v_obj(row.object)),
+                    ("field", v_str("property")),
+                    ("names", names(&[property.name])),
+                ]));
+            }
+        }
         let accepted = match &row.target {
-            ChangeTarget::RetainProperty { accepted } => accepted,
+            ChangeTarget::RetainProperty { accepted } | ChangeTarget::RetainObject { accepted } => {
+                accepted
+            }
             _ => &row.incoming_hash,
         }
         .clone();
@@ -1264,9 +1384,51 @@ fn write_actions(
     permissions: &TaskPermissions,
     actions: Vec<ChangeAction>,
 ) -> Result<(), ApplyError> {
+    let mut objects = Vec::new();
+    let mut members = Vec::new();
     for action in actions {
+        if let ChangeTarget::AddObject(object) = action.target {
+            objects.push((object, action.baseline));
+        } else {
+            members.push(action);
+        }
+    }
+    for (object, baseline) in &objects {
+        for verb in &object.verbs {
+            let mut verb_baseline = vec![
+                ("schema", v_str(PROGRAM_SCHEMA)),
+                (
+                    "program",
+                    v_str(&program_fingerprint(&verb.program).map_err(ReviewError::from)?),
+                ),
+            ];
+            if let Ok(source) = baseline.as_map().unwrap().get(&v_str("source")) {
+                verb_baseline.push(("source", source));
+            }
+            members.push(ChangeAction {
+                object: object.oid,
+                target: ChangeTarget::AddVerb(verb.clone()),
+                program: None,
+                baseline: record(&verb_baseline),
+            });
+        }
+    }
+    objects::allocate(
+        world,
+        permissions,
+        &objects
+            .iter()
+            .map(|(object, _)| object.as_ref())
+            .collect::<Vec<_>>(),
+    )
+    .map_err(ApplyError::Mutation)?;
+    objects::initialize(world, permissions, &objects).map_err(ApplyError::Mutation)?;
+    for action in members {
         let uuid = match action.target {
-            ChangeTarget::RetainProperty { .. } => continue,
+            ChangeTarget::RetainProperty { .. } | ChangeTarget::RetainObject { .. } => continue,
+            ChangeTarget::AddObject(_) => {
+                unreachable!("object actions were partitioned before member writes")
+            }
             ChangeTarget::AddProperty(property) => {
                 world
                     .define_property(
@@ -1365,6 +1527,7 @@ fn write_actions(
             )
             .map_err(ApplyError::Mutation)?;
     }
+    objects::finish(world, permissions, &objects).map_err(ApplyError::Mutation)?;
     Ok(())
 }
 

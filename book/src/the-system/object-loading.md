@@ -298,8 +298,8 @@ the caller and other changes untouched. Refresh the review to see the current de
 Successful apply records the new member and its accepted program baseline with the completion
 receipt.
 
-New objects remain unsupported in this increment. Existing property values remain unchanged. Group
-membership does not authorize unsupported operations.
+Existing property values remain unchanged. Group membership does not authorize unsupported
+operations.
 
 The native request's optional `policy` has schema 1 and a `groups` list. Each group has `name`,
 `members`, and optional `requires` entries. `members` contains opaque membership keys from report
@@ -505,3 +505,84 @@ and discard remove working source and drafts. The last 64 completed receipts ret
 After a restart or interrupted task, query status. An `interrupted` review requires an explicit
 refresh or discard. Rejection leaves installed content unchanged. A changed live program makes the
 original evidence stale; refresh before making new decisions.
+
+### Bind and create objects
+
+A new object needs an explicit numeric ID before preview. Its objdef constant maps to that ID in
+package configuration. Source cannot select another address or move an existing object.
+
+In Meadow:
+
+1. Select the package.
+2. If a review is active, finish or discard it first.
+3. Select **Object bindings and source scope**.
+4. Enter one binding per line, such as `HELPER = #9600`.
+5. Choose whether the source lists every member of each managed object.
+6. Save the configuration, then fetch or upload source.
+7. Read the new object's full definition, including ownership, flags, properties, and programs.
+8. Put the new object and its dependent programs in a change group.
+9. Select the group, then apply it.
+
+A new package can start with no existing managed objects. Add its proposed bindings before fetching
+source. Only wizards can propose or create objects.
+
+The terminal equivalent for the bindings is:
+
+```text
+@changes bindings PACKAGE GENERATION [HELPER=#9600 OTHER=#9601] [complete]
+```
+
+This command replaces the package's pending object bindings. Installed bindings remain in place.
+Omit bindings to remove all pending proposals. Omit `complete` to use partial source. Use the
+generation shown by `@changes packages`. Ordinary objdef constants bind references inside programs
+and property values to these IDs. Uploaded source must not redeclare configured constant names. Git
+fetching omits `constants.moo` and uses package bindings.
+
+The new-object row includes the complete initial definition. Selecting that row permits these
+contents only at an absent address. Properties require explicit initial values. Inherited overrides
+apply only to the new object. Apply does not run `initialize`, movement hooks, or other MOO verbs.
+Programs can call initialization code later through normal, explicit administration.
+
+Preview creates nothing and reserves no IDs. Apply checks the addresses again. It allocates all
+selected objects before connecting their parents and locations. Then it installs their contents. A
+new child can therefore inherit a property from a new parent in the same transaction. Required new
+parents, owners, and locations must be selected too. A missing selection rejects apply.
+
+If an ID is occupied:
+
+1. Discard the review.
+2. Choose another explicit ID in **Object bindings and source scope**.
+3. Fetch or upload the source again.
+4. Update the change group to include the newly bound object.
+5. Review the new comparison before applying.
+
+The occupied object stays unchanged. Apply never relocates an object or guesses its identity from
+its name. A concurrent creation or late error rolls back all selected changes, including program
+updates, object contents, membership, baselines, and the receipt.
+
+After creation, the package retains a creation receipt for that address. Later reviews compare the
+installed object but cannot replace its structure. **Keep local** preserves that structure and its
+creation receipt. Separate program rows control program updates. Existing property data remains
+unchanged. A missing or different creation receipt blocks the object row.
+
+### Complete and partial source
+
+Partial source makes no statement about omitted members. This is the default. A file that contains
+one changed method does not request deletion of the other methods.
+
+Complete source declares that it lists every member of the managed objects. An omitted installed
+member then appears as an unsupported removal. Apply still preserves that member. Deletion,
+renaming, structural updates to existing objects, and data migrations need separate support.
+
+The scope declaration is a package rule. Fetching source cannot change it. Native policy can name
+complete objects individually. Meadow's checkbox declares all managed objects complete or leaves all
+of them partial. Changes to bindings or scope require a fresh review.
+
+Native requests include `object` in `fields` for creation. Policy `creations` entries contain an
+explicit `object` and `mode: "absent"`. After apply, the core records the native creation hash as
+`installed` in that entry. Policy `complete` lists objects with complete source. All policy
+addresses must belong to the request's managed scope. Source outside that scope remains unapplied.
+
+The object baseline records `creation` and `creation_schema` alongside field baselines. The schema
+is `objdef-v1:creation-text:sha256`. The hash covers normalized objdef text with reserved baselines
+removed. It identifies the accepted initial definition. It does not authorize replacing live data.

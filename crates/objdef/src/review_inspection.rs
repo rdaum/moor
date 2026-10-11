@@ -171,6 +171,19 @@ pub(crate) fn baseline(
     graph: &ProposedObjectGraph,
     source: Option<&Var>,
 ) -> Var {
+    field_baseline(object, Some(graph), source)
+}
+
+/// Baselines from an installed object's local rows include resolved override permissions.
+pub(super) fn snapshot_baseline(object: &ObjectDefinition, source: Option<&Var>) -> Var {
+    field_baseline(object, None, source)
+}
+
+fn field_baseline(
+    object: &ObjectDefinition,
+    graph: Option<&ProposedObjectGraph>,
+    source: Option<&Var>,
+) -> Var {
     let hashes = |values: BTreeMap<String, Var>| {
         v_map(
             &values
@@ -187,7 +200,7 @@ pub(crate) fn baseline(
         (
             "property",
             hashes(
-                properties(object, Some(graph))
+                properties(object, graph)
                     .into_iter()
                     .filter(|(_, property)| property.permissions_known)
                     .map(|(name, property)| (name, property.value))
