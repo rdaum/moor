@@ -166,6 +166,26 @@ Add `--clean` to discard the development database and create it again. Without `
 existing database is reused: neither source import nor baseline preparation runs. The flag does not
 repair an existing database's baselines.
 
+The Cowbell Docker launcher accepts the same baseline options and starts both HTTP and Git workers:
+
+```bash
+scripts/start-moor-cowbell.sh --git-upstream origin/main --detach
+```
+
+Use `--core PATH` to import a prepared directory. Docker source paths must be inside the checkout,
+which Compose mounts at `/db`. The launcher accepts host paths and converts them to container paths.
+Use `RUN_DIR=run-cowbell-test` to create a separate installation. Restarting with the same `RUN_DIR`
+preserves the database, accepted baselines, and package configuration.
+
+The launcher passes baseline options through `MOOR_GIT_UPSTREAM` or `MOOR_BASELINE_OBJDEF_DIR`. The
+npm `moor:dev` commands start both workers and accept these environment variables. The `moor`
+executable also accepts these environment variables directly. Set only one; unset both for an
+ordinary import. YAML baseline configuration still applies when neither variable is set.
+
+The standard Docker image includes Git for local ancestry preparation. Git worker requests use the
+built-in Git library and do not need that executable. Images built with `Dockerfile.arm64-cross`
+require prepared objdefs or an explicit baseline directory because they do not include Git.
+
 For direct startup, add `--git-upstream origin/main` alongside
 `--import cores/cowbell/src --import-format objdef`. Both server executables also accept
 `import_export.git_upstream` in YAML configuration. Use `--baseline-objdef-dir PATH` (or
@@ -218,3 +238,43 @@ Cowbell and Snore declare their package configuration in ordinary objdef propert
 `@changes` to fetch the same repository and subtree selected during preparation. Git preparation
 runs before the bulk importer; the importer has no knowledge of Git, the change manager, or its
 package schema.
+
+### Source archives without Git history
+
+The container images contain server and utility binaries. They do not contain a Cowbell source
+installation or its Git history. The repository source archive contains `cores/cowbell/src`, without
+prepared baseline metadata. Keep an unchanged copy of the chosen release source as the accepted
+baseline. Apply installation edits to a separate copy.
+
+For example, with both directories inside the checkout:
+
+```bash
+scripts/start-moor-cowbell.sh --core cowbell-local \
+    --baseline-objdef-dir cowbell-release/cores/cowbell/src --detach
+```
+
+To produce a portable installation directory before deployment:
+
+```bash
+moorc --src-objdef-dir cowbell-local \
+    --baseline-objdef-dir cowbell-release/cores/cowbell/src \
+    --out-objdef-dir cowbell-prepared \
+    --use-boolean-returns true --use-symbols-in-builtins true \
+    --custom-errors true --use-uuobjids true --anonymous-objects true
+```
+
+Distribute `cowbell-prepared` with its baseline metadata intact. Import it without another baseline
+option. This path needs neither Git history nor the Git executable on the destination. An edited
+installation must not supply its own files as the baseline: that would accept local edits as
+upstream.
+
+### Startup and fetch failures
+
+Missing or ambiguous ancestry aborts a fresh import. Fetch the required history, or supply an
+explicit baseline directory, then restart. Failed import removes the newly created database so the
+next attempt can import again. Existing databases skip import and baseline preparation.
+
+If `@changes fetch` reports that no worker is available, start the required worker and retry. The
+native launcher needs `--git-worker` for Git and `--curl-worker` for HTTP. The Cowbell Docker
+launcher starts both. Worker startup does not require changes to package configuration. Failed
+fetches do not install a partial source set; inspect `@changes status` before retrying.

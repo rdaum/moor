@@ -50,7 +50,7 @@ moor-var = { path = "../var" }
 moor-web-host = { path = "../web-host" }
 
 async-trait.workspace = true
-clap.workspace = true
+clap = { workspace = true, features = ["env"] }
 clap_derive.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true

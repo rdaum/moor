@@ -79,9 +79,9 @@ FROM debian:bookworm-slim AS backend
 # Re-declare ARG to use it in this stage
 ARG BUILD_PROFILE=debug
 
-# We need libssl for the curl worker, ca-certificates for HTTPS, and libsodium for CURVE encryption
+# libssl serves HTTP, ca-certificates HTTPS, libsodium CURVE, and Git prepares import baselines.
 RUN apt update && \
-    apt -y install libssl3 ca-certificates libsodium23 && \
+    apt -y install libssl3 ca-certificates libsodium23 git && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /moor

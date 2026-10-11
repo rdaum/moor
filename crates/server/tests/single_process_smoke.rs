@@ -61,7 +61,8 @@ services:
     )
     .expect("write config");
 
-    let child = Command::new(moor_bin())
+    let mut command = Command::new(moor_bin());
+    command
         .arg(&data_dir)
         .arg("--config-file")
         .arg(&config_path)
@@ -85,20 +86,74 @@ services:
         .env("HOME", test_dir.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .env_remove("MOOR_GIT_UPSTREAM")
+        .env("MOOR_BASELINE_OBJDEF_DIR", minimal_core_path());
+
+    for restart in [false, true] {
+        if restart {
+            // Existing worlds must not repeat baseline preparation on restart.
+            command.env(
+                "MOOR_BASELINE_OBJDEF_DIR",
+                test_dir.path().join("missing-base"),
+            );
+        }
+        let child = command.spawn().expect("start moor");
+        let result = run_smoke_flow(telnet_port, web_port);
+        let output = terminate_and_wait(child);
+        if let Err(error) = result {
+            panic_with_output(error, &output);
+        }
+        if !output.status.success() {
+            panic_with_output(format!("moor exited with {}", output.status), &output);
+        }
+    }
+}
+
+#[test]
+fn failed_baseline_preparation_removes_only_the_new_database() {
+    let root = tempfile::tempdir().unwrap();
+    let data = root.path().join("data");
+    std::fs::create_dir(&data).unwrap();
+    std::fs::write(data.join("keep.txt"), "unrelated data").unwrap();
+    let child = Command::new(moor_bin())
+        .arg(&data)
+        .args([
+            "--db",
+            "world.db",
+            "--import-format",
+            "objdef",
+            "--generate-keypair",
+        ])
+        .arg("--import")
+        .arg(minimal_core_path())
+        .env("XDG_CONFIG_HOME", root.path().join("config"))
+        .env("XDG_DATA_HOME", root.path().join("share"))
+        .env_remove("MOOR_GIT_UPSTREAM")
+        .env("MOOR_BASELINE_OBJDEF_DIR", root.path().join("missing-base"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .expect("start moor");
-
-    let result = run_smoke_flow(telnet_port, web_port);
-    let output = terminate_and_wait(child);
-
-    if let Err(error) = result {
-        panic_with_output(error, &output);
-    }
-
-    let status = output.status;
-    if !status.success() {
-        panic_with_output(format!("moor exited with {status}"), &output);
-    }
+        .unwrap();
+    let mut child = child;
+    let output = match wait_for_exit(&mut child, Duration::from_secs(10)) {
+        Some(output) => output,
+        None => panic_with_output(
+            "failed import did not exit".into(),
+            &terminate_and_wait(child),
+        ),
+    };
+    assert!(!output.status.success());
+    let diagnostics = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(diagnostics.contains("missing-base"), "{diagnostics}");
+    assert!(!data.join("world.db").exists());
+    assert_eq!(
+        std::fs::read_to_string(data.join("keep.txt")).unwrap(),
+        "unrelated data"
+    );
 }
 
 fn run_smoke_flow(telnet_port: u16, web_port: u16) -> Result<(), String> {
@@ -130,6 +185,15 @@ fn run_smoke_flow(telnet_port: u16, web_port: u16) -> Result<(), String> {
         )
         .map_err(|e| format!("write Git capabilities request: {e}"))?;
     read_until(&mut stream, "=> 1", Duration::from_secs(10))?;
+
+    stream
+        .write_all(b"eval verb_metadata(#2, \"eval\", \"objdef_base\")[\"schema\"]\n")
+        .map_err(|e| format!("read accepted baseline metadata: {e}"))?;
+    read_until(
+        &mut stream,
+        "=> \"objdef-v1:program:sha256\"",
+        Duration::from_secs(10),
+    )?;
 
     Ok(())
 }

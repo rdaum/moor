@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The Cowbell Docker launcher starts HTTP and Git workers and accepts `--core`, `--git-upstream`,
+  and `--baseline-objdef-dir`. Baseline preparation applies only to fresh imports. Existing
+  databases retain their baselines and package configuration on restart.
+
 - The single-process `moor` server supports read-only Git worker requests with `--enable-git-worker`
   or `services.git_worker.enabled`. Requests use isolated child processes with configurable resource
   limits. Separate worker enrollment is not required.

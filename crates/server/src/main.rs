@@ -127,11 +127,15 @@ struct Args {
 
     /// Prepare initial program baselines from HEAD's common ancestor with this remote-tracking ref.
     /// Uses local Git history only; fetch the remote first when needed.
-    #[arg(long, conflicts_with = "baseline_objdef_dir")]
+    #[arg(
+        long,
+        env = "MOOR_GIT_UPSTREAM",
+        conflicts_with = "baseline_objdef_dir"
+    )]
     git_upstream: Option<String>,
 
     /// Use this objdef directory as the upstream baseline for the initial import.
-    #[arg(long)]
+    #[arg(long, env = "MOOR_BASELINE_OBJDEF_DIR")]
     baseline_objdef_dir: Option<PathBuf>,
 
     #[arg(

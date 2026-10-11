@@ -18,25 +18,28 @@ services:
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     working_dir: /db
     environment:
+      - MOOR_GIT_UPSTREAM
+      - MOOR_BASELINE_OBJDEF_DIR
       - RUST_BACKTRACE=1
       - HOME=/db
       - XDG_CONFIG_HOME=/db/${RUN_DIR:-run}/config
       - XDG_DATA_HOME=/db/${RUN_DIR:-run}/local-share
     volumes:
       - ./:/db
-    command: >
-      /moor/moor
-        /db/${RUN_DIR:-run}/moor-data
-        --db=development.db
-        --config-file=/db/${MOOR_CONFIG_FILE:-moor-dev.yaml}
-        --import=${IMPORT_PATH:-/db/cores/cowbell/src}
-        --import-format=objdef
-        --export=/db/${RUN_DIR:-run}/export
-        --generate-keypair
-        --public-key=/db/${RUN_DIR:-run}/config/moor.key.pub
-        --private-key=/db/${RUN_DIR:-run}/config/moor.key.pem
-        --enable-curl-worker
-        --web-listen-address=0.0.0.0:8081
+    command:
+      - "/moor/moor"
+      - "/db/${RUN_DIR:-run}/moor-data"
+      - "--db=development.db"
+      - "--config-file=/db/${MOOR_CONFIG_FILE:-moor-dev.yaml}"
+      - "--import=${IMPORT_PATH:-/db/cores/cowbell/src}"
+      - "--import-format=objdef"
+      - "--export=/db/${RUN_DIR:-run}/export"
+      - "--generate-keypair"
+      - "--public-key=/db/${RUN_DIR:-run}/config/moor.key.pub"
+      - "--private-key=/db/${RUN_DIR:-run}/config/moor.key.pem"
+      - "--enable-curl-worker"
+      - "--enable-git-worker"
+      - "--web-listen-address=0.0.0.0:8081"
     ports:
       - "8888:8888"
       - "8081:8081"
