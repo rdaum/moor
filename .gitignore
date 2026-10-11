@@ -64,3 +64,7 @@ clients/moor-web-mcp/*.local.json
 proptest-failures/
 .mcp.json
 .mcp.json
+
+# Browser acceptance output
+clients/meadow/test-results/
+clients/meadow/playwright-report/

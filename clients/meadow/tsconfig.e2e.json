@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.test.json",
+  "include": ["e2e/**/*.ts", "e2e/**/*.tsx", "playwright.config.ts", "src/vite-env.d.ts"],
+  "exclude": []
+}

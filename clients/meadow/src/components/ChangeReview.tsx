@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-import Editor, { DiffEditor } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
     baselineText,
@@ -24,6 +24,7 @@ import {
     ReviewPage,
     ReviewStatus,
 } from "../lib/change-review";
+import { ReviewDiffEditor } from "./ReviewDiffEditor";
 import "../lib/monaco";
 import { registerMooLanguage } from "../lib/monaco-moo";
 import { DialogSheet } from "./DialogSheet";
@@ -605,7 +606,7 @@ export function ChangeReview({ target, authToken, onClose }: Props) {
                                                     />
                                                 )
                                                 : (
-                                                    <DiffEditor
+                                                    <ReviewDiffEditor
                                                         key={row.id}
                                                         original={original ?? ""}
                                                         modified={modified ?? ""}

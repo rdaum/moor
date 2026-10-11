@@ -137,7 +137,7 @@ ESLint still requires the JavaScript compiler API. The root override keeps ESLin
 on that API too, since its peer range also accepts TypeScript 7 despite requiring the removed
 JavaScript API. Keep the root compiler version aligned with the schema, SDK, and MCP workspaces.
 
-`npm run typecheck --workspace meadow` checks four TypeScript projects in order:
+`npm run typecheck --workspace meadow` checks five TypeScript projects in order:
 
 | Command            | Configuration          | Checked code and environment                                                                                              |
 | ------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -145,6 +145,7 @@ JavaScript API. Keep the root compiler version aligned with the schema, SDK, and
 | `typecheck:worker` | `tsconfig.worker.json` | Export worker and its helpers, with WebWorker types and no browser window, Node, or test globals.                         |
 | `typecheck:test`   | `tsconfig.test.json`   | All `src/**/*.test.{ts,tsx}` and `src/**/*.spec.{ts,tsx}` files, plus `vitest.setup.ts`; jsdom, Node, and Vitest globals. |
 | `typecheck:node`   | `tsconfig.node.json`   | `vite.config.ts` and `vitest.config.ts`, with Node types and no Vitest globals.                                           |
+| `typecheck:e2e`    | `tsconfig.e2e.json`    | Browser acceptance fixtures and Playwright configuration, with browser and Node types.                                    |
 
 The application and test projects also check their imported source files. Shared worker helpers can
 be checked from both the browser and worker projects. Each environment selects its own ambient
@@ -152,8 +153,32 @@ types; Vitest's imported jsdom configuration types additionally bring DOM declar
 configuration project. Node type definitions target the Node 24 runtime used in CI.
 
 `npm run build --workspace meadow` checks the application and worker projects before bundling. The
-existing web CI job runs `npm run web:typecheck`, which includes all four Meadow checks along with
+existing web CI job runs `npm run web:typecheck`, which includes all five Meadow checks along with
 the SDK and MCP client checks. Test execution remains `npm test --workspace meadow`.
+
+### Change review acceptance tests
+
+The browser suite starts a temporary Cowbell world with the real Git and HTTP workers. A local Git
+HTTP server supplies two revisions of a small package. Tests use Meadow's authenticated client and
+review component. No public repository or existing world is required.
+
+From the repository root:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:changes
+```
+
+The root command builds the server and web dependencies before testing. To reuse a current build,
+run `npm run test:changes --workspace meadow`. Set `MOOR_TEST_BINARY` to use another server binary.
+Playwright stores failure traces in `clients/meadow/test-results`, which Git ignores.
+
+Coverage includes program classifications, inherited property comparison, edited programs,
+concurrent choices, restart, stale evidence, lost apply responses, late rollback, and revoked
+authority after HTTP suspension. Fetch and package setup use authenticated service calls. The
+browser exercises comparison, validation, saved drafts, apply, and refresh confirmation. Package
+configuration and fetch controls need their own UI coverage as that workspace is completed.
 
 ### Connection diagnostics
 

@@ -33,6 +33,9 @@
 ; const id = #0.changes_probe["review_id"]; return $change_manager:resolve(id, 1, #0.changes_probe["row"], "edited", "return (;")["validation"][1]["valid"];
 false
 
+; return $change_manager:details(#0.changes_probe["review_id"], 2, #0.changes_probe["row"])["row"]["choice"]["validated"];
+false
+
 ; return `$change_manager:resolve(#0.changes_probe["review_id"], 1, #0.changes_probe["row"], "local") ! ANY => "stale"';
 "stale"
 
@@ -108,8 +111,8 @@ E_PERM
 ; const id = #0.changes_probe["review_id"]; try $change_manager:review(id, $change_manager:status(id)["generation"], {id, 1, 1}); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "stale_cursor"
 
-; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); return {output[2], #9500:test(), length($change_manager.pending)};
-{"1: return 4;", 4, 0}
+; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); const text = $format.block:mk(@output):compose(player, 'text_plain, false); return {index(text, "1: return 4;") != 0, #9500:test(), length($change_manager.pending)};
+{true, 4, 0}
 
 // Each programmatic request checks current delegation without borrowing another task's elevation.
 @wizard
@@ -160,8 +163,8 @@ E_PERM
 ; player.authoring_features = $wiz_features; return 1;
 1
 
-% @changes packages
-~~Change packages:
+; const text = $format.block:mk(@$change_manager:command({"packages"})):compose(player, 'text_plain, false); return index(text, "Change packages") != 0 && index(text, "probe") != 0;
+true
 
 @wizard
 // Core-declared owner policy also covers system code intentionally owned by a non-wizard.

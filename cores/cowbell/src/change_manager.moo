@@ -798,6 +798,9 @@ object CHANGE_MANAGER [
       if (row["id"] == row_id)
         row["label"] = this:_command_label(row["object"], this:_command_names(), row["names"][1]);
         row["choice"] = `record["choices"][row_id] ! E_RANGE => []';
+        if (row["choice"])
+          row["choice"]["validated"] = maphaskey(row["choice"], "validation");
+        endif
         value_bytes(row) <= 524288 || raise(E_QUOTA, "Selected details exceed the service limit.");
         return ["schema" -> 1, "review_id" -> id, "generation" -> generation, "row" -> row];
       endif

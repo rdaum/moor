@@ -38,7 +38,8 @@
     "full:dev:oauth2": "concurrently \"npm run meadow:dev\" \"npm run moor:dev:oauth2\"",
     "full:dev-traced": "concurrently \"npm run meadow:dev\" \"npm run moor:traced\"",
     "full:build": "npm run web:build && cargo build --release -p moor-server --bin moor",
-    "format:check": "dprint check"
+    "format:check": "dprint check",
+    "test:changes": "npm run web:prepare && cargo build -p moor-server --bin moor && npm run test:changes --workspace meadow"
   },
   "author": "Ryan Daum <ryan.daum@gmail.com>",
   "license": "AGPL-3.0-only",

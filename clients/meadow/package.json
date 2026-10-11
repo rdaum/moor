@@ -13,7 +13,7 @@
     "build:deb": "npm run build && ./deploy/debian-packages/build-web-client-deb.sh",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "typecheck": "npm run typecheck:app && npm run typecheck:worker && npm run typecheck:test && npm run typecheck:node",
+    "typecheck": "npm run typecheck:app && npm run typecheck:worker && npm run typecheck:test && npm run typecheck:node && npm run typecheck:e2e",
     "clean": "rimraf dist",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -30,7 +30,9 @@
     "typecheck:node": "node ../../tools/tsc.mjs --noEmit -p tsconfig.node.json",
     "version:check": "node scripts/version.mjs check",
     "test:version": "node --test scripts/version.test.mjs",
-    "prebuild": "npm run version:check"
+    "prebuild": "npm run version:check",
+    "test:changes": "playwright test --config playwright.config.ts",
+    "typecheck:e2e": "node ../../tools/tsc.mjs --noEmit -p tsconfig.e2e.json"
   },
   "keywords": [
     "moo",
@@ -51,6 +53,7 @@
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^10.0.1",
     "@guidepup/virtual-screen-reader": "^0.33.0",
+    "@playwright/test": "^1.64.0",
     "@tauri-apps/cli": "^2.9.6",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.1",
