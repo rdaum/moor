@@ -53,13 +53,31 @@ export function buildObjRefList(curies: string[]): Uint8Array {
     return builder.asUint8Array();
 }
 
-/** Structured integer/string/list/map arguments; object references remain explicit strings. */
-export type StructuredArgument = string | number | StructuredArgument[] | { [key: string]: StructuredArgument };
+/** An explicit object argument, distinct from strings and ordinary maps. */
+export class ObjectArgument {
+    constructor(readonly curie: string) {
+        const parsed = parseObjectCurie(curie);
+        if (
+            parsed.kind === "oid" && (!/^oid:-?\d+$/.test(curie) || parsed.oid < -2147483648 || parsed.oid > 2147483647)
+        ) {
+            throw new Error("Object argument must contain a signed 32-bit object ID");
+        }
+    }
+}
+
+/** Structured arguments preserve literal strings, including strings that resemble object references. */
+export type StructuredArgument =
+    | string
+    | number
+    | ObjectArgument
+    | StructuredArgument[]
+    | { [key: string]: StructuredArgument };
 
 export function buildStructuredArgs(values: StructuredArgument[]): Uint8Array {
     const builder = new flatbuffers.Builder(1024);
     const encode = (value: StructuredArgument, depth = 0): number => {
         if (depth > 16) throw new Error("Argument nesting is too deep");
+        if (value instanceof ObjectArgument) return buildObjRefOffset(builder, value.curie);
         if (typeof value === "number") {
             if (!Number.isSafeInteger(value)) throw new Error("Integer argument is outside the safe range");
             return FbVar.createVar(builder, VarUnion.VarInt, VarInt.createVarInt(builder, BigInt(value)));

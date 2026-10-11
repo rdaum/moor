@@ -249,6 +249,17 @@ terminal commands. Snore requires a wizard. Cowbell also accepts current adminis
 with an `@changes` allowlist entry. Each API call and background job checks that authority again.
 Source, drafts, and saved reviews are private administrator data.
 
+In Meadow, **Changes** appears in the navigation bar when the core exposes an accessible, compatible
+service. Select a package to configure its upstream, fetch source, or upload objdef files. **New
+package** accepts explicit managed objects, object constant bindings, and trusted owners. Git
+configuration accepts a full ref or commit and a repository subdirectory.
+
+Select **Adopt supplied source as the baseline** when supplying original upstream source. Adoption
+creates a review; applying it records baselines without replacing live programs. The workspace also
+opens saved reviews, discards pending reviews after confirmation, and lists retained completed
+reviews. Configuration saves use the generation observed when the form opened. A concurrent
+configuration change rejects the save and preserves the form for inspection.
+
 Each core declares its default package and object bindings in its own source. Prepare upstream
 baselines with `moorc` before a fresh import, as described in
 [Preparing an upstream baseline](bootstrapping-from-source.md#preparing-an-upstream-baseline).
@@ -319,6 +330,11 @@ It returns counts and up to 50 rows within 256 KiB. `diagnostics()` pages throug
 `details()` checks original evidence before returning selected text and a saved draft, within 512
 KiB. Compile errors identify the source or row, pane, and line/column range. Service errors carry a
 schema-1 map in the raised error value.
+
+Cowbell also exposes `history(package)`. It returns summaries from the retained receipts for that
+package. A wizard can list all receipts; a delegated administrator can list only their own.
+`status(review_id)` returns the corresponding receipt. Clients check the advertised operations
+before using this extension.
 
 In Cowbell, the upstream argument also accepts a Git source map:
 

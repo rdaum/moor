@@ -24,6 +24,9 @@
 ; return {#9500:test(), length($change_manager.pending), length($change_manager.receipts), $change_manager:apply(#0.changes_probe["review_id"], 1)["status"]};
 {1, 0, 1, "complete"}
 
+; const history = $change_manager:history("probe"); const review = history["reviews"][1]; return {history["package"], review["review_id"] == #0.changes_probe["review_id"], review["status"], review["decision_count"], maphaskey(review, "decisions"), maphaskey(review, "sources")};
+{"probe", true, "complete", 1, false, false}
+
 ; const sources = {["label" -> "probe.moo", "text" -> {"object #9500", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 2;", "endverb", "endobject"}]}; #0.changes_probe = $change_manager:stage("probe", sources); return #0.changes_probe["status"];
 "ready"
 
@@ -85,6 +88,8 @@ false
 @programmer
 ; return $change_manager:capabilities();
 E_PERM
+; return $change_manager:history("probe");
+E_PERM
 ; return $change_manager.pending;
 E_PERM
 ; return $change_manager:_apply(1, 1);
@@ -121,6 +126,8 @@ E_PERM
 @programmer
 ; return {$change_manager:capabilities()["schema"], player:has_admin_elevation()};
 {1, false}
+; return $change_manager:history("probe")["reviews"];
+{}
 ; try $change_manager:configure("delegated", {#9500}, []); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "overlapping_package"
 ; player.changes_review = $change_manager:stage("probe", {["label" -> "probe.moo", "text" -> {"object #9500", "owner: #90100", "verb test (this none this) owner: #90100 flags: \"rxd\"", "return 4;", "endverb", "endobject"}]}, "adopt"); return player.changes_review["status"];
@@ -130,6 +137,8 @@ E_PERM
 ; for i in [1..100] const status = $change_manager:status(player.changes_review["review_id"]); if (status["status"] != "applying") return status["status"]; endif suspend(0.01); endfor return "timed out";
 "complete"
 // Private source remains unreadable through ordinary object access.
+; const reviews = $change_manager:history("probe")["reviews"]; return {length(reviews), reviews[1]["review_id"] == player.changes_review["review_id"]};
+{1, true}
 ; return $change_manager.pending;
 E_PERM
 @wizard

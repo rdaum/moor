@@ -308,3 +308,66 @@ test("a failure after native writes rolls back programs, baselines, and receipts
     ).toEqual(baseline);
     expect(await page.evaluate(() => window.changes.evaluate("return length($change_manager.receipts);"))).toBe(0);
 });
+
+test("workspace configures bindings, fetches, discards, and adopts uploaded source", async ({ page }) => {
+    await login(page);
+    await page.evaluate(() => window.changes.workspace());
+    await page.getByRole("button", { name: "New package", exact: true }).click();
+    await page.getByLabel("Package name", { exact: true }).fill("workspace");
+    await page.getByLabel("Managed objects").fill("#9500 #9501");
+    await page.getByLabel("Object constant bindings").fill("PROBE = #9500");
+    await page.getByLabel("Trusted owners").fill("#2");
+    await page.getByRole("combobox", { name: "Source", exact: true }).selectOption("git");
+    await page.getByLabel("Repository URL").fill(fixture.gitUrl);
+    await page.getByLabel("Repository subdirectory").fill("cores/sample/src");
+    await page.getByRole("button", { name: "Save configuration" }).click();
+    await expect(page.getByLabel("Package", { exact: true })).toHaveValue("workspace");
+    await expect(page.getByText("2 managed objects", { exact: false })).toBeVisible();
+    await page.getByRole("button", { name: "Fetch source", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Open review", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Open review", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "workspace · Review 1", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Discard review", exact: true }).click();
+    await page.getByRole("button", { name: "Discard saved review", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Active review" })).toHaveCount(0);
+
+    const { source } = await import("./changes-fixture");
+    await page.getByLabel("Upload objdef files").setInputFiles({
+        name: "base.moo",
+        mimeType: "text/plain",
+        buffer: Buffer.from(source("base")),
+    });
+    await page.getByLabel("Adopt supplied source as the baseline").check();
+    await page.getByRole("button", { name: "Review uploaded source" }).click();
+    await page.getByRole("button", { name: "Open review", exact: true }).click();
+    await page.getByRole("button", { name: "Accept 8 baselines", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm apply", exact: true }).click();
+    await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Completed reviews" })).toContainText("Review 2");
+    await page.getByRole("region", { name: "Completed reviews" }).getByRole("button", { name: "Review 2", exact: true })
+        .click();
+    await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
+    expect(await programs(page)).toEqual([1, 3, 3, 3, 3]);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Configure upstream" }).click();
+    await page.getByRole("combobox", { name: "Source", exact: true }).selectOption("http");
+    await page.getByLabel("Bundle URL").fill(fixture.httpUrl);
+    await page.evaluate(async () => {
+        const response = await window.changes.invoke("packages", []) as {
+            packages: Record<string, { generation: number }>;
+        };
+        await window.changes.invoke("upstream", [
+            "workspace",
+            "https://example.org/newer.moo",
+            response.packages.workspace.generation,
+        ]);
+    });
+    await page.getByRole("button", { name: "Reload packages" }).click();
+    await page.getByRole("button", { name: "Save configuration" }).click();
+    await expect(page.locator(".change-workspace").getByRole("alert")).toContainText("Package settings changed");
+    await expect(page.getByLabel("Bundle URL")).toHaveValue(fixture.httpUrl);
+    const current = await page.evaluate(() => window.changes.invoke("packages", []));
+    expect(current).toMatchObject({ packages: { workspace: { upstream: "https://example.org/newer.moo" } } });
+});

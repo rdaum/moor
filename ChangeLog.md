@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Meadow's Changes workspace discovers compatible core services and provides package creation,
+  upstream configuration, Git/HTTP fetches, source uploads, and baseline adoption. Administrators
+  can reopen saved reviews, discard pending reviews, and view retained completed reviews. Cowbell
+  exposes completion history under the same authorization rules as individual receipts.
+
 - The Cowbell Docker launcher starts HTTP and Git workers and accepts `--core`, `--git-upstream`,
   and `--baseline-objdef-dir`. Baseline preparation applies only to fresh imports. Existing
   databases retain their baselines and package configuration on restart.

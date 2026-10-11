@@ -16,8 +16,10 @@ import "../src/styles/main.css";
 import { buildStructuredArgs, type StructuredArgument } from "@moor/web-sdk";
 import { createRoot } from "react-dom/client";
 import { ChangeReview } from "../src/components/ChangeReview";
+import { ChangeWorkspace } from "../src/components/ChangeWorkspace";
 import { ThemeProvider } from "../src/components/ThemeProvider";
 import { ChangeReviewClient, type ChangeTarget } from "../src/lib/change-review";
+import { discoverChangeService } from "../src/lib/change-service";
 import { invokeVerbFlatBuffer, performEvalFlatBuffer } from "../src/lib/rpc-fb";
 
 let token = "";
@@ -45,6 +47,21 @@ const harness = {
     },
     client(review: number) {
         return new ChangeReviewClient(token, target(review));
+    },
+    async workspace() {
+        const service = await discoverChangeService(token);
+        if (!service) throw new Error("No change service");
+        root.render(
+            <ThemeProvider>
+                <ChangeWorkspace
+                    visible
+                    service={service}
+                    authToken={token}
+                    isWizard
+                    onClose={() => root.render(null)}
+                />
+            </ThemeProvider>,
+        );
     },
     open(review: number, generation = 1) {
         root.render(

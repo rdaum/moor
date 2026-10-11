@@ -13,6 +13,11 @@
 
 import { lazySurface } from "./lazySurface";
 
+export const ChangeWorkspace = lazySurface(
+    "change workspace",
+    async () => ({ default: (await import("./ChangeWorkspace")).ChangeWorkspace }),
+);
+
 export const ChangeReview = lazySurface(
     "change review",
     async () => ({ default: (await import("./ChangeReview")).ChangeReview }),

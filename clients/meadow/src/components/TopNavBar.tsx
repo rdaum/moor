@@ -21,6 +21,7 @@ interface TopNavBarProps {
     onAccountToggle: () => void;
     onBrowserToggle?: () => void;
     onEvalToggle?: () => void;
+    onChangesToggle?: () => void;
 }
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({
@@ -28,6 +29,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
     onAccountToggle,
     onBrowserToggle,
     onEvalToggle,
+    onChangesToggle,
 }) => {
     const title = useTitle();
 
@@ -48,6 +50,9 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
             <div className="nav-title" title={title}>{title}</div>
 
             <div className="nav-actions flex gap-sm items-center">
+                {onChangesToggle && (
+                    <button type="button" onClick={onChangesToggle} aria-label="Open changes">Changes</button>
+                )}
                 {onBrowserToggle && (
                     <button
                         className="account-icon"

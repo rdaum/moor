@@ -335,7 +335,7 @@ object CHANGE_MANAGER [
     "Describe the versioned review API and its limits.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    return ["schema" -> 1, "operations" -> {"packages", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
+    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
   endmethod
 
   method packages owner: ARCH_WIZARD
@@ -343,6 +343,22 @@ object CHANGE_MANAGER [
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
     return ["schema" -> 1, "packages" -> this.packages];
+  endmethod
+
+  method history owner: ARCH_WIZARD
+    "List retained completion summaries without source or decision bodies.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {name} = args;
+    maphaskey(this.packages, name) || raise(E_INVARG);
+    let reviews = {};
+    for id in (mapkeys(this.receipts))
+      const receipt = this.receipts[id];
+      if (receipt["package"] == name && (receipt["actor"] == auth[1] || auth[1].wizard))
+        reviews = {@reviews, ["review_id" -> id, "generation" -> receipt["generation"], "status" -> receipt["status"], "completed_at" -> receipt["completed_at"], "decision_count" -> receipt["decision_count"]]};
+      endif
+    endfor
+    return ["schema" -> 1, "package" -> name, "reviews" -> reviews];
   endmethod
 
   method configure owner: ARCH_WIZARD
@@ -1276,7 +1292,7 @@ object CHANGE_MANAGER [
         output = {@output, $format.list:actions({this:_command_action(tostr("@changes details ", id, " ", offset + length(page)), "More checks")})};
       endif
     endif
-    output = {@output, $format.paragraph:mk("Properties and object attributes aren’t compared or updated.")};
+    output = {@output, $format.paragraph:mk("Properties and object attributes are compared read-only; apply updates selected verb programs only.")};
     if (property_objects)
       output = {@output, $format.paragraph:mk(tostr("The source contains property declarations on ", property_objects, " objects; this isn’t a count of property changes."))};
     endif

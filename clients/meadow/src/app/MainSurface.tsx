@@ -25,6 +25,7 @@ import { EncryptionSetupPrompt } from "../components/EncryptionSetupPrompt";
 import { InspectPopover } from "../components/InspectPopover";
 import {
     ChangeReview,
+    ChangeWorkspace,
     EvalPanel,
     ObjectBrowser,
     PropertyEditor,
@@ -54,6 +55,7 @@ import { useSplitDrag } from "../hooks/useSplitDrag";
 import { useTitle } from "../hooks/useTitle";
 import { useTouchDevice } from "../hooks/useTouchDevice";
 import { useUnseenTitle } from "../hooks/useUnseenTitle";
+import { type ChangeServiceClient, discoverChangeService } from "../lib/change-service";
 import { MoorVar } from "../lib/MoorVar";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 import { useNarrativePipelineContext } from "../session/SessionCoordinator";
@@ -66,6 +68,7 @@ import { useRoomHud } from "./useRoomHud";
 
 // ObjFlag enum values (must match server-side ObjFlag::Programmer = 1)
 const OBJFLAG_PROGRAMMER = 1 << 1; // Bit position 1 -> value 2
+const OBJFLAG_WIZARD = 1 << 2;
 
 const clampNarrativeFontSize = (size: number) => Math.min(24, Math.max(10, size));
 const serializeNarrativeFontSize = (value: number) => clampNarrativeFontSize(value).toString();
@@ -120,6 +123,25 @@ export const MainSurface: React.FC = () => {
     const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
     const [isObjectBrowserOpen, setIsObjectBrowserOpen] = useState<boolean>(false);
     const [isEvalPanelOpen, setIsEvalPanelOpen] = useState<boolean>(false);
+    const [isChangesOpen, setIsChangesOpen] = useState(false);
+    const [changeService, setChangeService] = useState<ChangeServiceClient | null>(null);
+    useEffect(() => {
+        setChangeService(null);
+        setIsChangesOpen(false);
+    }, [authToken]);
+    useEffect(() => {
+        if (!authToken || !isConnected) return;
+        let cancelled = false;
+        void discoverChangeService(authToken).then(service => {
+            if (!cancelled) setChangeService(service);
+        }).catch(() => {
+            // Cores may omit this service or deny access to the current player.
+            if (!cancelled) setChangeService(null);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [authToken, isConnected]);
     const [forceSplitMode, setForceSplitMode] = useState(false);
     const [isObjectBrowserDocked, setIsObjectBrowserDocked] = useState(() => isTouchDevice);
     const [isEvalPanelDocked, setIsEvalPanelDocked] = useState(() => isTouchDevice);
@@ -520,6 +542,7 @@ export const MainSurface: React.FC = () => {
                                 onAccountToggle={() => setIsAccountMenuOpen(true)}
                                 onBrowserToggle={hasProgrammerAccess ? handleOpenObjectBrowser : undefined}
                                 onEvalToggle={hasProgrammerAccess ? handleOpenEvalPanel : undefined}
+                                onChangesToggle={changeService ? () => setIsChangesOpen(true) : undefined}
                             />
                         </>
                     )}
@@ -923,6 +946,17 @@ export const MainSurface: React.FC = () => {
                                 </button>
                             </div>
                         </DialogSheet>
+                    )}
+
+                    {isChangesOpen && changeService && authToken && (
+                        <ChangeWorkspace
+                            visible
+                            key={authToken}
+                            service={changeService}
+                            authToken={authToken}
+                            isWizard={Boolean((playerFlags ?? 0) & OBJFLAG_WIZARD)}
+                            onClose={() => setIsChangesOpen(false)}
+                        />
                     )}
 
                     {changeReview && authToken && (

@@ -1,0 +1,511 @@
+// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+
+import { jsObjectRefToCurie, ObjectArgument } from "@moor/web-sdk";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChangeReviewClient, type ChangeTarget, type ReviewStatus } from "../lib/change-review";
+import {
+    type ChangePackage,
+    type ChangeServiceClient,
+    type CompletedReview,
+    type Upstream,
+} from "../lib/change-service";
+import { ChangeReview } from "./ChangeReview";
+import { DialogSheet } from "./DialogSheet";
+import "../styles/change-workspace.css";
+
+interface Props {
+    visible: boolean;
+    service: ChangeServiceClient;
+    authToken: string;
+    isWizard: boolean;
+    onClose: () => void;
+}
+function objectReferences(input: string): string[] {
+    return input.split(/[\s,]+/).filter(Boolean).map(value => {
+        const reference = jsObjectRefToCurie(value);
+        if (!reference) throw new Error(`Invalid object reference: ${value}`);
+        return reference;
+    });
+}
+function bindingArguments(input: string): Record<string, ObjectArgument> {
+    const names = new Set<string>();
+    return Object.fromEntries(
+        input.split("\n").filter(line => line.trim()).map(line => {
+            const parts = line.trim().split(/\s*=\s*/);
+            if (parts.length !== 2 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(parts[0])) {
+                throw new Error("Use one NAME = object reference per line for constant bindings.");
+            }
+            const refs = objectReferences(parts[1]);
+            if (refs.length !== 1) throw new Error("Each constant binding needs one object reference.");
+            if (names.has(parts[0].toLowerCase())) throw new Error(`Duplicate constant binding: ${parts[0]}`);
+            names.add(parts[0].toLowerCase());
+            return [parts[0], new ObjectArgument(refs[0])];
+        }),
+    );
+}
+
+export function ChangeWorkspace({ service, authToken, isWizard, onClose }: Props) {
+    const [packages, setPackages] = useState<ChangePackage[]>([]);
+    const [selected, setSelected] = useState(service.capabilities.defaultPackage);
+    const [history, setHistory] = useState<CompletedReview[]>([]);
+    const [active, setActive] = useState<ReviewStatus | null>(null);
+    const [review, setReview] = useState<ChangeTarget | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const [editor, setEditor] = useState<"new" | "upstream" | null>(null);
+    const [expectedGeneration, setExpectedGeneration] = useState(0);
+    const [name, setName] = useState("");
+    const [objects, setObjects] = useState("");
+    const [bindings, setBindings] = useState("");
+    const [owners, setOwners] = useState("");
+    const [transport, setTransport] = useState("upload");
+    const [url, setUrl] = useState("");
+    const [revisionKind, setRevisionKind] = useState("ref");
+    const [revision, setRevision] = useState("refs/heads/main");
+    const [path, setPath] = useState("");
+    const [dirty, setDirty] = useState(false);
+    const [files, setFiles] = useState<File[]>([]);
+    const [adopting, setAdopting] = useState(false);
+    const [confirmDiscard, setConfirmDiscard] = useState(false);
+    const sequence = useRef(0);
+    const item = packages.find(item => item.name === selected);
+    const capabilities = service.capabilities;
+    const target = useCallback((id: number, generation: number): ChangeTarget => ({
+        kind: "change",
+        provider: service.provider,
+        review: id,
+        generation,
+    }), [service.provider]);
+    const fail = (failure: unknown) =>
+        setError(failure instanceof Error ? failure.message : "Could not complete the request.");
+    const load = useCallback(async () => {
+        const request = ++sequence.current;
+        try {
+            const next = await service.packages();
+            const packageItem = next.find(item => item.name === selected);
+            const [completed, status] = await Promise.all([
+                packageItem && service.supports("history") ? service.history(selected) : Promise.resolve([]),
+                packageItem?.active && service.supports("status")
+                    ? new ChangeReviewClient(authToken, target(packageItem.active, 1)).status()
+                    : Promise.resolve(null),
+            ]);
+            if (request !== sequence.current) return;
+            setPackages(next);
+            setHistory(completed);
+            setActive(status);
+            setError("");
+        } catch (failure) {
+            if (request === sequence.current) fail(failure);
+        }
+    }, [service, selected, authToken, target]);
+    const invalidate = useCallback(() => {
+        sequence.current++;
+    }, []);
+    useEffect(() => {
+        if (review) return;
+        void load();
+        return invalidate;
+    }, [load, review, invalidate]);
+    useEffect(() => {
+        if (review || !["fetching", "applying"].includes(active?.status ?? "")) return;
+        const timer = setTimeout(() => void load(), 1000);
+        return () => clearTimeout(timer);
+    }, [active, review, load]);
+    useEffect(() => {
+        if (!dirty && files.length === 0) return;
+        const prevent = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = "";
+        };
+        window.addEventListener("beforeunload", prevent);
+        return () => window.removeEventListener("beforeunload", prevent);
+    }, [dirty, files.length]);
+    const navigate = (action: () => void) => {
+        if ((dirty || files.length > 0) && !window.confirm("Discard unsaved package settings and selected files?")) {
+            return;
+        }
+        setDirty(false);
+        setFiles([]);
+        action();
+    };
+    const run = async (action: () => Promise<void>) => {
+        setBusy(true);
+        setError("");
+        try {
+            await action();
+        } catch (failure) {
+            fail(failure);
+        } finally {
+            setBusy(false);
+        }
+    };
+    const edit = (kind: "new" | "upstream") => {
+        setEditor(kind);
+        setExpectedGeneration(kind === "new" ? 0 : item?.generation ?? 0);
+        setDirty(false);
+        const upstream = kind === "new" ? "" : item?.upstream ?? "";
+        setTransport(typeof upstream === "string" ? upstream ? "http" : "upload" : "git");
+        setUrl(typeof upstream === "string" ? upstream : upstream.repository);
+        setRevisionKind(typeof upstream !== "string" && "commit" in upstream.revision ? "commit" : "ref");
+        setRevision(
+            typeof upstream === "string"
+                ? "refs/heads/main"
+                : "ref" in upstream.revision
+                ? upstream.revision.ref
+                : upstream.revision.commit,
+        );
+        setPath(typeof upstream === "string" ? "" : upstream.path);
+        setName("");
+        setObjects("");
+        setBindings("");
+        setOwners("");
+    };
+    const upstream = (): Upstream =>
+        transport === "upload" ? "" : transport === "http" ? url : {
+            transport: "git",
+            repository: url,
+            path,
+            revision: revisionKind === "ref" ? { ref: revision } : { commit: revision },
+        };
+    const save = () =>
+        run(async () => {
+            if (editor === "new") {
+                await service.configure({
+                    name,
+                    generation: 0,
+                    objects: objectReferences(objects),
+                    constants: bindingArguments(bindings),
+                    trustedOwners: objectReferences(owners),
+                    upstream: upstream(),
+                });
+                setSelected(name);
+            } else if (item) {
+                await service.upstream(item.name, expectedGeneration, upstream());
+            }
+            setEditor(null);
+            setDirty(false);
+            await load();
+        });
+    const stage = () =>
+        run(async () => {
+            const size = files.reduce((sum, file) => sum + file.size, 0);
+            if (size > capabilities.maxSourceBytes) throw new Error("Source exceeds the service limit.");
+            const sources = await Promise.all(files.map(async file => ({ label: file.name, text: await file.text() })));
+            await service.stage(selected, sources, adopting ? "adopt" : "update");
+            setFiles([]);
+            await load();
+        });
+    if (review) return <ChangeReview visible target={review} authToken={authToken} onClose={() => setReview(null)} />;
+    const gitRestricted = !files.length && typeof item?.upstream !== "string"
+        && capabilities.gitAuthorization === "wizard" && !isWizard;
+    const fetchTransport = typeof item?.upstream === "string" ? "http" : "git";
+    const canStage = service.supports("stage") && !item?.active && !gitRestricted
+        && (files.length > 0 || Boolean(item?.upstream) && capabilities.transports.includes(fetchTransport));
+    return (
+        <>
+            <DialogSheet
+                title="Changes"
+                titleId="change-workspace-title"
+                maxWidth="900px"
+                onCancel={() => {
+                    if (!busy) navigate(onClose);
+                }}
+            >
+                <div className="change-workspace">
+                    <p>Review upstream programs against this world's accepted baseline and local changes.</p>
+                    {error && <p role="alert">{error}</p>}
+                    <div className="change-workspace-actions">
+                        <label>
+                            Package{" "}
+                            <select
+                                aria-label="Package"
+                                disabled={busy || editor !== null}
+                                value={selected}
+                                onChange={event => navigate(() => setSelected(event.target.value))}
+                            >
+                                {!packages.some(item => item.name === selected) && (
+                                    <option value={selected}>{selected || "Select a package"}</option>
+                                )}
+                                {packages.map(item => <option key={item.name}>{item.name}</option>)}
+                            </select>
+                        </label>
+                        <button type="button" disabled={busy} onClick={() => void load()}>Reload packages</button>
+                        {service.supports("configure") && (
+                            <button
+                                type="button"
+                                disabled={busy || editor !== null || packages.length >= capabilities.maxPackages}
+                                onClick={() => navigate(() => edit("new"))}
+                            >
+                                New package
+                            </button>
+                        )}
+                        <button type="button" disabled={busy} onClick={() => navigate(onClose)}>Close</button>
+                    </div>
+                    {editor
+                        ? (
+                            <form
+                                onSubmit={event => {
+                                    event.preventDefault();
+                                    void save();
+                                }}
+                                onChange={() => setDirty(true)}
+                            >
+                                <fieldset disabled={busy}>
+                                    <legend>{editor === "new" ? "New package" : "Upstream configuration"}</legend>
+                                    {editor === "new" && (
+                                        <>
+                                            <label>
+                                                Package name<input
+                                                    required
+                                                    maxLength={64}
+                                                    value={name}
+                                                    onChange={event => setName(event.target.value)}
+                                                />
+                                            </label>
+                                            <label>
+                                                Managed objects<textarea
+                                                    required
+                                                    placeholder="#9500 #9501"
+                                                    value={objects}
+                                                    onChange={event => setObjects(event.target.value)}
+                                                />
+                                            </label>
+                                            <label>
+                                                Object constant bindings<textarea
+                                                    placeholder="ROOT = #1"
+                                                    value={bindings}
+                                                    onChange={event => setBindings(event.target.value)}
+                                                />
+                                            </label>
+                                            <p>
+                                                Use one NAME = object reference per line. Source files can define other
+                                                constants.
+                                            </p>
+                                            <label>
+                                                Trusted owners<textarea
+                                                    placeholder="#2"
+                                                    value={owners}
+                                                    onChange={event => setOwners(event.target.value)}
+                                                />
+                                            </label>
+                                            <p>Only add owners whose code this package is allowed to update.</p>
+                                        </>
+                                    )}
+                                    <label>
+                                        Source<select
+                                            value={transport}
+                                            onChange={event => setTransport(event.target.value)}
+                                        >
+                                            {capabilities.transports.includes("upload") && (
+                                                <option value="upload">Upload only</option>
+                                            )}
+                                            {capabilities.transports.includes("http") && (
+                                                <option value="http">HTTP bundle</option>
+                                            )}
+                                            {capabilities.transports.includes("git") && (
+                                                <option value="git">Git repository</option>
+                                            )}
+                                        </select>
+                                    </label>
+                                    {transport !== "upload" && (
+                                        <label>
+                                            {transport === "git" ? "Repository URL" : "Bundle URL"}
+                                            <input
+                                                required
+                                                type="url"
+                                                value={url}
+                                                onChange={event => setUrl(event.target.value)}
+                                            />
+                                        </label>
+                                    )}
+                                    {transport === "git" && (
+                                        <>
+                                            <label>
+                                                Revision type<select
+                                                    value={revisionKind}
+                                                    onChange={event => setRevisionKind(event.target.value)}
+                                                >
+                                                    <option value="ref">Full ref</option>
+                                                    <option value="commit">Commit</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                Revision<input
+                                                    required
+                                                    value={revision}
+                                                    onChange={event => setRevision(event.target.value)}
+                                                />
+                                            </label>
+                                            <label>
+                                                Repository subdirectory<input
+                                                    value={path}
+                                                    onChange={event => setPath(event.target.value)}
+                                                    placeholder="cores/cowbell/src"
+                                                />
+                                            </label>
+                                        </>
+                                    )}
+                                    <div className="change-workspace-actions">
+                                        <button type="submit">Save configuration</button>
+                                        <button type="button" onClick={() => navigate(() => setEditor(null))}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </fieldset>
+                            </form>
+                        )
+                        : item && (
+                            <>
+                                <p>
+                                    {item.objects.length} managed objects · Configuration generation {item.generation}
+                                </p>
+                                <p>
+                                    Upstream: {typeof item.upstream === "string"
+                                        ? item.upstream || "Upload only"
+                                        : `${item.upstream.repository} / ${item.upstream.path} (${
+                                            Object.values(item.upstream.revision)[0]
+                                        })`}
+                                </p>
+                                {service.supports("upstream") && (
+                                    <button
+                                        type="button"
+                                        disabled={busy || Boolean(item.active)}
+                                        onClick={() => navigate(() => edit("upstream"))}
+                                    >
+                                        Configure upstream
+                                    </button>
+                                )}
+                                {item.active
+                                    ? (
+                                        <section aria-label="Active review">
+                                            <h3>Review {item.active}</h3>
+                                            <p role="status">{active?.status ?? "Loading review status…"}</p>
+                                            {active?.error?.message && <p role="alert">{active.error.message}</p>}
+                                            {active && service.supports("review") && (
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || ["fetching", "failed"].includes(active.status)}
+                                                    onClick={() => setReview(target(item.active, active.generation))}
+                                                >
+                                                    Open review
+                                                </button>
+                                            )}
+                                            {active && service.supports("discard") && (
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || active.status === "applying"}
+                                                    onClick={() => setConfirmDiscard(true)}
+                                                >
+                                                    Discard review
+                                                </button>
+                                            )}
+                                        </section>
+                                    )
+                                    : (
+                                        <section aria-label="Stage source">
+                                            <h3>Prepare a review</h3>
+                                            {capabilities.transports.includes("upload") && (
+                                                <label>
+                                                    Upload objdef files<input
+                                                        type="file"
+                                                        multiple
+                                                        disabled={busy}
+                                                        onChange={event =>
+                                                            setFiles(Array.from(event.target.files ?? []))}
+                                                    />
+                                                </label>
+                                            )}
+                                            <p>
+                                                Source limit: {capabilities.maxSourceBytes.toLocaleString()} bytes.{" "}
+                                                {files.length
+                                                    ? `${files.length} files selected.`
+                                                    : "Fetch uses the configured upstream."}
+                                            </p>
+                                            <label>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={adopting}
+                                                    disabled={busy}
+                                                    onChange={event => setAdopting(event.target.checked)}
+                                                />{" "}
+                                                Adopt supplied source as the baseline
+                                            </label>
+                                            {adopting && (
+                                                <p>
+                                                    Supply the original upstream source. Applying adoption records its
+                                                    baseline without replacing live programs.
+                                                </p>
+                                            )}
+                                            {gitRestricted && <p>Fetching Git source requires wizard authority.</p>}
+                                            <button
+                                                type="button"
+                                                disabled={busy || !canStage}
+                                                onClick={() => void stage()}
+                                            >
+                                                {files.length ? "Review uploaded source" : "Fetch source"}
+                                            </button>
+                                        </section>
+                                    )}
+                                {service.supports("history") && (
+                                    <section aria-label="Completed reviews">
+                                        <h3>Completed reviews</h3>
+                                        {!history.length && <p>No retained completed reviews.</p>}
+                                        {history.map(receipt => (
+                                            <p key={receipt.review}>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        setReview(target(receipt.review, receipt.generation))}
+                                                >
+                                                    Review {receipt.review}
+                                                </button>{" "}
+                                                · {receipt.status} · {receipt.decisionCount} decisions ·{" "}
+                                                {new Date(receipt.completedAt * 1000).toLocaleString()}
+                                            </p>
+                                        ))}
+                                    </section>
+                                )}
+                            </>
+                        )}
+                </div>
+            </DialogSheet>
+            {confirmDiscard && active && item && (
+                <DialogSheet
+                    title="Discard review?"
+                    titleId="discard-review-title"
+                    onCancel={() => setConfirmDiscard(false)}
+                >
+                    <div className="dialog-sheet-content">
+                        This removes staged source, saved choices, and saved drafts. It does not undo applied changes.
+                    </div>
+                    <div className="dialog-sheet-footer">
+                        <button type="button" disabled={busy} onClick={() => setConfirmDiscard(false)}>Cancel</button>
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                                void run(async () => {
+                                    await service.discard(item.active, active.generation);
+                                    setConfirmDiscard(false);
+                                    await load();
+                                })}
+                        >
+                            Discard saved review
+                        </button>
+                    </div>
+                </DialogSheet>
+            )}
+        </>
+    );
+}
