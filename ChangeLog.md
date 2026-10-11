@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell no longer requires a group for local edits or already-installed code just because the same
+  review contains new additions. Explicitly declared groups still apply together.
+
 - Meadow starts configured change management with **Check for updates**. Reviews support search
   across all pages, compact rows with one status per item, and a separate code view on narrow
   screens. Minimize and close controls sit in the title bar. Minimizing preserves unsaved drafts.

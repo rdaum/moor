@@ -546,6 +546,7 @@ test("a declared group installs a helper and property with its caller through Me
     const input = "object #9500 [import_export_id -> \"changes_acceptance\"]\nowner: #2\n"
         + "verb upstream (this none this) owner: #2 flags: \"rxd\"\nreturn this:added_helper();\nendverb\n"
         + "verb added_helper (this none this) owner: #2 flags: \"rxd\"\nreturn this.item_schema;\nendverb\n"
+        + "verb local (this none this) owner: #2 flags: \"rxd\"\nreturn 1;\nendverb\n"
         + "property item_schema (owner: #2, flags: \"r\") = 42;\nendobject";
     const review = await page.evaluate(
         async text =>
@@ -555,6 +556,11 @@ test("a declared group installs a helper and property with its caller through Me
         input,
     );
     await page.evaluate(id => window.changes.open(id, 1), review);
+    await page.getByRole("button", { name: /:local, Verb, Local/ }).click();
+    await expect(page.getByRole("button", { name: /:local, Verb/ })).not.toContainText("Needs group");
+    await expect(page.getByRole("region", { name: "Required group" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Keep my code", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Keep my code", exact: true }).click();
     await page.getByRole("button", { name: /\.item_schema, Property/ }).click();
     await expect(page.getByRole("region", { name: "Property initialization" })).toContainText(
         "Existing data stays unchanged",
@@ -591,10 +597,10 @@ test("a declared group installs a helper and property with its caller through Me
     expect(
         await page.evaluate(() =>
             window.changes.evaluate(
-                "return {#9500:upstream(), #9500:added_helper(), length($change_manager.packages[\"addition\"][\"members\"])};",
+                "return {#9500:upstream(), #9500:added_helper(), #9500:local(), length($change_manager.packages[\"addition\"][\"members\"])};",
             )
         ),
-    ).toEqual([42, 42, 2]);
+    ).toEqual([42, 42, 3, 2]);
     expect(browserErrors).toEqual([]);
 });
 

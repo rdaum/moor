@@ -14,7 +14,7 @@
 //! Explicit dependency groups for guarded changes. Group declarations are caller policy,
 //! never inferred from program text or imported as authority from objdef metadata.
 
-use super::{Analysis, ChangeRow, MAX_ROWS, ReviewError, fields, record, required};
+use super::{Analysis, ChangeRow, ChangeTarget, MAX_ROWS, ReviewError, fields, record, required};
 use moor_var::{Associative, ByteSized, Obj, Var, v_bool, v_list, v_map, v_str};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -267,14 +267,25 @@ impl Policy {
         let present: BTreeSet<_> = rows.iter().map(|row| row.member.clone()).collect();
         for (row, report) in rows.iter_mut().zip(reports) {
             let group = self.group_for(&row.member);
-            let blocker = if group.is_none() && additions {
+            let map = report.as_map().unwrap();
+            // New source can introduce dependencies into incoming updates. Local edits
+            // and already-installed code need no installation, so an unrelated addition
+            // must not force them into a group. Explicit group membership still applies.
+            let needs_installation = match &row.target {
+                ChangeTarget::Existing(_) => !matches!(
+                    map.get(&v_str("classification")).unwrap().as_string(),
+                    Some("local" | "unchanged" | "converged")
+                ),
+                ChangeTarget::RetainProperty { .. } | ChangeTarget::RetainObject { .. } => false,
+                _ => true,
+            };
+            let blocker = if group.is_none() && additions && needs_installation {
                 Some("change_group_required")
             } else if group.is_some_and(|name| !self.groups[name].members.is_subset(&present)) {
                 Some("change_group_member_missing")
             } else {
                 None
             };
-            let map = report.as_map().unwrap();
             let mut values: Vec<_> = map.iter().collect();
             values.push((v_str("member"), v_str(&row.member)));
             if let Some(group) = group {

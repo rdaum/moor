@@ -1708,6 +1708,126 @@ fn grouped_request(report: &Var) -> Var {
 }
 
 #[test]
+fn additions_do_not_require_groups_for_local_or_already_installed_programs() {
+    for (classification, live, incoming) in [
+        ("local", "Local", "Base"),
+        ("unchanged", "Base", "Base"),
+        ("converged", "Updated", "Updated"),
+    ] {
+        let db = database();
+        let mut world = db.new_world_state().unwrap();
+        stamp(world.as_mut());
+        let definition = world
+            .get_verb(&permissions(), &ROOT, Symbol::mk("test"))
+            .unwrap();
+        let program = format!("return \"{live}\";");
+        world
+            .update_verb_with_id(
+                &permissions(),
+                &ROOT,
+                definition.uuid(),
+                VerbAttrs {
+                    definer: None,
+                    owner: None,
+                    names: None,
+                    flags: None,
+                    args_spec: None,
+                    program: Some(ProgramType::MooR(
+                        compile(&program, Default::default()).unwrap(),
+                    )),
+                },
+            )
+            .unwrap();
+        world.commit().unwrap();
+        let mut world = db.new_world_state().unwrap();
+        let incoming = sources(
+            &source_with_helper()
+                .replace("return this:helper();", &format!("return \"{incoming}\";")),
+        );
+        let report = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &request("update"),
+            None,
+        )
+        .unwrap();
+        let rows = get(&report, "rows");
+        let existing = rows
+            .as_list()
+            .unwrap()
+            .iter()
+            .find(|row| get(row, "classification") == v_str(classification))
+            .unwrap();
+        assert!(get(&existing, "eligible").is_true(), "{classification}");
+        assert!(get(&existing, "blockers").as_list().unwrap().is_empty());
+        let addition = rows
+            .as_list()
+            .unwrap()
+            .iter()
+            .find(|row| get(row, "classification") == v_str("incoming_only"))
+            .unwrap();
+        assert!(!get(&addition, "eligible").is_true());
+        assert!(
+            get(&addition, "blockers")
+                .as_list()
+                .unwrap()
+                .iter()
+                .any(|reason| reason == v_str("change_group_required"))
+        );
+        let choices = v_map(&[(get(&existing, "id"), record(&[("choice", v_str("local"))]))]);
+
+        // An explicitly declared group still requires all its members.
+        let grouped = grouped_request(&report);
+        let draft = preview(
+            world.as_ref(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &grouped,
+            Some(&choices),
+        )
+        .unwrap();
+        assert!(
+            !get(&draft, "group_validation")
+                .as_list()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            apply(
+                world.as_mut(),
+                &permissions(),
+                &CompileOptions::default(),
+                &incoming,
+                &grouped,
+                &get(&draft, "evidence"),
+                &choices
+            )
+            .is_err()
+        );
+
+        // Keeping the installed program needs no group and creates no helper.
+        apply(
+            world.as_mut(),
+            &permissions(),
+            &CompileOptions::default(),
+            &incoming,
+            &request("update"),
+            &get(&report, "evidence"),
+            &choices,
+        )
+        .unwrap();
+        assert_eq!(
+            program_text(&live_program(world.as_ref())).unwrap(),
+            v_str(&program)
+        );
+        assert_eq!(world.verbs(&permissions(), &ROOT).unwrap().len(), 1);
+    }
+}
+
+#[test]
 fn verb_additions_require_a_complete_explicit_group_and_allocate_only_on_apply() {
     let db = database();
     let mut world = db.new_world_state().unwrap();
