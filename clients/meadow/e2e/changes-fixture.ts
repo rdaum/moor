@@ -20,14 +20,15 @@ import { resolve } from "node:path";
 
 export const workspace = resolve(import.meta.dirname, "../../..");
 export const members = ["unchanged", "upstream", "local", "converged", "conflict", "edited", "deferred", "unbased"];
-export function source(version: "base" | "live" | "incoming") {
-    const values = members.map(name => {
+export function source(version: "base" | "live" | "incoming", extraMembers = 0) {
+    const names = [...members, ...Array.from({ length: extraMembers }, (_, index) => `extra_${index + 1}`)];
+    const values = names.map(name => {
         if (version === "base") return 1;
         if (version === "live") return ["local", "converged", "conflict", "edited", "deferred"].includes(name) ? 3 : 1;
         return name === "unchanged" || name === "local" ? 1 : name === "converged" ? 3 : 2;
     });
     return `object #9500 [import_export_id -> "changes_acceptance"]\nname: "Acceptance package"\nowner: #2\nparent: #9501\noverride setting (owner: #2, flags: \"\") = 1;\n`
-        + members.map((name, i) =>
+        + names.map((name, i) =>
             `verb ${name} (this none this) owner: #2 flags: "rxd"\nreturn ${values[i]};\nendverb\n`
         ).join("")
         + "endobject\nobject #9501 [import_export_id -> \"acceptance_parent\"]\nowner: #2\nproperty setting (owner: #2, flags: \"rc\") = 1;\nendobject\n";
@@ -65,6 +66,8 @@ export class ChangesFixture {
     private world?: ChildProcess;
     private hosts: ChildProcess[] = [];
     private distributed = false;
+    private extraMembers = 0;
+    httpFailure = false;
     rpcArgs: string[] = [];
     telnetPort = 0;
     private vite?: ChildProcess;
@@ -77,8 +80,9 @@ export class ChangesFixture {
     private releaseGit?: () => void;
     private gitChildren = new Set<ChildProcess>();
 
-    async start(options: { distributed?: boolean; browser?: boolean } = {}) {
+    async start(options: { distributed?: boolean; browser?: boolean; extraMembers?: number } = {}) {
         this.distributed = options.distributed ?? false;
+        this.extraMembers = options.extraMembers ?? 0;
         this.directory = await mkdtemp(resolve(tmpdir(), "moor-changes-"));
         try {
             this.apiPort = await port();
@@ -92,9 +96,9 @@ export class ChangesFixture {
                     "\"AcceptanceAdmin\"",
                 );
             await writeFile(resolve(base, "acceptance_admin.moo"), administrator);
-            await writeFile(resolve(base, "changes_acceptance.moo"), source("base"));
+            await writeFile(resolve(base, "changes_acceptance.moo"), source("base", this.extraMembers));
             await cp(base, live, { recursive: true });
-            await writeFile(resolve(live, "changes_acceptance.moo"), source("live"));
+            await writeFile(resolve(live, "changes_acceptance.moo"), source("live", this.extraMembers));
             const repo = resolve(this.directory, "repo.git");
             await mkdir(resolve(repo, "cores/sample/src"), { recursive: true });
             const git = (...args: string[]) =>
@@ -111,7 +115,7 @@ export class ChangesFixture {
                 }).trim();
             git("init", "-b", "main");
             for (const version of ["base", "incoming"] as const) {
-                await writeFile(resolve(repo, "cores/sample/src/probe.moo"), source(version));
+                await writeFile(resolve(repo, "cores/sample/src/probe.moo"), source(version, this.extraMembers));
                 git("add", ".");
                 git("commit", "-m", version);
                 if (version === "base") this.revisionA = git("rev-parse", "HEAD");
@@ -120,10 +124,15 @@ export class ChangesFixture {
             this.server = createServer(async (request, response) => {
                 const url = new URL(request.url!, "http://localhost");
                 if (url.pathname === "/bundle.moo") {
+                    if (this.httpFailure) {
+                        response.writeHead(503);
+                        response.end("Fixture source is temporarily unavailable.");
+                        return;
+                    }
                     this.bundleArrived?.();
                     await this.bundleGate;
                     response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-                    response.end(source("incoming"));
+                    response.end(source("incoming", this.extraMembers));
                     return;
                 }
                 this.gitArrived?.();

@@ -187,3 +187,19 @@ The `change_tools.moot` scenario checks the shared provider and requester permis
 Its inspection request leaves live code unchanged. Its update request validates and applies a
 multiline edited program through the shared tools. The session runner creates an ephemeral signing
 key so room authorization uses the normal capability checks.
+
+## Plain-telnet change reviews
+
+```sh
+node --import tsx cores/cowbell/tests/changes/telnet.ts
+node --import tsx cores/cowbell/tests/changes/telnet.ts --git
+```
+
+The test uses the same isolated world and local sources as the MCP test. It sends ordinary telnet
+commands without GMCP or HTML. It covers multiple review pages, comparisons, multiline editing,
+cancellation, reconnect, a concurrent review change, compiler repair, apply, result pagination,
+finish, history, and another review. The HTTP run also exercises failed-fetch retry.
+Independent assertions check the installed programs. They do not drive the administrator workflow.
+
+The `change_terminal.moot` scenario checks displayed-row guards, prepared selection invalidation,
+group removal, and recovery of saved decisions after live code changes.

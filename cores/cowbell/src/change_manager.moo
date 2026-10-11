@@ -270,6 +270,9 @@ object CHANGE_MANAGER [
   ];
   property pending (owner: ARCH_WIZARD, flags: "") = [];
   property receipts (owner: ARCH_WIZARD, flags: "") = [];
+  property terminal_contexts (owner: ARCH_WIZARD, flags: "") = [];
+  property terminal_drafts (owner: ARCH_WIZARD, flags: "") = [];
+  property next_terminal_draft (owner: ARCH_WIZARD, flags: "") = 1;
 
   method _error owner: ARCH_WIZARD
     "Raise a versioned service error.";
@@ -1055,7 +1058,7 @@ object CHANGE_MANAGER [
         endif
         choices[id] = choice;
       else
-        recovery[id] = ["id" -> id, "member" -> old["member"], "choice" -> choice, "reason" -> same ? "The contents or permissions changed. Check this saved decision again." | "This member is missing or has a different identity. Its saved decision was not attached to another member."];
+        recovery[id] = ["id" -> id, "member" -> old["member"], "label" -> this:_member_label(old), "choice" -> choice, "reason" -> same ? "The contents or permissions changed. Check this saved decision again." | "This member is missing or has a different identity. Its saved decision was not attached to another member."];
         same && (choices[id] = ["choice" -> "defer"]);
       endif
     endfor
@@ -1150,7 +1153,7 @@ object CHANGE_MANAGER [
       endif
       if (kind == "defer" && `record["choices"][row_id]["choice"] != "defer" ! E_RANGE => false' && !maphaskey(`record["recovery"] ! E_RANGE => []', row_id))
         let saved = `record["recovery"] ! E_RANGE => []';
-        saved[row_id] = ["id" -> row_id, "member" -> selected["member"], "choice" -> record["choices"][row_id], "reason" -> "This group was deferred. Its previous decision is saved here.", "needs_review" -> false, "group_deferred" -> true];
+        saved[row_id] = ["id" -> row_id, "member" -> selected["member"], "label" -> this:_member_label(selected), "choice" -> record["choices"][row_id], "reason" -> "This group was deferred. Its previous decision is saved here.", "needs_review" -> false, "group_deferred" -> true];
         record["recovery"] = saved;
       endif
       record["choices"][row_id] = ["choice" -> kind == "incoming" && `selected["operation"] ! E_RANGE => ""' in {"retain_property", "retain_object"} ? "local" | kind];
@@ -1649,9 +1652,9 @@ object CHANGE_MANAGER [
     endif
     return {@output,
       $format.list:mk({
-        $format.paragraph:inline($help_utils:command_usage("@changes diff <review ID>", player, {"any", "any", "any"}), " — Review changes."),
-        $format.paragraph:inline($help_utils:command_usage("@changes apply <review ID> <generation>", player, {"any", "any", "any"}), " — Apply your choices."),
-        $format.paragraph:inline($help_utils:command_usage("@changes status <review ID>", player, {"any", "any", "any"}), " — Check progress.")}),
+        $format.paragraph:inline($help_utils:command_usage("@changes diff", player, {"any", "any", "any"}), " — Review changes."),
+        $format.paragraph:inline($help_utils:command_usage("@changes preview", player, {"any", "any", "any"}), " — Read what applying your choices will do."),
+        $format.paragraph:inline($help_utils:command_usage("@changes status", player, {"any", "any", "any"}), " — Check progress.")}),
       $format.list:actions({this:_command_action("help @changes", "Command reference", ["kind" -> "help", "provider" -> $url_utils:to_curie_str($admin_features.help_source), "topic" -> "@changes"])})};
   endmethod
 
@@ -1693,6 +1696,8 @@ object CHANGE_MANAGER [
       return {@output, $format.paragraph:mk(tostr("Applying changes to ", summary["package"], "…"))};
     elseif (status == "complete")
       return {@output, $format.paragraph:mk("Changes applied.")};
+    elseif (status in {"finished", "discarded"})
+      return {@output, $format.paragraph:mk("Review closed. Earlier committed changes remain installed. Deferred contents and baselines stay unchanged."), $format.list:actions({this:_command_action(tostr("@changes history ", summary["package"]), "Read update history"), this:_command_action(tostr("@changes fetch ", summary["package"]), "Check for another update")})};
     elseif (status == "partial")
       return {@output, $format.paragraph:mk("Changes applied. Some were skipped."), $format.list:actions({this:_command_review_link(summary, "Review remaining changes")})};
     endif
@@ -1700,12 +1705,12 @@ object CHANGE_MANAGER [
     const message = `error["message"] ! E_RANGE => `error["code"] ! E_RANGE => "No error details available."'';
     output = {@output, $format.paragraph:mk(tostr(status == "failed" ? "Fetch failed: " | "Update stopped: ", message))};
     if (index(message, "No worker available for git"))
-      output = {@output, $format.paragraph:mk("The server needs a Git worker. Start one, then fetch again.")};
+      output = {@output, $format.paragraph:mk("The server needs a Git worker. Start one, then use @changes status and @changes retry.")};
     elseif (index(message, "No worker available for curl"))
-      output = {@output, $format.paragraph:mk("The server needs a curl worker. Start one, then fetch again.")};
+      output = {@output, $format.paragraph:mk("The server needs a curl worker. Start one, then use @changes status and @changes retry.")};
     endif
     if (status == "failed")
-      return {@output, $format.list:actions({this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard failed review")})};
+      return {@output, $format.list:actions({this:_command_action("@changes status", "Read the current failure"), this:_command_action("@changes retry", "Retry after fixing the source or worker"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard failed review")})};
     endif
     return {@output, $format.list:actions({this:_command_action(tostr("@changes refresh ", id, " ", generation), "Refresh review"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard review")})};
   endmethod
@@ -1740,13 +1745,14 @@ object CHANGE_MANAGER [
       output = {@output, $format.paragraph:mk(problem["message"])};
     endfor
     let change_rows = {};
+    let displayed_rows = [];
     let next_offset = 0;
     const choice_counts = this:_review_decisions(record);
     const selected = choice_counts["selected"];
     const unresolved = choice_counts["unresolved"];
     const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged", "incoming_only" -> "New member"];
     const decisions = ["incoming" -> "Use upstream", "local" -> "Keep local", "edited" -> "Use edited program", "defer" -> "Skip", "unresolved" -> "Choose"];
-    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition", "object_address_occupied" -> "Object ID is occupied; discard, choose another binding, and fetch again", "object_binding_changed" -> "Object no longer matches its creation receipt", "creation_requires_wizard" -> "Object creation requires wizard authority", "invalid_object_parent" -> "A parent is missing or inheritance contains a cycle", "invalid_object_location" -> "A location is missing or containment contains a cycle", "missing_inherited_property" -> "An override names a property no parent defines"];
+    const reasons = ["adoption_required" -> "Accepted upstream history is unknown; review history repair before adoption", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition", "object_address_occupied" -> "Object ID is occupied; discard, choose another binding, and fetch again", "object_binding_changed" -> "Object no longer matches its creation receipt", "creation_requires_wizard" -> "Object creation requires wizard authority", "invalid_object_parent" -> "A parent is missing or inheritance contains a cycle", "invalid_object_location" -> "A location is missing or containment contains a cycle", "missing_inherited_property" -> "An override names a property no parent defines"];
     for i in [1..length(rows)]
       const row = rows[i];
       const choice = `record["choices"][row["id"]] ! E_RANGE => []';
@@ -1777,6 +1783,7 @@ object CHANGE_MANAGER [
       const displayed = $format.paragraph:inline(tostr(i, ". "), link, " — ", descriptions[row["classification"]], ". ", decision, ".");
       value_bytes(change_rows) + value_bytes(displayed) <= 60000 || raise(E_QUOTA, "Review page is too large.");
       change_rows = {@change_rows, displayed};
+      displayed_rows[tostr(i)] = row["id"];
     endfor
     if (change_rows)
       output = {@output, $format.list:mk(change_rows)};
@@ -1809,10 +1816,11 @@ object CHANGE_MANAGER [
     if (unresolved)
       output = {@output, $format.paragraph:mk(tostr(unresolved, unresolved == 1 ? " member or group needs a choice before applying." | " members or groups need choices before applying."))};
     elseif (selected)
-      commands = {@commands, this:_command_action(tostr("@changes apply ", id, " ", generation), "Apply choices")};
+      commands = {@commands, this:_command_action("@changes preview", "Read planned effects")};
     endif
-    commands = {@commands, this:_command_action(tostr("@changes details ", id), "Source and checks"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard review")};
+    commands = {@commands, this:_command_action(tostr("@changes details ", id), "Upstream source and limitations"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard review")};
     output = {@output, $format.list:actions(commands)};
+    this:_terminal_remember(record, displayed_rows, next_offset);
     return output;
   endmethod
 
@@ -1839,7 +1847,7 @@ object CHANGE_MANAGER [
       output = {@output, $format.title:mk("Source", 4), $format.table:mk({"Field", "Value"}, source)};
     endif
     let checks = {};
-    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition", "object_address_occupied" -> "Object ID is occupied; discard, choose another binding, and fetch again", "object_binding_changed" -> "Object no longer matches its creation receipt", "creation_requires_wizard" -> "Object creation requires wizard authority", "invalid_object_parent" -> "A parent is missing or inheritance contains a cycle", "invalid_object_location" -> "A location is missing or containment contains a cycle", "missing_inherited_property" -> "An override names a property no parent defines"];
+    const reasons = ["adoption_required" -> "Accepted upstream history is unknown; review history repair before adoption", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first", "change_group_member_missing" -> "A required group member is missing", "verb_name_collision" -> "A local or inherited verb uses a conflicting name", "initialization_required" -> "Review the initial value, then use @changes initialize", "initial_value_required" -> "Supply an explicit initial value", "inherited_effects_require_approval" -> "Explicitly permit descendants to inherit this property", "property_name_collision" -> "An existing property conflicts with this addition", "object_address_occupied" -> "Object ID is occupied; discard, choose another binding, and fetch again", "object_binding_changed" -> "Object no longer matches its creation receipt", "creation_requires_wizard" -> "Object creation requires wizard authority", "invalid_object_parent" -> "A parent is missing or inheritance contains a cycle", "invalid_object_location" -> "A location is missing or containment contains a cycle", "missing_inherited_property" -> "An override names a property no parent defines"];
     for row in (record["report"]["rows"])
       if (!row["eligible"])
         const explanation = {`reasons[reason] ! E_RANGE => reason' for reason in (row["blockers"])}:join("; ");
@@ -1885,11 +1893,480 @@ object CHANGE_MANAGER [
     return record["report"]["rows"][number]["id"];
   endmethod
 
+  method _member_label owner: ARCH_WIZARD
+    "Retain a readable member name even when the member disappears after refresh.";
+    caller == this || raise(E_PERM);
+    const {row} = args;
+    const object = this:_command_label(row["object"], this:_command_names());
+    return row["field"] == "object" ? object | object + (row["field"] == "property" ? "." | ":") + row["names"][1];
+  endmethod
+
+  method _terminal_key owner: ARCH_WIZARD
+    "Keep displayed choices separate for each actor and connection.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    return tostr(player, "/", `connection() ! E_INVARG => player');
+  endmethod
+
+  method _terminal_context owner: ARCH_WIZARD
+    "Read only the review version displayed on this connection.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const context = `this.terminal_contexts[this:_terminal_key()] ! E_RANGE => []';
+    context || this:_error("no_displayed_review", "Open a review with @changes diff first. Use @changes packages to find another package.");
+    return context;
+  endmethod
+
+  method _terminal_remember owner: ARCH_WIZARD
+    "Record displayed row identities. Merely reading status must not rebind old row numbers.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {record, ?displayed = [], ?next = -1} = args;
+    const key = this:_terminal_key();
+    let context = `this.terminal_contexts[key] ! E_RANGE => []';
+    const id = `record["id"] ! E_RANGE => record["review_id"]';
+    if (!context || context["id"] != id || context["generation"] != record["generation"])
+      context = ["id" -> id, "generation" -> record["generation"], "rows" -> [], "prepared" -> [], "next" -> 0];
+    endif
+    for number in (mapkeys(displayed))
+      context["rows"][number] = displayed[number];
+    endfor
+    next >= 0 && (context["next"] = next);
+    context["updated"] = time();
+    let contexts = this.terminal_contexts;
+    contexts[key] = context;
+    value_bytes(context) <= 8388608 || this:_error("review_too_large", "This terminal review exceeds 8 MiB. Use explicit review and member IDs.");
+    while (length(contexts) > 128 || value_bytes(contexts) > 8388608)
+      let oldest = "";
+      for candidate in (mapkeys(contexts))
+        if (candidate != key && (!oldest || contexts[candidate]["updated"] < contexts[oldest]["updated"]))
+          oldest = candidate;
+        endif
+      endfor
+      contexts = mapdelete(contexts, oldest);
+    endwhile
+    this.terminal_contexts = contexts;
+  endmethod
+
+  method _terminal_row owner: ARCH_WIZARD
+    "Resolve a shortcut against a displayed stable row, never a fresh row position.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {auth, context, selector} = args;
+    try
+      this:_get(auth, context["id"], context["generation"]);
+    except failure (E_INVARG)
+      this:_error(`failure[3]["code"] ! E_RANGE => "stale_generation"', "This review changed. Use @changes diff to check the current list before choosing again.");
+    endtry
+    const number = toint(selector);
+    tostr(number) == selector && maphaskey(context["rows"], selector) || this:_error("row_not_displayed", "That row is not on a page you have opened. Use @changes diff or @changes next first.");
+    return context["rows"][selector];
+  endmethod
+
+  method _terminal_effect_names owner: ARCH_WIZARD
+    "Use the same concrete effect descriptions for plans and committed results.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    return ["program" -> "Replace program", "add_verb" -> "Add verb", "add_property" -> "Create property with its initial value", "add_object" -> "Create object", "baseline" -> "Acknowledge upstream; keep live contents", "retained" -> "Keep live contents", "deferred" -> "Decide later; keep contents and baseline", "blocked" -> "Cannot apply"];
+  endmethod
+
+  method _terminal_preview owner: ARCH_WIZARD
+    "Display the complete counts and one page of effects, and remember the exact prepared handle.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {context, offset} = args;
+    const prepared = this:prepare_apply(context["id"], context["generation"], offset);
+    const labels = this:_terminal_effect_names();
+    let counts = {};
+    for kind in (mapkeys(prepared["counts"]))
+      const count = prepared["counts"][kind];
+      count && (counts = {@counts, tostr(labels[kind], ": ", count)});
+    endfor
+    let effects = {};
+    for item in (prepared["effects"])
+      effects = {@effects, tostr(item["label"], " — ", labels[item["effect"]], item["defaulted"] ? " (automatic choice)" | "", ".")};
+    endfor
+    let output = {$format.title:mk("What applying will do", 3), $format.list:mk(counts), $format.paragraph:mk("Counts cover the whole review. Opening another page does not change the selection."), $format.list:mk(effects)};
+    this.terminal_contexts[this:_terminal_key()]["prepared"] = prepared["can_apply"] ? prepared["prepared"] | [];
+    if (prepared["next"])
+      output = {@output, $format.list:actions({this:_command_action(tostr("@changes preview ", prepared["next"]), "More planned effects")})};
+    endif
+    if (prepared["can_apply"])
+      output = {@output, $format.list:actions({this:_command_action("@changes apply", "Apply these choices")})};
+    else
+      output = {@output, $format.paragraph:mk("There is nothing ready to apply, or a saved choice needs attention. Use @changes diff to review it.")};
+    endif
+    return output;
+  endmethod
+
+  method _terminal_result owner: ARCH_WIZARD
+    "Show committed effects without confusing pending decisions with installed changes.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {id, offset} = args;
+    const status = this:status(id);
+    const result = this:result(id, status["generation"], offset);
+    const labels = this:_terminal_effect_names();
+    let lines = {};
+    for item in (result["decisions"])
+      lines = {@lines, tostr(item["label"], " — ", labels[item["effect"]], ".")};
+    endfor
+    let output = {$format.title:mk(tostr("Review ", id, " results"), 3), $format.paragraph:mk(tostr(result["decision_count"], " recorded decisions. Status: ", result["status"], ".")), $format.list:mk(lines)};
+    if (result["next_decision"])
+      output = {@output, $format.list:actions({this:_command_action(tostr("@changes result ", id, " ", result["next_decision"]), "More recorded decisions")})};
+    endif
+    return output;
+  endmethod
+
+  method _terminal_compare owner: ARCH_WIZARD
+    "Show a paginated local-to-upstream comparison with explicit line numbers and literal source.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {auth, context, selector, offset} = args;
+    offset >= 1 || raise(E_INVARG, "The comparison offset must be positive.");
+    const row = this:details(context["id"], context["generation"], this:_terminal_row(auth, context, selector))["row"];
+    const local = explode(row["live_text"], "\n", true);
+    const incoming = explode(row["incoming_text"], "\n", true);
+    let start = 1;
+    while (start <= min(length(local), length(incoming)) && local[start] == incoming[start])
+      start = start + 1;
+    endwhile
+    let old_end = length(local);
+    let new_end = length(incoming);
+    while (old_end >= start && new_end >= start && local[old_end] == incoming[new_end])
+      old_end = old_end - 1;
+      new_end = new_end - 1;
+    endwhile
+    const old_count = max(0, old_end - start + 1);
+    const total = old_count + max(0, new_end - start + 1);
+    let lines = {};
+    let next = offset;
+    for position in [offset..min(offset + 39, total)]
+      const removed = position <= old_count;
+      const number = removed ? start + position - 1 | start + position - old_count - 1;
+      const line = tostr(removed ? "- local " | "+ upstream ", number, ": ", removed ? local[number] | incoming[number]);
+      if (value_bytes(lines) + value_bytes(line) > 60000)
+        length(lines) || raise(E_QUOTA, "One source line exceeds the terminal page limit.");
+        break;
+      endif
+      lines = {@lines, line};
+      next = position + 1;
+    endfor
+    let output = {$format.title:mk(row["label"], 3), $format.paragraph:mk(total ? "Minus lines are local code; plus lines are upstream code. Matching leading and trailing lines are omitted." | "Local and upstream contents match."), $format.code:mk(lines, "moo")};
+    if (next <= total)
+      output = {@output, $format.list:actions({this:_command_action(tostr("@changes compare ", selector, " ", next), "More comparison")})};
+    endif
+    return {@output, $format.paragraph:mk(tostr("Use @changes incoming ", selector, " to use upstream; @changes keep ", selector, " to keep your code and acknowledge upstream; or @changes later ", selector, " to leave both code and baseline unchanged."))};
+  endmethod
+
+  method _terminal_source owner: ARCH_WIZARD
+    "Page literal source without requiring a browser or clickable actions.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {title, lines, offset, command} = args;
+    offset >= 1 || raise(E_INVARG, "The source offset must be positive.");
+    let page = {};
+    let next = offset;
+    for i in [offset..min(offset + 39, length(lines))]
+      const line = tostr(i, ": ", lines[i]);
+      if (value_bytes(page) + value_bytes(line) > 60000)
+        length(page) || raise(E_QUOTA, "One source line exceeds the terminal page limit.");
+        break;
+      endif
+      page = {@page, line};
+      next = i + 1;
+    endfor
+    let output = {$format.title:mk(title, 3), $format.code:mk(page, "moo")};
+    if (next <= length(lines))
+      output = {@output, $format.paragraph:mk(tostr("More source: ", command, " ", next))};
+    endif
+    return output;
+  endmethod
+
+  method _terminal_store_draft owner: ARCH_WIZARD
+    "Persist editor input within a bounded store before the next read commits the task.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {draft} = args;
+    value_bytes(draft["lines"]) <= 524288 || raise(E_QUOTA, "The draft exceeds 512 KiB. Previous saved input remains available.");
+    const id = draft["id"];
+    maphaskey(this.terminal_drafts, id) || length(this.terminal_drafts) < 128 || raise(E_QUOTA, "The draft store is full. Use @changes drafts and @changes forget-draft ID to remove old drafts.");
+    const old = `this.terminal_drafts[id] ! E_RANGE => []';
+    value_bytes(this.terminal_drafts) - value_bytes(old) + value_bytes(draft) <= 8388608 || raise(E_QUOTA, "Draft storage exceeds 8 MiB. Remove an old draft before saving more text.");
+    this.terminal_drafts[id] = draft;
+  endmethod
+
+  method _terminal_draft owner: ARCH_WIZARD
+    "Only a draft's original writer can read its terminal buffer.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {id} = args;
+    const draft = `this.terminal_drafts[id] ! E_RANGE => []';
+    draft && draft["actor"] == player || this:_error("missing_draft", "No saved draft with that ID belongs to you. Use @changes drafts.");
+    return draft;
+  endmethod
+
+  method _terminal_edit owner: ARCH_WIZARD
+    "Collect recoverable multiline input, then validate a choice against the displayed review version.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {auth, context, selector} = args;
+    const row_id = this:_terminal_row(auth, context, selector);
+    const row = this:details(context["id"], context["generation"], row_id)["row"];
+    row["field"] == "program" && "edited" in row["choices"] || this:_error("not_editable", "This item does not accept an edited program. Read its explanation in @changes diff.");
+    let draft = [];
+    for entry in (mapvalues(this.terminal_drafts))
+      if (entry["actor"] == auth[1] && entry["review"] == context["id"] && entry["row"] == row_id)
+        draft = entry;
+        break;
+      endif
+    endfor
+    const resumed = length(draft) > 0;
+    if (resumed)
+      if (draft["task"] && valid_task(draft["task"]))
+        const connected = {entry[1] for entry in (connections(auth[1]))};
+        if (`draft["connection"] in connected ! E_RANGE => true')
+          this:_error("draft_busy", "This draft is open on another connection. Finish or cancel that editor first.");
+        endif
+        `kill_task(draft["task"]) ! E_INVARG';
+      endif
+    else
+      let program = `row["choice"]["program"] ! E_RANGE => `row["recovery"]["choice"]["program"] ! E_RANGE => ""'';
+      const lines = typeof(program) == TYPE_LIST ? program | program ? explode(program, "\n", true) | {};
+      draft = ["id" -> this.next_terminal_draft, "actor" -> auth[1], "review" -> context["id"], "row" -> row_id, "revision" -> row["revision"], "lines" -> lines];
+      this.next_terminal_draft = this.next_terminal_draft + 1;
+    endif
+    const changed = draft["revision"] != row["revision"];
+    draft["generation"] = context["generation"];
+    draft["revision"] = row["revision"];
+    draft["label"] = row["label"];
+    draft["task"] = task_id();
+    draft["connection"] = connection();
+    this:_terminal_store_draft(draft);
+    const instructions = tostr("Editing draft ", draft["id"], " for ", row["label"], ". ", length(draft["lines"]), " saved lines. New lines append. Use .show to read, .clear to replace all text, .delete NUMBER to remove a line, . to validate and save the choice, or @abort to leave the editor and keep the draft. Prefix a literal dot with another dot.");
+    player:inform_current($event:mk_info(player, instructions));
+    if (changed)
+      player:inform_current($event:mk_info(player, "The reviewed contents changed since this draft was written. Check the code before saving it against this review."));
+    endif
+    try
+      while (true)
+        const line = read(draft["connection"]);
+        this:_authorized(@auth);
+        this:_terminal_draft(draft["id"])["task"] == task_id() || raise(E_INVARG, "This editor was replaced by another session.");
+        if (line == ".")
+          break;
+        elseif (line == "@abort")
+          draft["task"] = 0;
+          this:_terminal_store_draft(draft);
+          return {$format.paragraph:mk(tostr("Editing cancelled. Draft ", draft["id"], " is saved. Live code and the review choice are unchanged. Resume with @changes edit ", selector, "; read it with @changes draft ", draft["id"], "."))};
+        elseif (line == ".clear")
+          draft["lines"] = {};
+        elseif (line == ".show" || index(line, ".show ") == 1)
+          const offset = line == ".show" ? 1 | toint(line[7..$]);
+          const output = this:_terminal_source(tostr("Draft ", draft["id"]), draft["lines"], offset, ".show");
+          player:inform_current($event:mk_info(player, $format.block:mk(@output)));
+          continue;
+        elseif (index(line, ".delete ") == 1)
+          const number = toint(line[9..$]);
+          if (number < 1 || number > length(draft["lines"]))
+            player:inform_current($event:mk_info(player, "There is no line with that number. Use .show to read the draft."));
+            continue;
+          endif
+          draft["lines"] = listdelete(draft["lines"], number);
+        else
+          draft["lines"] = {@draft["lines"], length(line) && line[1] == "." ? line[2..$] | line};
+        endif
+        this:_terminal_store_draft(draft);
+      endwhile
+    except failure (ANY)
+      "The last successful read already committed the saved input.";
+      draft = this:_terminal_draft(draft["id"]);
+      draft["task"] == task_id() || return {};
+      draft["task"] = 0;
+      this:_terminal_store_draft(draft);
+      return {$format.paragraph:mk(tostr("Editing stopped: ", failure[2], ". Draft ", draft["id"], " remains saved. Use @changes drafts after reconnecting."))};
+    endtry
+    draft["task"] = 0;
+    this:_terminal_store_draft(draft);
+    try
+      const result = this:resolve(context["id"], context["generation"], row_id, "edited", draft["lines"]:join("\n"));
+      let updated = context;
+      updated["generation"] = result["generation"];
+      updated["prepared"] = [];
+      this.terminal_contexts[this:_terminal_key()] = updated;
+      let output = {$format.paragraph:mk(tostr("Draft ", draft["id"], " saved as the edited choice for ", row["label"], ". Live code is unchanged."))};
+      let valid = true;
+      for diagnostic in (result["validation"])
+        if (diagnostic["id"] == row_id && !diagnostic["valid"])
+          valid = false;
+          output = {@output, $format.paragraph:mk(tostr("Program error at line ", diagnostic["line"], ": ", diagnostic["message"]))};
+        endif
+      endfor
+      return {@output, $format.paragraph:mk(valid ? "The edited program compiles. Use @changes preview to inspect its effects before applying." | tostr("The draft needs correction. Use @changes edit ", selector, " to continue."))};
+    except failure (ANY)
+      return {$format.paragraph:mk(tostr("The choice was not saved: ", failure[2], ". Draft ", draft["id"], " remains available. Use @changes diff to read the current review, then reopen the matching item. Live code is unchanged."))};
+    endtry
+  endmethod
+
   method command owner: ARCH_WIZARD
-    "Terminal wrapper for the versioned review service; writes require a displayed generation.";
+    "Offer terminal shortcuts while preserving the version and member identities actually displayed.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
     let {words} = args;
+    const action = words ? words[1] | "";
+    if (action in {"review", "check"})
+      words[1] = action == "review" ? "diff" | "fetch";
+    endif
+    if (words && words[1] in {"diff", "status", "details"} && length(words) == 1)
+      const context = `this.terminal_contexts[this:_terminal_key()] ! E_RANGE => []';
+      const id = context ? context["id"] | this.packages[this.default_package]["active"];
+      id || this:_error("no_active_review", "There is no active review. Use @changes fetch to check for updates.");
+      words = {words[1], tostr(id)};
+    elseif (action == "next")
+      const context = this:_terminal_context();
+      this:_get(auth, context["id"], context["generation"]);
+      context["next"] || this:_error("last_page", "There are no more review pages.");
+      words = {"diff", tostr(context["id"]), tostr(context["next"])};
+    elseif (action in {"incoming", "keep", "later"} && length(words) == 2)
+      const context = this:_terminal_context();
+      const row = this:_terminal_row(auth, context, words[2]);
+      const choices = ["incoming" -> "incoming", "keep" -> "local", "later" -> "defer"];
+      words = {"resolve", tostr(context["id"]), tostr(context["generation"]), row, choices[action]};
+    elseif (action == "resolve" && length(words) == 3)
+      const context = this:_terminal_context();
+      const row = this:_terminal_row(auth, context, words[2]);
+      words = {action, tostr(context["id"]), tostr(context["generation"]), row, words[3]};
+    elseif (action in {"select-group", "skip-group"} && length(words) == 2)
+      const context = this:_terminal_context();
+      words = {action, tostr(context["id"]), tostr(context["generation"]), words[2]};
+    elseif (action in {"initialize", "base"} && length(words) in {2, 3})
+      const context = this:_terminal_context();
+      const row = this:_terminal_row(auth, context, words[2]);
+      words = {action, tostr(context["id"]), tostr(context["generation"]), row, @words[3..$]};
+    elseif (action == "source" && length(words) in {3, 4})
+      const context = this:_terminal_context();
+      const row = this:_terminal_row(auth, context, words[2]);
+      words = {action, tostr(context["id"]), tostr(context["generation"]), row, @words[3..$]};
+    elseif (action == "group" && length(words) >= 3 && tostr(toint(words[2])) != words[2])
+      const context = this:_terminal_context();
+      let members = {};
+      for selector in (words[3..$])
+        members = {@members, index(selector, "requires=") == 1 ? selector | this:_terminal_row(auth, context, selector)};
+      endfor
+      words = {action, tostr(context["id"]), tostr(context["generation"]), words[2], @members};
+    elseif (action in {"refresh", "discard", "finish"} && length(words) == 1)
+      const context = this:_terminal_context();
+      words = {action, tostr(context["id"]), tostr(context["generation"])};
+    endif
+    if (action == "retry" && length(words) == 1)
+      const context = this:_terminal_context();
+      const record = this:_get(auth, context["id"], context["generation"]);
+      record["status"] == "failed" || this:_error("not_failed", "Only a failed fetch can be retried. Use @changes status to read its result.");
+      const package = record["package"];
+      this:discard(context["id"], context["generation"]);
+      const result = this:stage(package);
+      this:_terminal_remember(result);
+      return this:_command_progress(result);
+    endif
+    if (action == "edit" && length(words) == 2)
+      return this:_terminal_edit(auth, this:_terminal_context(), words[2]);
+    elseif (action == "drafts" && length(words) == 1)
+      let drafts = {};
+      for draft in (mapvalues(this.terminal_drafts))
+        if (draft["actor"] == auth[1])
+          drafts = {@drafts, tostr("Draft ", draft["id"], ": ", draft["label"], "; review ", draft["review"], "; ", length(draft["lines"]), " lines. Read @changes draft ", draft["id"], ".")};
+        endif
+      endfor
+      return {$format.title:mk("Your saved drafts", 3), $format.list:mk(drafts), $format.paragraph:mk("To resume a draft, open its review with @changes diff ID, then use @changes edit ROW for the matching item. Drafts for missing members remain readable. Remove an old buffer with @changes forget-draft ID.")};
+    elseif (action == "draft" && length(words) in {2, 3})
+      const draft = this:_terminal_draft(toint(words[2]));
+      return this:_terminal_source(tostr("Draft ", draft["id"], " for ", draft["label"]), draft["lines"], length(words) == 3 ? toint(words[3]) | 1, tostr("@changes draft ", draft["id"]));
+    elseif (action == "forget-draft" && length(words) == 2)
+      const draft = this:_terminal_draft(toint(words[2]));
+      if (draft["task"] && valid_task(draft["task"]))
+        const connected = {entry[1] for entry in (connections(auth[1]))};
+        !(draft["connection"] in connected) || this:_error("draft_busy", "Close this draft's editor before removing it.");
+        `kill_task(draft["task"]) ! E_INVARG';
+      endif
+      this.terminal_drafts = mapdelete(this.terminal_drafts, draft["id"]);
+      return {$format.paragraph:mk("Draft buffer removed. Saved review choices and live code are unchanged.")};
+    elseif (action == "recovery" && length(words) in {1, 2})
+      const context = this:_terminal_context();
+      const offset = length(words) == 2 ? toint(words[2]) | 1;
+      const page = this:recovery(context["id"], context["generation"], offset);
+      let items = {};
+      for i in [1..length(page["items"])]
+        const item = page["items"][i];
+        items = {@items, tostr(offset + i - 1, ". ", `item["label"] ! E_RANGE => item["member"]', ": ", item["reason"], maphaskey(item["choice"], "program") ? tostr(" Read its saved code with @changes recovery-source ", offset + i - 1, ".") | "")};
+      endfor
+      let output = {$format.title:mk("Saved decisions that need another check", 3), $format.list:mk(items), $format.paragraph:mk("Unsubmitted terminal drafts are listed separately by @changes drafts.")};
+      if (page["next"])
+        output = {@output, $format.paragraph:mk(tostr("More saved decisions: @changes recovery ", page["next"]))};
+      endif
+      return output;
+    elseif (action == "recovery-source" && length(words) in {2, 3})
+      const context = this:_terminal_context();
+      const page = this:recovery(context["id"], context["generation"], toint(words[2]));
+      page["items"] || this:_error("missing_draft", "No saved decision at that position. Use @changes recovery.");
+      const item = page["items"][1];
+      const program = `item["choice"]["program"] ! E_RANGE => ""';
+      const lines = typeof(program) == TYPE_LIST ? program | explode(program, "\n", true);
+      return this:_terminal_source("Recovered edited program", lines, length(words) == 3 ? toint(words[3]) | 1, tostr("@changes recovery-source ", words[2]));
+    endif
+    if (action == "preview" && length(words) in {1, 2})
+      return this:_terminal_preview(this:_terminal_context(), length(words) == 2 ? toint(words[2]) | 1);
+    elseif (action == "apply" && length(words) == 1)
+      const context = this:_terminal_context();
+      context["prepared"] || this:_error("not_prepared", "Use @changes preview to read what will happen before applying.");
+      return this:_command_progress(this:apply(context["id"], context["generation"], context["prepared"]));
+    elseif (action == "compare" && length(words) in {2, 3})
+      return this:_terminal_compare(auth, this:_terminal_context(), words[2], length(words) == 3 ? toint(words[3]) | 1);
+    elseif (action == "history" && length(words) in {1, 2, 3})
+      const name = length(words) >= 2 ? words[2] | this.default_package;
+      const history = this:history(name, length(words) == 3 ? toint(words[3]) | 1);
+      let lines = {};
+      for item in (history["reviews"])
+        lines = {@lines, tostr("Review ", item["review_id"], ": ", item["status"], "; ", item["decision_count"], " decisions; by ", item["actor"], ". Read @changes result ", item["review_id"], ".")};
+      endfor
+      let output = {$format.title:mk(name + " update history", 3), $format.list:mk(lines), $format.paragraph:mk("The service retains up to 64 complete review records within 32 MiB. Old records are removed as whole reviews. There is no general rollback command.")};
+      if (history["next"])
+        output = {@output, $format.list:actions({this:_command_action(tostr("@changes history ", name, " ", history["next"]), "More history")})};
+      endif
+      return output;
+    elseif (action == "result" && length(words) in {1, 2, 3})
+      const id = length(words) >= 2 ? toint(words[2]) | this:_terminal_context()["id"];
+      return this:_terminal_result(id, length(words) == 3 ? toint(words[3]) | 1);
+    elseif (action == "finish" && length(words) == 3)
+      const summary = this:finish(toint(words[2]), toint(words[3]));
+      this:_terminal_remember(summary);
+      return this:_command_status(summary);
+    elseif (action == "remove-group" && length(words) == 2)
+      const context = this:_terminal_context();
+      const result = this:set_group(context["id"], context["generation"], words[2], {});
+      this:_terminal_remember(result);
+      return {$format.paragraph:mk("Group removed. Saved decisions are retained. Use @changes diff to check the affected items.")};
+    endif
+    const previous = `this.terminal_contexts[this:_terminal_key()] ! E_RANGE => []';
+    const output = this:_command_dispatch(auth, words);
+    if (words && words[1] in {"resolve", "base"} && previous && previous["id"] == toint(words[2]) && previous["generation"] == toint(words[3]))
+      "Saving a decision or fetching accepted source preserves displayed member identities.";
+      let context = previous;
+      context["generation"] = this.pending[context["id"]]["generation"];
+      context["prepared"] = [];
+      this.terminal_contexts[this:_terminal_key()] = context;
+    elseif (words && words[1] in {"group", "select-group", "skip-group", "initialize", "refresh"})
+      this:_terminal_remember(this:status(toint(words[2])));
+    elseif (words && words[1] == "status")
+      this:_terminal_remember(this:status(toint(words[2])));
+    endif
+    return output;
+  endmethod
+
+  method _command_dispatch owner: ARCH_WIZARD
+    "Run explicit versioned terminal commands after authorization.";
+    caller == this || raise(E_PERM);
+    let {auth, words} = args;
+    set_task_perms(auth[2]);
     if (!words)
       return this:_command_overview();
     endif
@@ -1949,6 +2426,7 @@ object CHANGE_MANAGER [
     endif
     if (action in {"fetch", "stage", "adopt"} && length(words) == 2)
       const result = this:stage(words[2], {}, action == "adopt" ? "adopt" | "update");
+      this:_terminal_remember(result);
       return this:_command_progress(result);
     endif
     if (action == "bindings" && length(words) >= 3)
@@ -2028,14 +2506,13 @@ object CHANGE_MANAGER [
       endif
       const lines = explode(detail["row"][tostr(words[5], "_text")], "\n", true);
       const offset = length(words) == 6 ? toint(words[6]) | 1;
-      offset >= 1 && offset <= length(lines) || raise(E_INVARG);
+      offset >= 1 && offset <= max(1, length(lines)) || raise(E_INVARG);
       let code = {};
       for i in [offset..min(offset + 49, length(lines))]
         value_bytes(code) + value_bytes(lines[i]) <= 60000 || raise(E_QUOTA, "Source page is too large.");
         code = {@code, tostr(i, ": ", lines[i])};
       endfor
-      const names = this:_command_names();
-      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local contents" | words[5] == "base" ? "Accepted baseline" | "Upstream contents"), 3), $format.paragraph:mk(this:_command_review_link(detail, this:_command_label(detail["row"]["object"], names, detail["row"]["names"][1]), detail["row"]["id"])), $format.code:mk(code, "moo")};
+      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local contents" | words[5] == "base" ? "Accepted baseline" | "Upstream contents"), 3), $format.paragraph:mk(this:_command_review_link(detail, detail["row"]["label"], detail["row"]["id"])), $format.code:mk(code, "moo")};
       if (offset == 1 && words[5] == "incoming" && maphaskey(detail["row"], "definition_text"))
         output = {$format.paragraph:mk("Apply creates this verb with the following definition. Flags: r permits reading, x permits calls from programs, and d enables error reporting. Arguments control command matching."), $format.code:mk(explode(detail["row"]["definition_text"], "\n", true)), @output};
       endif
@@ -2060,7 +2537,7 @@ object CHANGE_MANAGER [
       const row_id = this:_command_row(auth, id, generation, words[4]);
       const result = this:resolve(id, generation, row_id, words[5], program);
       const labels = ["incoming" -> "Use upstream", "local" -> "Keep local", "defer" -> "Skip", "edited" -> "Use edited program"];
-      let output = {$format.title:mk(tostr("Review ", id, " · Generation ", result["generation"]), 3), $format.paragraph:mk(tostr(labels[words[5]], " saved for row ", words[4], "."))};
+      let output = {$format.title:mk(tostr("Review ", id, " · Generation ", result["generation"]), 3), $format.paragraph:mk(tostr(labels[words[5]], " saved for ", this:details(id, result["generation"], row_id)["row"]["label"], "."))};
       for validation in (result["validation"])
         if (validation["id"] == row_id && !validation["valid"])
           output = {@output, $format.paragraph:mk(tostr("Program error at line ", validation["line"], ": ", validation["message"]))};

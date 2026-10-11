@@ -28,7 +28,11 @@ true
 ~~cowbell · Review 1
 =
 ~~Fetch failed: No worker available for curl
-~~The server needs a curl worker. Start one, then fetch again.
+~~The server needs a curl worker. Start one, then use @changes status and @changes retry.
+~~* Read the current failure
+~~@changes status
+~~* Retry after fixing the source or worker
+~~@changes retry
 ~~* Discard failed review
 ~~@changes discard 1 1
 
@@ -36,7 +40,11 @@ true
 ~~cowbell · Review 1
 =
 ~~Fetch failed: No worker available for curl
-~~The server needs a curl worker. Start one, then fetch again.
+~~The server needs a curl worker. Start one, then use @changes status and @changes retry.
+~~* Read the current failure
+~~@changes status
+~~* Retry after fixing the source or worker
+~~@changes retry
 ~~* Discard failed review
 ~~@changes discard 1 1
 

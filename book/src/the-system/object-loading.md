@@ -439,6 +439,77 @@ program with `@changes source ID GENERATION ROW live` or `incoming`. Add an offs
 its decompiled lines. Both panes use decompiled coordinates. Structured details also contain exact
 incoming body text and its file position.
 
+### Use Cowbell through plain telnet
+
+Cowbell supports this workflow without Meadow, HTML, GMCP, or clickable links. For a configured
+upstream, start with:
+
+```text
+@changes check
+@changes status
+@changes diff
+@changes next
+@changes compare 5
+@changes keep 5
+@changes later 7
+@changes preview
+@changes apply
+@changes result
+@changes finish
+```
+
+Use the row numbers shown in your review. `next` opens the next page. `compare` shows local and
+upstream code with line numbers. `source ROW live` or `source ROW incoming` shows complete code. Add
+a line offset to read another page.
+
+`incoming ROW` accepts upstream code. `keep ROW` preserves live code and acknowledges upstream as
+the new baseline. `later ROW` preserves both live code and the old baseline. `finish` closes the
+review without accepting deferred changes. A later review still sees those changes.
+
+These shortcuts remember the review version and member identities displayed on that connection. If
+another administrator changes the review, the command asks you to open the current list. Reading
+status alone does not authorize choices against new row numbers.
+
+`preview` shows counts for the entire review, including unopened pages. It lists the proposed
+effects and provides commands for more pages. `apply` uses that exact prepared selection. If a
+choice or live evidence changes, prepare again before applying.
+
+For a multiline merge, use `@changes edit ROW`. Enter program lines, then enter `.` to validate the
+saved choice. This step does not change live code. Compiler errors include line numbers.
+
+| Editor command  | Effect                                             |
+| --------------- | -------------------------------------------------- |
+| `.show [START]` | Read saved lines.                                  |
+| `.clear`        | Clear the buffer before entering replacement code. |
+| `.delete LINE`  | Remove one line.                                   |
+| `@abort`        | Leave the editor and retain its buffer.            |
+| `..text`        | Enter a literal line that starts with a dot.       |
+| `.`             | Validate the buffer and save the edited choice.    |
+
+Draft buffers survive cancellation, disconnect, and a stale review. Use `@changes drafts` to list
+your buffers. Use `@changes draft ID` to read one. Reopen the review and its matching row to resume.
+A missing member's draft remains readable. `forget-draft ID` removes only that buffer. Each buffer
+has a 512 KiB limit. The world retains up to 128 buffers within 8 MiB.
+
+`@changes recovery` lists saved decisions that need another check after refresh.
+`@changes recovery-source NUMBER` reads their edited code. These decisions differ from unsubmitted
+terminal buffers. Neither list silently attaches code to a different member.
+
+`@changes group NAME ROW ... [requires=NAME,NAME]` declares a group from displayed rows.
+`select-group NAME`, `skip-group NAME`, and `remove-group NAME` change its selection or definition.
+`initialize ROW [descendants]` approves an absent property's initial value under the existing
+policy. After changing group or initialization rules, open `diff` again before choosing individual
+rows.
+
+If a fetch fails, read `@changes status`. Correct the worker or upstream problem, then use
+`@changes retry`. Retry closes the failed review and starts a fresh fetch.
+`@changes history [PACKAGE]` lists retained reviews. `@changes result ID [START]` reads committed
+results, including pages beyond the first 50 decisions. There is no general rollback command.
+
+Explicit commands with a review ID and generation remain supported. Snore uses those explicit forms.
+
+### Retrieve accepted source and save choices
+
 Cowbell can retrieve historical objdefs from the accepted Git commit or accept an upload. Meadow
 offers **Fetch accepted source** when Git provenance and wizard authority are available. Use
 **Upload accepted objdefs** for other sources. Retrieval uses the saved commit and repository

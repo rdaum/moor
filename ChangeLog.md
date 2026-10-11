@@ -19,6 +19,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cowbell supports the complete change-review workflow over plain telnet. Commands remember the
+  displayed review, compare code, save multiline drafts, and show planned effects before apply.
+  Drafts survive cancellation and reconnect. Commands also expose recovery, history, partial-review
+  completion, and retry after a failed fetch.
+
 - Cowbell exposes guarded change management through both MCP hosts and its internal agents. Tools
   return structured results, preserve edited source, and report compiler errors and committed
   outcomes. Native MCP no longer repeats dynamic calls automatically after a lost connection.
