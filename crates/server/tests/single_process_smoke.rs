@@ -54,6 +54,8 @@ services:
     listen_address: "127.0.0.1:{web_port}"
   curl_worker:
     enabled: false
+  git_worker:
+    enabled: true
 "#
         ),
     )
@@ -121,6 +123,13 @@ fn run_smoke_flow(telnet_port: u16, web_port: u16) -> Result<(), String> {
         .write_all(b"eval 1 + 1\n")
         .map_err(|e| format!("write eval command: {e}"))?;
     read_until(&mut stream, "=> 2", Duration::from_secs(10))?;
+
+    stream
+        .write_all(
+            b"eval worker_request(\"git\", {\"capabilities\", [\"schema\" -> 1]})[\"schema\"]\n",
+        )
+        .map_err(|e| format!("write Git capabilities request: {e}"))?;
+    read_until(&mut stream, "=> 1", Duration::from_secs(10))?;
 
     Ok(())
 }

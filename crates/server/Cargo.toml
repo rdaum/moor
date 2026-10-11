@@ -42,6 +42,7 @@ moor-common = { path = "../common" }
 moor-curl-worker = { path = "../curl-worker" }
 moor-daemon = { path = "../daemon" }
 moor-db = { path = "../db" }
+moor-git-worker = { path = "../git-worker" }
 moor-kernel = { path = "../kernel" }
 moor-runtime-api = { path = "../runtime-api" }
 moor-telnet-host = { path = "../telnet-host" }

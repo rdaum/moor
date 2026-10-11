@@ -4494,6 +4494,7 @@ dependencies = [
 name = "moor-git-worker"
 version = "2.0.0-dev"
 dependencies = [
+ "async-trait",
  "clap",
  "clap_derive",
  "color-eyre",
@@ -4728,6 +4729,7 @@ dependencies = [
  "moor-curl-worker",
  "moor-daemon",
  "moor-db",
+ "moor-git-worker",
  "moor-kernel",
  "moor-runtime-api",
  "moor-telnet-host",

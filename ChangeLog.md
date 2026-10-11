@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The single-process `moor` server supports read-only Git worker requests with `--enable-git-worker`
+  or `services.git_worker.enabled`. Requests use isolated child processes with configurable resource
+  limits. Separate worker enrollment is not required.
+
 - Change reviews now let you browse local-only objects and verbs, including their source, and
   inspect property and object-attribute differences. Import preparation records ancestor hashes for
   those fields so Meadow can group their local edits, upstream edits, and conflicts with verb

@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 
 /// Operator ceilings. Requests may lower the three result limits.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Limits {
     pub max_entries: usize,
     pub max_file_bytes: usize,

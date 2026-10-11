@@ -13,8 +13,8 @@ and tuning guidance, see [Performance and Concurrency](performance-and-concurren
 ## Single-Process Configuration
 
 The `moor` binary is the default way to run the server. It bundles the daemon, telnet host, web
-host, and curl worker into one process — no socket configuration or encryption setup needed. This is
-the closest analogue to running a traditional LambdaMOO or ToastStunt server.
+host, and optional HTTP and Git worker services into one process. No worker sockets or enrollment
+are needed. This is the closest analogue to running a traditional LambdaMOO or ToastStunt server.
 
 To start the server:
 
@@ -25,6 +25,34 @@ moor /path/to/database --db development.db --generate-keypair
 The same configuration file and most command-line options described in this page apply to the
 combined `moor` binary. The transport endpoint and enrollment options (described below) are not
 needed in single-process mode — they only apply when running components as separate processes.
+
+Enable outbound HTTP with `--enable-curl-worker` and read-only Git access with
+`--enable-git-worker`. Git requests run in isolated child processes of the same `moor` executable.
+They use the same protocol and resource limits as the standalone Git worker. No Git executable is
+needed for worker requests. Import preparation with `--git-upstream` separately requires Git and
+local repository history.
+
+You can configure the Git service in YAML:
+
+```yaml
+services:
+  git_worker:
+    enabled: true
+    work_dir: git-jobs
+    max_concurrent_requests: 4
+    limits:
+      max_seconds: 30
+      max_entries: 4096
+      max_file_bytes: 4194304
+      max_total_bytes: 16777216
+      max_fetch_bytes: 268435456
+      max_memory_bytes: 1073741824
+```
+
+Relative job directories resolve under the server data directory. Job directories are temporary and
+removed when each request finishes. Limits apply to individual requests; excess concurrent work
+receives a busy response. Invalid limits or inaccessible job storage prevent startup before database
+import. Shutdown terminates active Git child processes before the worker detaches.
 
 ## Daemon, Hosts, Workers, and RPC (Advanced)
 

@@ -208,6 +208,9 @@ struct Args {
     #[arg(long, help = "Enable the embedded curl worker")]
     enable_curl_worker: bool,
 
+    #[arg(long, help = "Enable the embedded Git worker with isolated child jobs")]
+    enable_git_worker: bool,
+
     #[arg(long, value_name = "address", help = "Telnet listener bind address")]
     telnet_address: Option<String>,
 
@@ -273,6 +276,7 @@ struct ServicesConfig {
     telnet: TelnetServiceConfig,
     web: WebServiceConfig,
     curl_worker: CurlWorkerServiceConfig,
+    git_worker: GitWorkerServiceConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -339,8 +343,42 @@ struct CurlWorkerServiceConfig {
     health_check_port: Option<u16>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Report> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct GitWorkerServiceConfig {
+    enabled: bool,
+    work_dir: PathBuf,
+    max_concurrent_requests: usize,
+    limits: moor_git_worker::protocol::Limits,
+}
+
+impl Default for GitWorkerServiceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            work_dir: PathBuf::from("git-jobs"),
+            max_concurrent_requests: 4,
+            limits: Default::default(),
+        }
+    }
+}
+
+fn main() -> Result<(), Report> {
+    // Dispatch isolated jobs before starting runtime threads or opening the world database.
+    let mut arguments = std::env::args_os().skip(1);
+    if arguments.next().as_deref() == Some(std::ffi::OsStr::new("--git-job")) {
+        let directory = arguments
+            .next()
+            .ok_or_else(|| eyre!("Missing Git job directory"))?;
+        return moor_git_worker::job::child_main(std::path::Path::new(&directory));
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(run())
+}
+
+async fn run() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
@@ -359,6 +397,18 @@ async fn main() -> Result<(), Report> {
 
     prepare_config_dir()?;
     std::fs::create_dir_all(&args.data_dir)?;
+
+    // Validate limits and prepare job storage before starting the daemon or importing a world.
+    let git_executor = if services_config.git_worker.enabled {
+        Some(Arc::new(moor_git_worker::job::Executor::new(
+            std::env::current_exe()?,
+            resolve_data_path(&args.data_dir, &services_config.git_worker.work_dir),
+            services_config.git_worker.limits.clone(),
+            services_config.git_worker.max_concurrent_requests,
+        )?))
+    } else {
+        None
+    };
 
     let public_key_path = resolved_config_path(args.public_key.as_ref(), "moor-verifying-key.pem");
     let private_key_path = resolved_config_path(args.private_key.as_ref(), "moor-signing-key.pem");
@@ -420,7 +470,7 @@ async fn main() -> Result<(), Report> {
             allowed_hosts_dir: resolved_allowed_hosts_dir(&args.data_dir),
         },
         num_io_threads: args.num_io_threads,
-        workers_enabled: services_config.curl_worker.enabled,
+        workers_enabled: services_config.curl_worker.enabled || services_config.git_worker.enabled,
         #[cfg(feature = "trace_events")]
         trace_output_path: args
             .trace_output
@@ -434,9 +484,8 @@ async fn main() -> Result<(), Report> {
         ready_signal: Some(ready_signal),
         local_transport: Some(local_event_bus.clone()),
         local_runtime_sender: Some(local_runtime_sender),
-        local_worker_handler_sender: services_config
-            .curl_worker
-            .enabled
+        local_worker_handler_sender: (services_config.curl_worker.enabled
+            || services_config.git_worker.enabled)
             .then_some(local_worker_handler_sender),
     };
 
@@ -495,27 +544,36 @@ async fn main() -> Result<(), Report> {
         }));
     }
 
-    if services_config.curl_worker.enabled {
+    if services_config.curl_worker.enabled || services_config.git_worker.enabled {
         let worker_handler = local_worker_handler_receiver
             .recv()
             .map_err(|e| eyre!("Daemon did not publish local worker services: {e}"))?;
         let worker_services = Arc::new(LocalWorkerServices::new(worker_handler))
             as Arc<dyn moor_runtime_api::WorkerServices>;
-        let curl_worker_runtime = moor_curl_worker::LocalWorkerRuntime {
-            kill_switch: kill_switch.clone(),
-        };
-        host_tasks.push(tokio::spawn(async move {
-            moor_curl_worker::run_with_services(
-                services_config.curl_worker.health_check_port,
-                curl_worker_runtime,
-                worker_services,
-            )
-            .await
-        }));
+        if services_config.curl_worker.enabled {
+            let worker_services = worker_services.clone();
+            let curl_worker_runtime = moor_curl_worker::LocalWorkerRuntime {
+                kill_switch: kill_switch.clone(),
+            };
+            host_tasks.push(tokio::spawn(async move {
+                moor_curl_worker::run_with_services(
+                    services_config.curl_worker.health_check_port,
+                    curl_worker_runtime,
+                    worker_services,
+                )
+                .await
+            }));
+        }
+        if let Some(executor) = git_executor {
+            let kill_switch = kill_switch.clone();
+            host_tasks.push(tokio::spawn(async move {
+                moor_git_worker::run_with_services(executor, kill_switch, worker_services).await
+            }));
+        }
     }
 
     if host_tasks.is_empty() {
-        warn!("No telnet, web, or curl worker services are enabled");
+        warn!("No telnet, web, or worker services are enabled");
     }
 
     wait_for_exit(kill_switch.clone(), &daemon_handle, &host_tasks).await;
@@ -555,6 +613,9 @@ fn apply_cli_overrides(args: &Args, config: &mut CombinedConfig) {
     }
     if args.enable_curl_worker {
         config.services.curl_worker.enabled = true;
+    }
+    if args.enable_git_worker {
+        config.services.git_worker.enabled = true;
     }
     if let Some(telnet_address) = args.telnet_address.as_ref() {
         config.services.telnet.address = telnet_address.clone();
@@ -766,6 +827,22 @@ mod tests {
         let mut config = CombinedConfig::default();
         super::apply_cli_overrides(&args, &mut config);
         assert!(config.into_parts().0.validate().is_err());
+    }
+
+    #[test]
+    fn embedded_git_configuration() {
+        use clap::Parser;
+        let mut config = CombinedConfig::default();
+        assert!(!config.services.git_worker.enabled);
+        let args = super::Args::try_parse_from(["moor", "--enable-git-worker"]).unwrap();
+        super::apply_cli_overrides(&args, &mut config);
+        assert!(config.services.git_worker.enabled);
+        let config = load("services:\n  git_worker:\n    enabled: true\n    max_concurrent_requests: 2\n    limits:\n      max_seconds: 10\n").unwrap();
+        assert!(config.services.git_worker.enabled);
+        assert_eq!(config.services.git_worker.max_concurrent_requests, 2);
+        assert_eq!(config.services.git_worker.limits.max_seconds, 10);
+        assert_eq!(config.services.git_worker.limits.max_entries, 4096);
+        assert!(load("services:\n  git_worker:\n    limits:\n      max_second: 10\n").is_err());
     }
 
     #[test]

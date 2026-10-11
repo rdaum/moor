@@ -112,6 +112,10 @@ impl Executor {
             .arg("--git-job")
             .arg(directory.path())
             .env_clear()
+            // The combined server uses mimalloc, whose default 1 GiB arena reservation
+            // exhausts the default address-space ceiling before a job can do useful work.
+            // Bound reservation chunks in children without changing the server allocator.
+            .env("MIMALLOC_ARENA_RESERVE", "65536")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

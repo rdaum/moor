@@ -16,4 +16,7 @@
 mod backend;
 pub mod job;
 pub mod protocol;
+mod service;
 mod transport;
+
+pub use service::run_with_services;
