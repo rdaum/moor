@@ -245,6 +245,20 @@ fn names(names: &[Symbol]) -> Var {
     )
 }
 
+/// Identify the live state relevant to one saved decision. Review-wide evidence still
+/// guards apply; this narrower revision lets callers retain unaffected decisions after
+/// refreshing another member or changing group policy. Detail text is not part of it.
+fn member_revision(report: Var, guards: &[Var], context: &[Var]) -> Result<Var, ReviewError> {
+    let map = report.as_map().unwrap();
+    let revision = digest(&v_list(&[
+        v_list(guards),
+        v_list(context),
+        map.get(&v_str("id")).unwrap(),
+        map.get(&v_str("incoming")).unwrap(),
+    ]))?;
+    Ok(map.set(&v_str("revision"), &v_str(&revision)).unwrap())
+}
+
 fn compile_context(options: &CompileOptions) -> Var {
     v_list(
         &[
@@ -509,6 +523,11 @@ pub(crate) fn analyze(
         v_int(actor_flags.to_u16().into()),
     ];
     let mut report_rows = Vec::new();
+    let member_context = vec![
+        compile_context(options),
+        v_obj(permissions.principal()),
+        v_int(actor_flags.to_u16().into()),
+    ];
     let mut rows = Vec::new();
     let mut diagnostics = Vec::new();
     for object in set
@@ -546,6 +565,7 @@ pub(crate) fn analyze(
                 provenance,
                 source_digest: &source_digest,
             };
+            let guard_start = guards.len();
             let (row, report) = context.analyze(
                 label,
                 incoming,
@@ -563,7 +583,11 @@ pub(crate) fn analyze(
             let proposed = matches!(row.target, ChangeTarget::AddObject(_));
             let blocked = !row.eligible;
             rows.push(row);
-            report_rows.push(report);
+            report_rows.push(member_revision(
+                report,
+                &guards[guard_start..],
+                &member_context,
+            )?);
             if proposed || blocked {
                 continue;
             }
@@ -600,6 +624,8 @@ pub(crate) fn analyze(
             live_identity.unwrap_or_else(|| v_list(&[])),
             v_obj(world.parent_of(permissions, &object)?),
         ]));
+        let mut object_context = member_context.clone();
+        object_context.push(guards.last().unwrap().clone());
         let verbs = world.verbs(permissions, &object)?;
         let definitions = verbs.iter().collect::<Vec<_>>();
         let mut matched = BTreeSet::new();
@@ -608,6 +634,7 @@ pub(crate) fn analyze(
                 .iter()
                 .any(|field| field.as_string() == Some("program"))
         }) {
+            let guard_start = guards.len();
             if report_rows.len() >= MAX_ROWS {
                 return Err("review exceeds 8192 rows".to_string().into());
             }
@@ -642,7 +669,11 @@ pub(crate) fn analyze(
                         }
                     }
                 }
-                report_rows.push(report);
+                report_rows.push(member_revision(
+                    report,
+                    &guards[guard_start..],
+                    &object_context,
+                )?);
                 rows.push(row);
                 continue;
             }
@@ -868,7 +899,11 @@ pub(crate) fn analyze(
                     ));
                 }
             }
-            report_rows.push(record(&output));
+            report_rows.push(member_revision(
+                record(&output),
+                &guards[guard_start..],
+                &object_context,
+            )?);
             rows.push(ChangeRow {
                 id,
                 eligible,
@@ -946,6 +981,7 @@ pub(crate) fn analyze(
                 {
                     continue;
                 }
+                let guard_start = guards.len();
                 let (row, report) = context.analyze(
                     label,
                     property,
@@ -961,7 +997,11 @@ pub(crate) fn analyze(
                     return Err("selected details exceed 16 MiB".to_owned().into());
                 }
                 rows.push(row);
-                report_rows.push(report);
+                report_rows.push(member_revision(
+                    report,
+                    &guards[guard_start..],
+                    &object_context,
+                )?);
             }
         }
         // Existing fields and overrides remain read-only.

@@ -275,7 +275,7 @@ In Meadow:
 1. Open the review and select **Create group**.
 2. Enter a name and select all required changes.
 3. If another group must apply too, select it under **Other groups required by this group**.
-4. Save the group. This clears previous choices in the review without changing running code.
+4. Save the group. This preserves previous decisions and drafts without changing running code.
 5. Select the group, review each program, then apply.
 
 For an existing program, **Keep local** or an edited result remains available after selecting the
@@ -291,7 +291,8 @@ The terminal equivalents are:
 ```
 
 Use row numbers from the review and a single word for the command-line group name. Changing a group
-clears saved choices, so use the new generation for subsequent commands.
+preserves saved decisions and advances the generation. Use the new generation for subsequent
+commands.
 
 If another task creates a conflicting verb after preview, apply rejects the old review. It leaves
 the caller and other changes untouched. Refresh the review to see the current definitions.
@@ -325,7 +326,7 @@ In Meadow:
 1. Select the proposed property in the review.
 2. Read its initial value, owner, flags, and metadata.
 3. If the object has descendants, decide whether they can inherit this new property.
-4. Select **Permit initialization and clear choices**.
+4. Select **Permit initialization**.
 5. Add the property and all dependent programs to a change group.
 6. Select the group, then apply it.
 
@@ -333,9 +334,9 @@ The terminal command is `@changes initialize ID GENERATION ROW`. To permit inher
 descendants, add `descendants` after ROW. Use `@changes source ID GENERATION ROW incoming` to read
 the initial value and permissions first.
 
-Initialization permission becomes a package rule for this member. Saving it clears previous choices
-and advances the review generation. It does not write the value. Apply still requires a complete
-group, current authority, and unchanged review evidence.
+Initialization permission becomes a package rule for this member. Saving it preserves decisions and
+advances the review generation. It does not write the value. Apply still requires a complete group,
+current authority, and unchanged review evidence.
 
 A local, inherited, or descendant property with the same name blocks creation. Apply rechecks
 absence and inheritance. If another task creates a conflicting property, refresh the review before
@@ -454,8 +455,9 @@ is unavailable, the two-way comparison remains usable.
 The Cowbell service method `base_source(ID, GENERATION, ROW, SOURCES)` accepts uploaded source
 units. Omit `SOURCES` to retrieve the pinned Git source. The response contains verified details and
 the next generation. Saved choices remain intact. Each member can use a different baseline revision.
-Source remains in the pending review across restarts. Refresh, apply, and discard remove the
-historical cache. Completion receipts do not contain historical source.
+Source remains in the pending review across restarts. Refresh keeps historical source while its
+baseline still matches. Apply and discard remove the historical cache. Completion receipts do not
+contain historical source.
 
 Resolve a row with `@changes resolve ID GENERATION ROW incoming`, `local`, or `defer`. For a short
 edited program, use `@changes resolve ID GENERATION ROW edited PROGRAM`. The service validates the
@@ -496,14 +498,27 @@ $change_manager:upstream("cowbell", source, package["generation"]);
 
 Only one review can be active per package. The service permits eight pending reviews, 4 MiB of
 source per review, and 32 MiB of pending storage. Choice writes, refresh, discard, and apply require
-the displayed review generation. Refresh creates new evidence and clears old approvals. It uses the
-saved source without fetching again. To review newer upstream source, discard and stage again.
+the displayed review generation. Refresh creates new evidence from the saved source without fetching
+again. Unchanged decisions remain valid. Changed members keep their drafts for another check.
+Missing or replaced members keep their drafts separately, without transferring decisions to another
+member. `recovery(ID, GENERATION)` returns these saved drafts. To review newer upstream source,
+finish or discard the review, then stage again.
 
 Fetch and apply return promptly and run as background tasks. Poll `status()` for the committed
 result. Apply writes programs, baselines, and its receipt in one transaction. Repeated apply calls
-return the existing job or receipt. A partial result retains source for deferred rows. Completion
-and discard remove working source and drafts. The last 64 completed receipts retain counts and up to
-50 decisions, without program bodies.
+return the existing job or receipt. A partial result retains source for deferred rows.
+`finish(ID, GENERATION)` closes the review without accepting deferred baselines or undoing installed
+changes. Completion, finish, and discard remove working source and drafts. Discarding a partial
+review preserves its committed results.
+
+`prepare_apply(ID, GENERATION)` reports the exact effects, including default choices on unopened
+pages. Pass its `prepared` value as the third argument to `apply` to bind that summary to the
+selection. Effect pages contain at most 50 items. Their counts cover the whole review.
+
+Receipts retain all decisions without program bodies. `status()` returns the first 50 decisions. Use
+`result(ID, GENERATION, OFFSET)` and `next_decision` to read further pages. Multiple partial
+applications accumulate in the same result. History retains at most 64 reviews within 32 MiB. When
+storage fills, the service removes whole older reviews instead of truncating their decisions.
 
 After a restart or interrupted task, query status. An `interrupted` review requires an explicit
 refresh or discard. Rejection leaves installed content unchanged. A changed live program makes the

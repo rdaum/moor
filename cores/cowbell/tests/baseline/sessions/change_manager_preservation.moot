@@ -1,0 +1,74 @@
+// Saved work survives group edits, group selection, and changes to other members.
+@wizard
+; load_object({"object #9500", tostr("owner: ", player), tostr("verb a (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", tostr("verb b (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", tostr("verb c (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", "endobject"}); add_property(#0, "preservation", [], {player, ""}); $change_manager:configure("preservation", {#9500}, []); const staged = $change_manager:stage("preservation", {["label" -> "probe.moo", "text" -> dump_object(#9500)]}, "adopt"); #0.preservation["adopt"] = staged["review_id"]; return $change_manager:apply(staged["review_id"], 1)["status"];
+"applying"
+
+; for i in [1..100] if ($change_manager:status(#0.preservation["adopt"])["status"] == "complete") return true; endif suspend(0.01); endfor return false;
+true
+
+; let source = dump_object(#9500); for i in [1..length(source)] if (index(source[i], "return 1;")) source[i] = "return 2;"; endif endfor const staged = $change_manager:stage("preservation", {["label" -> "probe.moo", "text" -> source]}); const id = staged["review_id"]; #0.preservation["id"] = id; const rows = $change_manager:review(id, 1)["rows"]; for row in (rows) #0.preservation[row["names"][1]] = row; endfor return $change_manager:resolve(id, 1, #0.preservation["a"]["id"], "edited", "return 3;")["generation"];
+2
+
+; const id = #0.preservation["id"]; $change_manager:set_group(id, 2, "pair", {#0.preservation["a"]["member"], #0.preservation["b"]["member"]}); const row = $change_manager:details(id, 3, #0.preservation["a"]["id"])["row"]; return {row["choice"]["program"], row["choice"]["validated"], row["needs_review"]};
+{"return 3;", true, false}
+
+; const id = #0.preservation["id"]; $change_manager:resolve_group(id, 3, "pair", "incoming"); const row = $change_manager:details(id, 4, #0.preservation["a"]["id"])["row"]; #0.preservation["prepared"] = $change_manager:prepare_apply(id, 4)["prepared"]; return {row["choice"]["choice"], row["choice"]["program"], $change_manager:prepare_apply(id, 4)["counts"]["program"]};
+{"edited", "return 3;", 3}
+
+; const id = #0.preservation["id"]; $change_manager:resolve(id, 4, #0.preservation["b"]["id"], "local"); try $change_manager:apply(id, 5, #0.preservation["prepared"]); except error (E_INVARG) return error[3]["code"]; endtry return "accepted stale selection";
+"stale_preparation"
+
+// Refresh revalidates the unchanged draft against new review evidence.
+; const id = #0.preservation["id"]; set_verb_code(#9500, "c", {"return 7;"}); $change_manager:refresh(id, 5); const row = $change_manager:details(id, 6, #0.preservation["a"]["id"])["row"]; return {row["choice"]["program"], row["choice"]["validated"], row["needs_review"], $change_manager:details(id, 6, #0.preservation["b"]["id"])["row"]["choice"]["choice"]};
+{"return 3;", true, false, "local"}
+
+// A change to the edited member retains its draft but requires another decision.
+; const id = #0.preservation["id"]; set_verb_code(#9500, "a", {"return 9;"}); $change_manager:refresh(id, 6); const row = $change_manager:details(id, 7, #0.preservation["a"]["id"])["row"]; return {row["needs_review"], row["choice"]["choice"], row["recovery"]["choice"]["program"], $change_manager:prepare_apply(id, 7)["can_apply"]};
+{true, "defer", "return 3;", false}
+
+; const id = #0.preservation["id"]; try $change_manager:apply(id, 7); except error (E_INVARG) return error[3]["code"]; endtry return "applied without another check";
+"decision_needs_review"
+
+// Repeating refresh does not replace the recovered draft with the temporary defer choice.
+; const id = #0.preservation["id"]; $change_manager:refresh(id, 7); return $change_manager:recovery(id, 8)["items"][1]["choice"]["program"];
+"return 3;"
+
+; const id = #0.preservation["id"]; $change_manager:resolve(id, 8, #0.preservation["a"]["id"], "edited", "return 4;"); $change_manager:resolve(id, 9, #0.preservation["c"]["id"], "defer"); const prepared = $change_manager:prepare_apply(id, 10); return {prepared["counts"]["program"], prepared["counts"]["baseline"], prepared["counts"]["deferred"], prepared["can_apply"], $change_manager:apply(id, 10, prepared["prepared"])["status"]};
+{1, 1, 1, true, "applying"}
+
+; for i in [1..100] const state = $change_manager:status(#0.preservation["id"]); if (state["status"] != "applying") return {state["status"], #9500:a(), #9500:b(), #9500:c()}; endif suspend(0.01); endfor return "timed out";
+{"partial", 4, 1, 7}
+
+; const id = #0.preservation["id"]; const state = $change_manager:status(id); const result = $change_manager:finish(id, state["generation"]); return {result["status"], result["decision_count"], $change_manager:packages()["packages"]["preservation"]["active"], $change_manager:result(id, result["generation"])["decision_count"], #9500:a()};
+{"finished", 2, 0, 2, 4}
+
+// Finish does not accept the skipped upstream version.
+; const old = #0.preservation["id"]; const prior = $change_manager:history("preservation"); let source = dump_object(#9500); for i in [1..length(source)] if (index(source[i], "return 7;")) source[i] = "return 2;"; endif endfor const staged = $change_manager:stage("preservation", {["label" -> "probe.moo", "text" -> source]}); const rows = $change_manager:review(staged["review_id"], 1)["rows"]; const c = {row for row in (rows) if (row["names"][1] == "c")}[1]; return {c["classification"], prior["reviews"][$]["status"], staged["review_id"] != old};
+{"conflict", "finished", true}
+
+// Deferring and selecting a group restores explicit drafts without treating a deliberate defer as a conflict.
+; const id = $change_manager:packages()["packages"]["preservation"]["active"]; $change_manager:resolve(id, 1, #0.preservation["a"]["id"], "edited", "return 8;"); $change_manager:resolve_group(id, 2, "pair", "defer"); const row = $change_manager:details(id, 3, #0.preservation["a"]["id"])["row"]; return {row["needs_review"], row["choice"]["choice"], row["recovery"]["choice"]["program"]};
+{false, "defer", "return 8;"}
+
+; const id = $change_manager:packages()["packages"]["preservation"]["active"]; $change_manager:refresh(id, 3); $change_manager:resolve_group(id, 4, "pair", "incoming"); const row = $change_manager:details(id, 5, #0.preservation["a"]["id"])["row"]; return {row["choice"]["choice"], row["choice"]["program"], row["choice"]["validated"]};
+{"edited", "return 8;", true}
+
+// Revising property-initialization policy preserves an already edited dependent program.
+; load_object({"object #9501", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", "endobject"}); $change_manager:configure("initialization", {#9501}, []); const staged = $change_manager:stage("initialization", {["label" -> "init.moo", "text" -> dump_object(#9501)]}, "adopt"); #0.preservation["init"] = staged["review_id"]; return $change_manager:apply(staged["review_id"], 1)["status"];
+"applying"
+
+; for i in [1..100] if ($change_manager:status(#0.preservation["init"])["status"] == "complete") return true; endif suspend(0.01); endfor return false;
+true
+
+; const source = {"object #9501", tostr("owner: ", player), tostr("property setting (owner: ", player, ", flags: \"r\") = 42;"), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return this.setting;", "endverb", "endobject"}; const staged = $change_manager:stage("initialization", {["label" -> "init.moo", "text" -> source]}); const id = staged["review_id"]; #0.preservation["init"] = id; const rows = $change_manager:review(id, 1)["rows"]; const prop_row = {row for row in (rows) if (row["field"] == "property")}[1]; const verb_row = {candidate for candidate in (rows) if (candidate["field"] == "program")}[1]; #0.preservation["property"] = prop_row["id"]; #0.preservation["program"] = verb_row["id"]; $change_manager:initialize_property(id, 1, prop_row["id"]); $change_manager:set_group(id, 2, "initialization", {prop_row["member"], verb_row["member"]}); return $change_manager:resolve(id, 3, verb_row["id"], "edited", "return this.setting + 1;")["generation"];
+4
+
+; const id = #0.preservation["init"]; $change_manager:initialize_property(id, 4, #0.preservation["property"], true); const row = $change_manager:details(id, 5, #0.preservation["program"])["row"]; return {row["choice"]["program"], row["choice"]["validated"], row["needs_review"], #9501:test(), `#9501.setting ! E_PROPNF => "absent"'};
+{"return this.setting + 1;", true, false, 1, "absent"}
+
+@nonprogrammer
+; return $change_manager:prepare_apply(#0.preservation["id"], 1);
+E_PERM
+; return $change_manager:recovery(#0.preservation["id"], 1);
+E_PERM
+@quiet

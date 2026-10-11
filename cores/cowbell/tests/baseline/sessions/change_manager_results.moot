@@ -1,0 +1,32 @@
+// Whole-review summaries and complete results include members beyond the first page.
+@wizard
+; let source = {"object #9500", tostr("owner: ", player)}; for i in [1..60] source = {@source, tostr("verb test", i, " (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb"}; endfor source = {@source, "endobject"}; load_object(source); add_property(#0, "result_probe", [], {player, ""}); $change_manager:configure("results", {#9500}, []); #0.result_probe = $change_manager:stage("results", {["label" -> "many.moo", "text" -> source]}, "adopt"); const prepared = $change_manager:prepare_apply(#0.result_probe["review_id"], 1); return {prepared["counts"]["baseline"], prepared["counts"]["program"], length(prepared["effects"]), prepared["next"], $change_manager:apply(#0.result_probe["review_id"], 1, prepared["prepared"])["status"]};
+{60, 0, 50, 51, "applying"}
+
+; for i in [1..100] const state = $change_manager:status(#0.result_probe["review_id"]); if (state["status"] != "applying") return {state["status"], state["decision_count"], length(state["decisions"]), state["next_decision"]}; endif suspend(0.01); endfor return "timed out";
+{"complete", 60, 50, 51}
+
+; const id = #0.result_probe["review_id"]; const state = $change_manager:status(id); const tail = $change_manager:result(id, state["generation"], state["next_decision"]); return {tail["decision_count"], length(tail["decisions"]), tail["next_decision"], tail["decisions"][$]["effect"], $change_manager:apply(id, 1)["decision_count"]};
+{60, 10, 0, "baseline", 60}
+
+// Removing and recreating a verb must never transfer its saved edited program.
+; const staged = $change_manager:stage("results", {["label" -> "many.moo", "text" -> dump_object(#9500)]}); const row = $change_manager:review(staged["review_id"], 1)["rows"][1]; #0.result_probe = staged; #0.result_probe["row"] = row; return $change_manager:resolve(staged["review_id"], 1, row["id"], "edited", "return 42;")["generation"];
+2
+
+; const id = #0.result_probe["review_id"]; const old = #0.result_probe["row"]; delete_verb(#9500, old["names"][1]); add_verb(#9500, {player, "rxd", old["names"][1]}, {"this", "none", "this"}); set_verb_code(#9500, old["names"][1], {"return 99;"}); $change_manager:refresh(id, 2); const recovered = $change_manager:recovery(id, 3); const report = $change_manager:review(id, 3); const replacement = {row for row in (report["rows"]) if (row["names"] == old["names"])}; return {recovered["items"][1]["choice"]["program"], length(replacement), replacement[1]["id"] != old["id"], replacement[1]["choice"]};
+{"return 42;", 1, true, []}
+
+// Status and history retain a partial receipt when pending work is discarded.
+; const id = #0.result_probe["review_id"]; $change_manager:discard(id, 3); const staged = $change_manager:stage("results", {["label" -> "many.moo", "text" -> dump_object(#9500)]}, "adopt"); #0.result_probe = staged; const row = $change_manager:review(staged["review_id"], 1)["rows"][1]; $change_manager:resolve(staged["review_id"], 1, row["id"], "defer"); return $change_manager:apply(staged["review_id"], 2)["status"];
+"applying"
+
+; for i in [1..100] const state = $change_manager:status(#0.result_probe["review_id"]); if (state["status"] != "applying") return {state["status"], state["last_receipt"]["decision_count"]}; endif suspend(0.01); endfor return "timed out";
+{"partial", 59}
+
+; const id = #0.result_probe["review_id"]; const state = $change_manager:status(id); const closed = $change_manager:discard(id, state["generation"]); return {closed["status"], $change_manager:status(id)["decision_count"], length($change_manager:result(id, closed["generation"], 51)["decisions"])};
+{"discarded", 59, 9}
+
+@nonprogrammer
+; return $change_manager:result(#0.result_probe["review_id"], 1);
+E_PERM
+@quiet

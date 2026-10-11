@@ -267,10 +267,18 @@ fn evidence_changes_with_live_code_baseline_and_definition_attributes() {
         .unwrap();
     let second = inspect(world.as_ref(), SOURCE, "update", None);
     assert_ne!(get(&first, "evidence"), get(&second, "evidence"));
+    assert_ne!(
+        get(&row(&first), "revision"),
+        get(&row(&second), "revision")
+    );
     assert_eq!(get(&row(&second), "classification"), v_str("local"));
     stamp(world.as_mut());
     let third = inspect(world.as_ref(), SOURCE, "update", None);
     assert_ne!(get(&second, "evidence"), get(&third, "evidence"));
+    assert_ne!(
+        get(&row(&second), "revision"),
+        get(&row(&third), "revision")
+    );
     world
         .update_verb_with_id(
             &permissions(),
@@ -288,6 +296,10 @@ fn evidence_changes_with_live_code_baseline_and_definition_attributes() {
         .unwrap();
     let fourth = inspect(world.as_ref(), SOURCE, "update", None);
     assert_ne!(get(&third, "evidence"), get(&fourth, "evidence"));
+    assert_ne!(
+        get(&row(&third), "revision"),
+        get(&row(&fourth), "revision")
+    );
 }
 
 #[test]
@@ -311,6 +323,10 @@ fn details_preserve_evidence_and_unknown_options_fail() {
     )
     .unwrap();
     assert_eq!(get(&report, "evidence"), get(&detailed, "evidence"));
+    assert_eq!(
+        get(&row(&report), "revision"),
+        get(&row(&detailed), "revision")
+    );
     assert!(
         get(&row(&detailed), "live_text")
             .as_string()

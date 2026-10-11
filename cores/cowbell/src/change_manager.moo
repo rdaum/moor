@@ -328,14 +328,14 @@ object CHANGE_MANAGER [
     "Return status without source, drafts, or program bodies.";
     caller == this || raise(E_PERM);
     const {record} = args;
-    return ["schema" -> 1, "review_id" -> record["id"], "generation" -> record["generation"], "package" -> record["package"], "status" -> record["status"], "task" -> record["task"], "error" -> record["error"], "provenance" -> record["provenance"]];
+    return ["schema" -> 1, "review_id" -> record["id"], "generation" -> record["generation"], "package" -> record["package"], "status" -> record["status"], "task" -> record["task"], "error" -> record["error"], "provenance" -> record["provenance"], "recovery_count" -> length(`record["recovery"] ! E_RANGE => []')];
   endmethod
 
   method capabilities owner: ARCH_WIZARD
     "Describe the versioned review API and its limits.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "propose_objects", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "base_source", "set_group", "initialize_property", "resolve_group", "resolve", "apply", "refresh", "discard"}, "fields" -> {"program", "property", "object"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50];
+    return ["schema" -> 1, "operations" -> {"packages", "history", "configure", "propose_objects", "upstream", "stage", "status", "review", "inspection", "diagnostics", "details", "base_source", "set_group", "initialize_property", "resolve_group", "resolve", "prepare_apply", "apply", "refresh", "recovery", "result", "finish", "discard"}, "fields" -> {"program", "property", "object"}, "choices" -> {"incoming", "local", "edited", "defer"}, "transports" -> {"upload", "http", "git"}, "git_authorization" -> "wizard", "authorization" -> "administrator", "default_package" -> this.default_package, "max_source_bytes" -> 4194304, "max_pending_bytes" -> 33554432, "max_packages" -> 32, "page_rows" -> 50, "max_detail_bytes" -> 524288, "max_page_bytes" -> 262144, "receipt_decisions" -> 50, "retained_reviews" -> 64, "max_receipt_bytes" -> 33554432];
   endmethod
 
   method packages owner: ARCH_WIZARD
@@ -349,16 +349,18 @@ object CHANGE_MANAGER [
     "List retained completion summaries without source or decision bodies.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    const {name} = args;
+    const {name, ?offset = 1} = args;
+    typeof(offset) == TYPE_INT && offset >= 1 || raise(E_INVARG);
     maphaskey(this.packages, name) || raise(E_INVARG);
     let reviews = {};
     for id in (mapkeys(this.receipts))
       const receipt = this.receipts[id];
       if (receipt["package"] == name && (receipt["actor"] == auth[1] || auth[1].wizard))
-        reviews = {@reviews, ["review_id" -> id, "generation" -> receipt["generation"], "status" -> receipt["status"], "completed_at" -> receipt["completed_at"], "decision_count" -> receipt["decision_count"]]};
+        reviews = {@reviews, ["review_id" -> id, "generation" -> receipt["generation"], "status" -> receipt["status"], "completed_at" -> receipt["completed_at"], "decision_count" -> receipt["decision_count"], "actor" -> receipt["actor"], "provenance" -> receipt["provenance"]]};
       endif
     endfor
-    return ["schema" -> 1, "package" -> name, "reviews" -> reviews];
+    const page = reviews[offset..min(offset + 49, length(reviews))];
+    return ["schema" -> 1, "package" -> name, "total" -> length(reviews), "reviews" -> page, "next" -> offset + length(page) <= length(reviews) ? offset + length(page) | 0];
   endmethod
 
   method configure owner: ARCH_WIZARD
@@ -570,8 +572,7 @@ object CHANGE_MANAGER [
     const report = preview_objdef_changes(sources, record["request"]);
     provenance["digest"] = report["source_digest"];
     record["sources"] = sources;
-    record["report"] = report;
-    record["group_validation"] = report["group_validation"];
+    record = this:_reconcile_choices(record, report);
     record["provenance"] = provenance;
     record["status"] = "ready";
     record["error"] = [];
@@ -711,7 +712,7 @@ object CHANGE_MANAGER [
     if (maphaskey(this.receipts, id))
       const receipt = this.receipts[id];
       receipt["actor"] == auth[1] || auth[1].wizard || raise(E_PERM);
-      return receipt;
+      return this:_receipt_page(receipt, 1);
     endif
     let record = this:_get(auth, id);
     if (record["status"] in {"fetching", "applying"} && !valid_task(record["task"]))
@@ -724,7 +725,7 @@ object CHANGE_MANAGER [
     endif
     let summary = this:_summary(record);
     if (maphaskey(record, "last_receipt"))
-      summary["last_receipt"] = record["last_receipt"];
+      summary["last_receipt"] = this:_receipt_page(record["last_receipt"], 1);
     endif
     return summary;
   endmethod
@@ -739,7 +740,9 @@ object CHANGE_MANAGER [
     for row in (record["report"]["rows"])
       const saved = `record["choices"][row["id"]] ! E_RANGE => []';
       const kind = saved ? saved["choice"] | row["default"];
-      if (!row["eligible"])
+      if (this:_needs_review(record, row["id"]))
+        unresolved = unresolved + 1;
+      elseif (!row["eligible"])
         blocked = blocked + (row["classification"] != "unchanged" ? 1 | 0);
       elseif (kind == "unresolved" || kind == "edited" && !maphaskey(saved, "validation"))
         unresolved = unresolved + 1;
@@ -777,6 +780,7 @@ object CHANGE_MANAGER [
       const choice = `record["choices"][row["id"]] ! E_RANGE => []';
       row["label"] = row["field"] == "object" ? this:_command_label(row["object"], names) | row["field"] == "property" ? this:_command_label(row["object"], names) + "." + row["names"][1] | this:_command_label(row["object"], names, row["names"][1]);
       row["choice"] = choice ? ["choice" -> choice["choice"], "validated" -> maphaskey(choice, "validation")] | [];
+      row["needs_review"] = this:_needs_review(record, row["id"]);
       if (value_bytes(page) + value_bytes(row) > 262144)
         length(page) > 0 || raise(E_QUOTA, "Row exceeds the page limit.");
         next_offset = i;
@@ -787,7 +791,25 @@ object CHANGE_MANAGER [
         break;
       endif
     endfor
-    const groups = {["name" -> group["name"], "requires" -> group["requires"], "complete" -> group["complete"], "count" -> length(group["members"])] for group in (record["report"]["groups"])};
+    let groups = {};
+    let row_index = [];
+    for indexed in (rows)
+      row_index[indexed["id"]] = indexed;
+    endfor
+    for group in (record["report"]["groups"])
+      let selected = 0;
+      let needs_review = false;
+      for member in (group["members"])
+        const member_row = row_index[member];
+        const decision = `record["choices"][member]["choice"] ! E_RANGE => member_row["default"]';
+        if (decision in {"incoming", "local", "edited"})
+          selected = selected + 1;
+        endif
+        needs_review = needs_review || this:_needs_review(record, member) || decision == "unresolved" || (decision == "edited" && !maphaskey(record["choices"][member], "validation"));
+      endfor
+      const state = !group["complete"] ? "blocked" | needs_review ? "needs_review" | selected == 0 ? "deferred" | selected == length(group["members"]) ? "selected" | "partial";
+      groups = {@groups, ["name" -> group["name"], "requires" -> group["requires"], "complete" -> group["complete"], "count" -> length(group["members"]), "selected" -> selected, "status" -> state]};
+    endfor
     const next_cursor = next_offset <= length(rows) ? {id, generation, next_offset} | {};
     return ["schema" -> 1, "review_id" -> id, "generation" -> generation, "total" -> length(rows), "rows" -> page, "cursor" -> next_cursor, "counts" -> record["report"]["counts"], "decision_counts" -> this:_review_decisions(record), "groups" -> groups, "group_validation" -> `record["group_validation"] ! E_RANGE => {}', "operation" -> record["request"]["operation"], "diagnostic_count" -> length(record["report"]["diagnostics"]), "diagnostics" -> record["report"]["diagnostics"][1..min(50, length(record["report"]["diagnostics"]))], "provenance" -> record["provenance"]];
   endmethod
@@ -893,6 +915,8 @@ object CHANGE_MANAGER [
         row["label"] = row["field"] == "object" ? this:_command_label(row["object"], this:_command_names()) | row["field"] == "property" ? this:_command_label(row["object"], this:_command_names()) + "." + row["names"][1] | this:_command_label(row["object"], this:_command_names(), row["names"][1]);
         row["base_fetch_available"] = auth[1].wizard && `row["base_source"]["transport"] == "git" ! E_RANGE => false';
         row["choice"] = `record["choices"][row_id] ! E_RANGE => []';
+        row["recovery"] = `record["recovery"][row_id] ! E_RANGE => []';
+        row["needs_review"] = this:_needs_review(record, row_id);
         if (row["choice"])
           row["choice"]["validated"] = maphaskey(row["choice"], "validation");
         endif
@@ -943,7 +967,7 @@ object CHANGE_MANAGER [
   endmethod
 
   method set_group owner: ARCH_WIZARD
-    "Declare changes that must apply together; replace review evidence and clear earlier choices.";
+    "Declare changes that must apply together while preserving saved decisions.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
     const {id, generation, name, members, ?requires = {}} = args;
@@ -983,8 +1007,94 @@ object CHANGE_MANAGER [
     return this:_save_policy(record, policy, generation);
   endmethod
 
+  method _needs_review owner: ARCH_WIZARD
+    "Distinguish changed decisions from drafts saved when their group was deliberately deferred.";
+    caller == this || raise(E_PERM);
+    const {record, id} = args;
+    const saved = `record["recovery"][id] ! E_RANGE => []';
+    return length(saved) > 0 && `saved["needs_review"] ! E_RANGE => true';
+  endmethod
+
+  method _reconcile_choices owner: ARCH_WIZARD
+    "Retain decisions whose member identity and live revision still match; keep other drafts for recovery.";
+    caller == this || raise(E_PERM);
+    let {record, report} = args;
+    let choices = [];
+    let recovery = `record["recovery"] ! E_RANGE => []';
+    let bases = [];
+    const previous = `record["report"]["rows"] ! E_RANGE => {}';
+    let members = [];
+    for current in (report["rows"])
+      const candidates = `members[current["member"]] ! E_RANGE => {}';
+      members[current["member"]] = {@candidates, current};
+    endfor
+    for old in (previous)
+      const id = old["id"];
+      const matches = `members[old["member"]] ! E_RANGE => {}';
+      const same = length(matches) == 1 && matches[1]["id"] == id;
+      if (same && matches[1]["base"] == old["base"] && maphaskey(`record["base_sources"] ! E_RANGE => []', id))
+        bases[id] = record["base_sources"][id];
+      endif
+      if (!maphaskey(record["choices"], id))
+        continue;
+      endif
+      let choice = record["choices"][id];
+      if (maphaskey(recovery, id))
+        if (!same || `matches[1]["revision"] != old["revision"] ! E_RANGE => true')
+          recovery[id]["needs_review"] = true;
+        endif
+        same && (choices[id] = ["choice" -> "defer"]);
+        continue;
+      endif
+      const unchanged = same && `matches[1]["revision"] == old["revision"] ! E_RANGE => false';
+      if (unchanged && choice["choice"] in matches[1]["choices"])
+        if (maphaskey(choice, "validation"))
+          choice = mapdelete(choice, "validation");
+        endif
+        choices[id] = choice;
+      else
+        recovery[id] = ["id" -> id, "member" -> old["member"], "choice" -> choice, "reason" -> same ? "The contents or permissions changed. Check this saved decision again." | "This member is missing or has a different identity. Its saved decision was not attached to another member."];
+        same && (choices[id] = ["choice" -> "defer"]);
+      endif
+    endfor
+    record["choices"] = choices;
+    record["recovery"] = recovery;
+    record["base_sources"] = bases;
+    const validated = preview_objdef_changes(record["sources"], record["request"], choices);
+    for validation in (validated["validation"])
+      if (validation["valid"])
+        record["choices"][validation["id"]]["validation"] = validation["validation"];
+      endif
+    endfor
+    record["report"] = report;
+    record["group_validation"] = validated["group_validation"];
+    return record;
+  endmethod
+
+  method recovery owner: ARCH_WIZARD
+    "Read saved decisions that need another check, including drafts for members no longer present.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {id, generation, ?offset = 1} = args;
+    const record = this:_get(auth, id, generation);
+    typeof(offset) == TYPE_INT && offset >= 1 || raise(E_INVARG);
+    const saved = `record["recovery"] ! E_RANGE => []';
+    const keys = mapkeys(saved);
+    let page = {};
+    let next = offset;
+    for i in [offset..length(keys)]
+      const item = saved[keys[i]];
+      if (length(page) && (value_bytes(page) + value_bytes(item) > 524288 || length(page) >= 50))
+        break;
+      endif
+      page = {@page, item};
+      next = i + 1;
+    endfor
+    return ["schema" -> 1, "review_id" -> id, "generation" -> generation, "total" -> length(keys), "items" -> page, "next" -> next <= length(keys) ? next | 0];
+  endmethod
+
   method _save_policy owner: ARCH_WIZARD
-    "Save an already validated administrator policy edit and invalidate earlier choices.";
+    "Save administrator policy while preserving decisions and recoverable drafts.";
     caller == this || raise(E_PERM);
     let {record, policy, generation} = args;
     set_task_perms(record["authority"]);
@@ -996,10 +1106,7 @@ object CHANGE_MANAGER [
     package["generation"] = package["generation"] + 1;
     record["package_generation"] = package["generation"];
     record["generation"] = generation + 1;
-    record["report"] = report;
-    record["choices"] = [];
-    record["base_sources"] = [];
-    record["group_validation"] = report["group_validation"];
+    record = this:_reconcile_choices(record, report);
     record["status"] = "ready";
     record["error"] = [];
     value_bytes(this.pending) + value_bytes(record) <= 33554432 || raise(E_QUOTA);
@@ -1019,12 +1126,43 @@ object CHANGE_MANAGER [
     const groups = {group for group in (record["report"]["groups"]) if (group["name"] == name)};
     length(groups) == 1 || this:_error("missing_group", "No change group has that name.");
     kind == "defer" || groups[1]["complete"] || this:_error("incomplete_group", "Some required changes are missing or blocked. Resolve those problems before selecting this group.");
+    let row_index = [];
+    for indexed in (record["report"]["rows"])
+      row_index[indexed["id"]] = indexed;
+    endfor
     for row_id in (groups[1]["members"])
-      const selected = {row for row in (record["report"]["rows"]) if (row["id"] == row_id)}[1];
+      const selected = row_index[row_id];
+      if (kind == "incoming" && this:_needs_review(record, row_id))
+        continue;
+      endif
+      if (kind == "incoming" && `record["recovery"][row_id]["group_deferred"] ! E_RANGE => false')
+        record["choices"][row_id] = record["recovery"][row_id]["choice"];
+        record["recovery"] = mapdelete(record["recovery"], row_id);
+        if (maphaskey(`record["group_choices"] ! E_RANGE => []', row_id))
+          record["group_choices"] = mapdelete(record["group_choices"], row_id);
+        endif
+        continue;
+      endif
+      if (kind == "incoming" && maphaskey(record["choices"], row_id) && !maphaskey(`record["group_choices"] ! E_RANGE => []', row_id))
+        continue;
+      endif
+      if (kind == "defer" && `record["choices"][row_id]["choice"] != "defer" ! E_RANGE => false' && !maphaskey(`record["recovery"] ! E_RANGE => []', row_id))
+        let saved = `record["recovery"] ! E_RANGE => []';
+        saved[row_id] = ["id" -> row_id, "member" -> selected["member"], "choice" -> record["choices"][row_id], "reason" -> "This group was deferred. Its previous decision is saved here.", "needs_review" -> false, "group_deferred" -> true];
+        record["recovery"] = saved;
+      endif
       record["choices"][row_id] = ["choice" -> kind == "incoming" && `selected["operation"] ! E_RANGE => ""' in {"retain_property", "retain_object"} ? "local" | kind];
+      let group_choices = `record["group_choices"] ! E_RANGE => []';
+      group_choices[row_id] = name;
+      record["group_choices"] = group_choices;
     endfor
     const current = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
     current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before choosing.");
+    for validation in (current["validation"])
+      if (validation["valid"])
+        record["choices"][validation["id"]]["validation"] = validation["validation"];
+      endif
+    endfor
     record["group_validation"] = current["group_validation"];
     record["generation"] = generation + 1;
     record["status"] = "ready";
@@ -1047,6 +1185,12 @@ object CHANGE_MANAGER [
       choice["program"] = program;
     endif
     record["choices"][row_id] = choice;
+    if (maphaskey(`record["group_choices"] ! E_RANGE => []', row_id))
+      record["group_choices"] = mapdelete(record["group_choices"], row_id);
+    endif
+    if (maphaskey(`record["recovery"] ! E_RANGE => []', row_id))
+      record["recovery"] = mapdelete(record["recovery"], row_id);
+    endif
     const current = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
     current["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before choosing.");
     for validation in (current["validation"])
@@ -1064,15 +1208,13 @@ object CHANGE_MANAGER [
   endmethod
 
   method refresh owner: ARCH_WIZARD
-    "Create new evidence from saved input and discard all earlier choices.";
+    "Compare saved input again while preserving decisions and drafts for review.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
     const {id, generation} = args;
     let record = this:_get(auth, id, generation);
     !(record["status"] in {"fetching", "applying"}) || this:_error("busy", "Task is still running.");
     length(record["sources"]) > 0 || this:_error("missing_source", "Discard this failed fetch and stage again.");
-    record["choices"] = [];
-    record["base_sources"] = [];
     record["generation"] = generation + 1;
     return this:_save_ready(record, record["sources"], record["provenance"]);
   endmethod
@@ -1081,7 +1223,7 @@ object CHANGE_MANAGER [
     "Start one dedicated application task; success is reported only by a committed receipt.";
     const auth = this:_entry(caller_perms());
     set_task_perms(auth[2]);
-    const {id, generation} = args;
+    const {id, generation, ?prepared = []} = args;
     if (maphaskey(this.receipts, id))
       return this:status(id);
     endif
@@ -1091,6 +1233,10 @@ object CHANGE_MANAGER [
     endif
     record["generation"] == generation || this:_error("stale_generation", "Review choices changed.");
     record["status"] in {"ready", "partial"} || this:_error("not_ready", "Review is not ready.");
+    !prepared || prepared == this:_apply_guard(record) || this:_error("stale_preparation", "The prepared selection changed. Read its effects again.");
+    for row in (record["report"]["rows"])
+      !this:_needs_review(record, row["id"]) || this:_error("decision_needs_review", "Check the saved decisions affected by changed contents before applying.");
+    endfor
     record["generation"] = generation + 1;
     record["status"] = "applying";
     record["error"] = [];
@@ -1104,6 +1250,75 @@ object CHANGE_MANAGER [
     return this:_summary(record);
   endmethod
 
+  method _apply_guard owner: ARCH_WIZARD
+    "Bind an apply summary to the review selection, policy, source, and live evidence.";
+    caller == this || raise(E_PERM);
+    const {record} = args;
+    return ["review_id" -> record["id"], "generation" -> record["generation"], "package_generation" -> record["package_generation"], "evidence" -> record["report"]["evidence"]];
+  endmethod
+
+  method _effects owner: ARCH_WIZARD
+    "Describe every member's outcome, including defaults on pages the administrator has not opened.";
+    caller == this || raise(E_PERM);
+    const {record, validation} = args;
+    let effects = {};
+    const names = this:_command_names();
+    let checked = [];
+    for item in (validation)
+      checked[item["id"]] = item;
+    endfor
+    for row in (record["report"]["rows"])
+      const saved = `record["choices"][row["id"]] ! E_RANGE => []';
+      const kind = saved ? saved["choice"] | row["default"];
+      const operation = `row["operation"] ! E_RANGE => "program"';
+      let effect = "deferred";
+      if (!row["eligible"])
+        effect = row["classification"] == "unchanged" ? "retained" | "blocked";
+      elseif (kind in {"incoming", "local", "edited"})
+        if (operation in {"retain_property", "retain_object"})
+          effect = "retained";
+        elseif (record["request"]["operation"] == "adopt")
+          effect = "baseline";
+        elseif (operation in {"add_object", "add_property", "add_verb"})
+          effect = operation;
+        elseif (kind == "local" || (kind == "incoming" && row["incoming"] == row["live"]))
+          effect = "baseline";
+        elseif (kind == "edited")
+          const check = `checked[row["id"]] ! E_RANGE => []';
+          effect = length(check) && check["valid"] && check["fingerprint"] == row["live"] ? "baseline" | "program";
+        else
+          effect = "program";
+        endif
+      elseif (row["classification"] in {"unchanged", "local"} && kind == "defer")
+        effect = "retained";
+      endif
+      const label = row["field"] == "object" ? this:_command_label(row["object"], names) | row["field"] == "property" ? this:_command_label(row["object"], names) + "." + row["names"][1] | this:_command_label(row["object"], names, row["names"][1]);
+      effects = {@effects, ["id" -> row["id"], "member" -> row["member"], "label" -> label, "field" -> row["field"], "choice" -> kind, "defaulted" -> !saved, "effect" -> effect]};
+    endfor
+    return effects;
+  endmethod
+
+  method prepare_apply owner: ARCH_WIZARD
+    "Read exact effects before apply. Counts cover all members; the list is paginated.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {id, generation, ?offset = 1} = args;
+    const record = this:_get(auth, id, generation);
+    record["status"] in {"ready", "partial", "rejected"} || this:_error("not_ready", "Review is not ready.");
+    typeof(offset) == TYPE_INT && offset >= 1 || raise(E_INVARG);
+    const report = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
+    report["evidence"] == record["report"]["evidence"] || this:_error("stale_review", "Live state changed. Refresh before preparing an update.");
+    const effects = this:_effects(record, report["validation"]);
+    let counts = ["program" -> 0, "add_verb" -> 0, "add_property" -> 0, "add_object" -> 0, "baseline" -> 0, "retained" -> 0, "deferred" -> 0, "blocked" -> 0];
+    for effect in (effects)
+      counts[effect["effect"]] = counts[effect["effect"]] + 1;
+    endfor
+    const decisions = this:_review_decisions(record);
+    const page = effects[offset..min(offset + 49, length(effects))];
+    value_bytes(page) <= 262144 || raise(E_QUOTA, "Effect page exceeds the service limit.");
+    return ["schema" -> 1, "review_id" -> id, "generation" -> generation, "prepared" -> this:_apply_guard(record), "counts" -> counts, "can_apply" -> decisions["selected"] > 0 && decisions["unresolved"] == 0, "decision_counts" -> decisions, "total" -> length(effects), "effects" -> page, "next" -> offset + length(page) <= length(effects) ? offset + length(page) | 0, "provenance" -> record["provenance"]];
+  endmethod
+
   method _apply owner: ARCH_WIZARD
     "Commit content, baselines, and a source-free receipt together, or abort the task.";
     caller == this || raise(E_PERM);
@@ -1112,6 +1327,8 @@ object CHANGE_MANAGER [
     set_task_perms(record["authority"]);
     let wrote = false;
     try
+      const preview = preview_objdef_changes(record["sources"], record["request"], record["choices"]);
+      const effects = this:_effects(record, preview["validation"]);
       const result = apply_objdef_changes(record["sources"], record["request"], record["report"]["evidence"], record["choices"]);
       wrote = true;
       let members = `this.packages[record["package"]]["members"] ! E_RANGE => []';
@@ -1176,26 +1393,29 @@ object CHANGE_MANAGER [
       let receipt = ["schema" -> 1, "review_id" -> id, "generation" -> record["generation"], "package" -> record["package"], "status" -> record["status"], "task" -> 0, "error" -> []];
       receipt["actor"] = record["actor"];
       receipt["provenance"] = record["provenance"];
-      receipt["decision_count"] = length(result["decisions"]);
       let labels = [];
-      for row in (record["report"]["rows"])
-        labels[row["id"]] = tostr(row["object"], ":", row["names"][1]);
+      for effect in (effects)
+        labels[effect["id"]] = effect;
       endfor
-      let decisions = {};
-      for decision in (result["decisions"][1..min(50, length(result["decisions"]))])
-        decision["label"] = labels[decision["id"]];
+      let decisions = `record["last_receipt"]["decisions"] ! E_RANGE => {}';
+      for decision in (result["decisions"])
+        const effect = labels[decision["id"]];
+        decision["label"] = effect["label"];
+        decision["member"] = effect["member"];
+        decision["field"] = effect["field"];
+        decision["effect"] = effect["effect"];
+        decision["applied_generation"] = generation;
         decisions = {@decisions, decision};
       endfor
+      receipt["decision_count"] = length(decisions);
       receipt["decisions"] = decisions;
       receipt["source_digest"] = record["report"]["source_digest"];
       receipt["completed_at"] = time();
       if (deferred)
         this.pending[id]["last_receipt"] = receipt;
+        value_bytes(this.pending) <= 33554432 || raise(E_QUOTA, "Pending review storage is full.");
       else
-        this.receipts[id] = receipt;
-        if (length(this.receipts) > 64)
-          this.receipts = mapdelete(this.receipts, mapkeys(this.receipts)[1]);
-        endif
+        this:_store_receipt(receipt);
       endif
     except failure (ANY)
       if (wrote)
@@ -1217,9 +1437,94 @@ object CHANGE_MANAGER [
     const {id, generation} = args;
     const record = this:_get(auth, id, generation);
     record["status"] != "applying" || this:_error("busy", "Apply is running. Query status before discarding.");
-    this.pending = mapdelete(this.pending, id);
+    return this:_close_review(record, "discarded");
+  endmethod
+
+  method finish owner: ARCH_WIZARD
+    "Finish a review without accepting deferred baselines or undoing committed changes.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {id, generation} = args;
+    if (maphaskey(this.receipts, id))
+      return this:status(id);
+    endif
+    const record = this:_get(auth, id, generation);
+    !(record["status"] in {"fetching", "applying"}) || this:_error("busy", "Wait for the running operation before finishing.");
+    return this:_close_review(record, "finished");
+  endmethod
+
+  method _close_review owner: ARCH_WIZARD
+    "Keep earlier committed effects in history when closing a partial or abandoned review.";
+    caller == this || raise(E_PERM);
+    const {record, state} = args;
+    let receipt = `record["last_receipt"] ! E_RANGE => ["schema" -> 1, "review_id" -> record["id"], "package" -> record["package"], "actor" -> record["actor"], "provenance" -> record["provenance"], "decision_count" -> 0, "decisions" -> {}]';
+    receipt["generation"] = record["generation"] + 1;
+    receipt["status"] = state;
+    receipt["task"] = 0;
+    receipt["error"] = [];
+    receipt["completed_at"] = time();
+    if (state != "discarded" || receipt["decision_count"] > 0)
+      this:_store_receipt(receipt);
+    endif
+    this.pending = mapdelete(this.pending, record["id"]);
     this.packages[record["package"]]["active"] = 0;
-    return ["schema" -> 1, "review_id" -> id, "status" -> "discarded"];
+    return this:_receipt_page(receipt, 1);
+  endmethod
+
+  method _store_receipt owner: ARCH_WIZARD
+    "Retain whole results, evicting older reviews at 64 reviews or 32 MiB, never truncating decisions.";
+    caller == this || raise(E_PERM);
+    const {receipt} = args;
+    value_bytes(receipt) <= 33554432 || raise(E_QUOTA, "The complete result exceeds receipt storage. Finish this review before another apply.");
+    this.receipts[receipt["review_id"]] = receipt;
+    while (length(this.receipts) > 64 || value_bytes(this.receipts) > 33554432)
+      let oldest = 0;
+      for id in (mapkeys(this.receipts))
+        if (id != receipt["review_id"] && (!oldest || this.receipts[id]["completed_at"] < this.receipts[oldest]["completed_at"]))
+          oldest = id;
+        endif
+      endfor
+      oldest || raise(E_QUOTA);
+      this.receipts = mapdelete(this.receipts, oldest);
+    endwhile
+  endmethod
+
+  method _receipt_page owner: ARCH_WIZARD
+    "Bound returned result bodies while retaining all decisions in storage.";
+    caller == this || raise(E_PERM);
+    let {receipt, offset} = args;
+    typeof(offset) == TYPE_INT && offset >= 1 || raise(E_INVARG);
+    const all = receipt["decisions"];
+    receipt["decisions"] = {};
+    for i in [offset..min(offset + 49, length(all))]
+      if (value_bytes(receipt) + value_bytes(all[i]) > 262000)
+        length(receipt["decisions"]) || raise(E_QUOTA, "One decision exceeds the result page limit.");
+        break;
+      endif
+      receipt["decisions"] = {@receipt["decisions"], all[i]};
+    endfor
+    receipt["next_decision"] = offset + length(receipt["decisions"]) <= length(all) ? offset + length(receipt["decisions"]) | 0;
+    value_bytes(receipt) <= 262144 || raise(E_QUOTA, "Result page exceeds the service limit.");
+    return receipt;
+  endmethod
+
+  method result owner: ARCH_WIZARD
+    "Read a generation-bound page of committed decisions, including earlier partial applications.";
+    const auth = this:_entry(caller_perms());
+    set_task_perms(auth[2]);
+    const {id, generation, ?offset = 1} = args;
+    let receipt = [];
+    if (maphaskey(this.receipts, id))
+      receipt = this.receipts[id];
+      receipt["actor"] == auth[1] || auth[1].wizard || raise(E_PERM);
+    else
+      const record = this:_get(auth, id, generation);
+      receipt = `record["last_receipt"] ! E_RANGE => []';
+      length(receipt) || this:_error("no_result", "This review has not applied any changes.");
+      receipt["generation"] = record["generation"];
+    endif
+    receipt["generation"] == generation || this:_error("stale_generation", "The result changed. Read its status again.");
+    return this:_receipt_page(receipt, offset);
   endmethod
 
   method _notify_review owner: ARCH_WIZARD
@@ -1396,7 +1701,7 @@ object CHANGE_MANAGER [
     if (status == "failed")
       return {@output, $format.list:actions({this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard failed review")})};
     endif
-    return {@output, $format.list:actions({this:_command_action(tostr("@changes refresh ", id, " ", generation), "Refresh review (clears choices)"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard review")})};
+    return {@output, $format.list:actions({this:_command_action(tostr("@changes refresh ", id, " ", generation), "Refresh review"), this:_command_action(tostr("@changes discard ", id, " ", generation), "Discard review")})};
   endmethod
 
   method _command_diff owner: ARCH_WIZARD

@@ -228,7 +228,7 @@ test("HTTP apply with a lost response recovers the same committed receipt", asyn
     expect(await page.evaluate(id => window.changes.invoke("status", [id]), review)).toEqual(receipt);
 });
 
-test("a live edit rejects apply, and refresh clears choices only after confirmation", async ({ page }) => {
+test("a live edit rejects apply, and confirmed refresh preserves unaffected choices", async ({ page }) => {
     await login(page);
     await configure(page, "git");
     const review = await stage(page);
@@ -267,7 +267,9 @@ test("a live edit rejects apply, and refresh clears choices only after confirmat
         const client = window.changes.client(id);
         return client.page((await client.status()).generation);
     }, review);
-    expect(refreshed.rows.every(row => row.choice === undefined)).toBe(true);
+    for (const row of before.page.rows.filter(row => row.choice)) {
+        expect(refreshed.rows.find(current => current.id === row.id)?.choice).toEqual(row.choice);
+    }
     expect(refreshed.rows.find(row => row.memberLabel === ":upstream")?.classification).toBe("conflict");
 });
 
@@ -522,9 +524,9 @@ test("historical Git retrieval rechecks authority after worker suspension", asyn
     expect(
         await administrator.evaluate(id =>
             window.changes.evaluate(
-                `return maphaskey($change_manager.pending[${id}], "base_sources");`,
+                `return length($change_manager.pending[${id}]["base_sources"]) == 0;`,
             ), review),
-    ).toBe(false);
+    ).toBe(true);
     expect(await programs(administrator)).toEqual([1, 3, 3, 3, 3]);
     await administrator.close();
 });
@@ -550,7 +552,7 @@ test("a declared group installs a helper and property with its caller through Me
     await expect(page.getByRole("region", { name: "Property initialization" })).toContainText(
         "Existing data stays unchanged",
     );
-    await page.getByRole("button", { name: "Permit initialization and clear choices", exact: true }).click();
+    await page.getByRole("button", { name: "Permit initialization", exact: true }).click();
     await expect(page.getByText("Absent-only initialization is already permitted.")).toBeVisible();
     await expect(page.getByRole("button", { name: /:added_helper, Verb/ })).toHaveCount(1);
     await page.getByRole("button", { name: /:added_helper, Verb/ }).click();
@@ -565,7 +567,7 @@ test("a declared group installs a helper and property with its caller through Me
     await editor.getByRole("checkbox", { name: "#9500:upstream — existing program", exact: true }).check();
     await editor.getByRole("checkbox", { name: "#9500 (Acceptance package).item_schema — new property", exact: true })
         .check();
-    await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();
+    await editor.getByRole("button", { name: "Save group", exact: true }).click();
     await expect(editor).toHaveCount(0);
     await page.getByRole("button", { name: "Select helper-update", exact: true }).click();
     await expect(page.getByRole("button", { name: "Apply 3 choices", exact: true })).toBeEnabled();
@@ -622,7 +624,7 @@ test("workspace binds a new object before preview and installs it without initia
     const editor = page.getByRole("dialog", { name: "Create group", exact: true });
     await editor.getByLabel("Group name").fill("install-helper");
     await editor.getByRole("checkbox", { name: "#9600 — new object and contents", exact: true }).check();
-    await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();
+    await editor.getByRole("button", { name: "Save group", exact: true }).click();
     await page.getByRole("button", { name: "Select install-helper", exact: true }).click();
     await page.getByRole("button", { name: "Apply 1 choice", exact: true }).click();
     await page.getByRole("button", { name: "Confirm apply", exact: true }).click();

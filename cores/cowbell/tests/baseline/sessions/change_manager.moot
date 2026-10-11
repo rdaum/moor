@@ -212,7 +212,7 @@ E_PERM
 
 @wizard
 ; const id = #0.changes_probe["review_id"]; $change_manager:refresh(id, 3); const row = $change_manager:details(id, 4, #0.changes_probe["row"])["row"]; $change_manager:discard(id, 4); return {row["base_text_available"], #9503:test(), maphaskey($change_manager.pending, id)};
-{false, 13, false}
+{true, 13, false}
 
 // New verbs require an explicit group with the caller that needs them.
 @wizard

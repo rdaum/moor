@@ -177,18 +177,18 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
                     </fieldset>
                 )}
                 <p>
-                    Saving or removing a group clears this review's saved choices. It changes package rules, but it does
-                    not change running code.
+                    Saving or removing a group preserves your decisions and drafts. Decisions affected by changed rules
+                    need another check. Running code stays unchanged.
                 </p>
                 <div className="change-group-actions">
                     <button type="button" disabled={busy} onClick={close}>Cancel</button>
                     {group && (
                         <button type="button" disabled={busy} onClick={() => void save(true)}>
-                            Remove group and clear choices
+                            Remove group
                         </button>
                     )}
                     <button type="button" disabled={busy || !name.trim() || !members.size} onClick={() => void save()}>
-                        Save group and clear choices
+                        Save group
                     </button>
                 </div>
             </div>

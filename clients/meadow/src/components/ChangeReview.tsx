@@ -855,7 +855,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                                                             || ((row.descendants ?? 0) > 0 && !allowDescendants)}
                                                         onClick={() => void initializeProperty()}
                                                     >
-                                                        Permit initialization and clear choices
+                                                        Permit initialization
                                                     </button>
                                                 )}
                                                 {row.initialization_approved && (
@@ -1174,7 +1174,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                             {confirmation === "discard"
                                 ? "Discard the unsaved draft?"
                                 : confirmation === "refresh"
-                                ? "Compare the fetched source with the running MOO again? This clears all saved choices and any unsaved draft."
+                                ? "Compare the fetched source with the running MOO again? Saved decisions are checked again. This discards the unsaved draft."
                                 : page?.operation === "adopt"
                                 ? `Accept ${selectedCount} baselines? Live code will stay as it is.`
                                 : `Apply ${selectedCount} choices to the running MOO?`}

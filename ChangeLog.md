@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased 2.0 series (`main`) branch
 
+- Cowbell change reviews preserve decisions and drafts when groups or policy change. Refresh keeps
+  unaffected decisions and retains changed drafts for another check. Apply summaries cover every
+  selected effect. Administrators can finish partial reviews without accepting deferred changes, and
+  retained results include all decisions through pagination.
+
 ### Changed
 
 - Cowbell change reviews can create objects at explicitly chosen IDs. Preview reserves no IDs, and
