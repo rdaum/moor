@@ -313,21 +313,113 @@
   cursor: progress;
 }
 
-.change-review-source {
+/* Secondary views share the comparison's space, rather than shrinking it. */
+.change-review-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border-medium);
+  padding-bottom: 8px;
   flex-shrink: 0;
-  max-height: 25vh;
+}
+
+.change-review-nav > button {
+  background: transparent;
+  border-color: transparent;
+}
+
+.change-review-nav > button[aria-pressed="true"] {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border-medium);
+  font-weight: 600;
+}
+
+.change-review-nav > .change-review-new-group {
+  margin-left: auto;
+}
+
+.change-review-workspace[hidden] {
+  display: none;
+}
+
+.change-review-details {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
+  padding: 4px 0 16px;
   overflow-wrap: anywhere;
 }
 
-.change-review-source dl > div {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+.change-review-details h3 {
+  margin: 0 0 8px;
 }
 
-.change-review-source dd {
-  margin: 0;
+.change-review-details p {
+  margin: 0 0 16px;
+  color: var(--color-text-secondary);
+  max-width: 75ch;
+}
+
+.change-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.change-review-table th, .change-review-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+  text-align: left;
+}
+
+.change-review-table thead th {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.change-review-table tbody th {
+  font-weight: 500;
+}
+
+.change-review-table small {
+  display: block;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  font-weight: normal;
+}
+
+.change-review-source-table {
+  table-layout: fixed;
+}
+
+.change-review-source-table th {
+  width: 160px;
+  color: var(--color-text-secondary);
+}
+
+.change-review-note {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+
+.change-review-note summary {
+  padding: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.change-review-note summary span {
+  color: var(--color-text-secondary);
+}
+
+.change-review-note > p {
+  padding: 0 12px;
 }
 
 .change-review-base-source {
@@ -368,20 +460,15 @@
   font-size: 0.875rem;
 }
 
-.change-review-groups {
-  padding: 8px;
-  border-bottom: 1px solid var(--color-border-medium);
-  max-height: 220px;
-  overflow: auto;
-}
-
-.change-review-group,
 .change-group-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 8px 0;
+}
+
+.change-group-editor .change-group-actions {
+  margin-top: 16px;
 }
 
 .change-group-editor fieldset {

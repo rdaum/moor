@@ -272,7 +272,7 @@ that selection. Selecting the group installs the helper and updates the caller i
 
 In Meadow:
 
-1. Open the review and select **Create a change group**.
+1. Open the review and select **Create group**.
 2. Enter a name and select all required changes.
 3. If another group must apply too, select it under **Other groups required by this group**.
 4. Save the group. This clears previous choices in the review without changing running code.
@@ -379,9 +379,12 @@ opens saved reviews, discards pending reviews after confirmation, and lists reta
 reviews. Configuration saves use the generation observed when the form opened. A concurrent
 configuration change rejects the save and preserves the form for inspection.
 
-The review's **Source and checks** panel shows provenance, unsupported changes, and committed
-outcomes. Edited drafts show compiler diagnostics in the Monaco editor. Reopening an invalid saved
-draft restores its diagnostics. Changing the draft clears markers for the previous text.
+The review opens on **Changes**. **Upstream source** identifies the repository, revision, or URL.
+**Left unchanged** groups unsupported fields by reason. **Groups** appears only when groups exist.
+**Results** lists the choices from a completed apply. These views leave the comparison area
+available for code. Edited drafts show compiler diagnostics in the Monaco editor. Reopening an
+invalid saved draft restores its diagnostics. Changing the draft clears markers for the previous
+text.
 
 Meadow protects unsaved drafts during navigation and browser reload. After reconnect, it reads the
 current review state. If another client changed the review, Meadow retains unsaved text and requires

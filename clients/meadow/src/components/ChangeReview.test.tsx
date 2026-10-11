@@ -77,6 +77,7 @@ let saved: Record<string, unknown>;
 let rejectChoice: boolean;
 let applied: boolean;
 let reviewStatus: string;
+let diagnosticRows: { code: string; label: string }[];
 
 beforeEach(() => {
     capabilities = defaultCapabilities;
@@ -85,16 +86,33 @@ beforeEach(() => {
     rejectChoice = false;
     applied = false;
     reviewStatus = "ready";
+    diagnosticRows = [];
     vi.mocked(invokeVerbFlatBuffer).mockReset().mockImplementation(async (_token, _provider, method, bytes) => {
         const args = new MoorVar(Var.getRootAsVar(new ByteBuffer(bytes!))).toJS() as unknown[];
         if (method === "capabilities") return { result: capabilities, output: [] };
         if (method === "diagnostics") {
-            return { result: { schema: 1, review_id: 1, generation, diagnostics: [], total: 0, next: 0 }, output: [] };
+            return {
+                result: {
+                    schema: 1,
+                    review_id: 1,
+                    generation,
+                    diagnostics: diagnosticRows,
+                    total: diagnosticRows.length,
+                    next: 0,
+                },
+                output: [],
+            };
         }
         const common = { schema: 1, review_id: 1, generation };
         if (method === "status") {
             return {
-                result: { ...common, package: "cowbell", status: applied ? "complete" : reviewStatus, error: {} },
+                result: {
+                    ...common,
+                    package: "cowbell",
+                    status: applied ? "complete" : reviewStatus,
+                    error: {},
+                    provenance: { transport: "http", url: "https://example.test/core.moo" },
+                },
                 output: [],
             };
         }
@@ -351,4 +369,35 @@ it("offers explicit recovery for an interrupted apply without needing a failed r
     await screen.findByRole("heading", { name: "$test:verb" });
     expect(generation).toBe(2);
     expect(applied).toBe(false);
+});
+
+it("keeps source details and empty groups out of the comparison", async () => {
+    capabilities = { ...defaultCapabilities, operations: [...defaultCapabilities.operations, "set_group"] };
+    diagnosticRows = [
+        { code: "property_fields_unmanaged", label: "$first" },
+        { code: "property_fields_unmanaged", label: "$second" },
+    ];
+    open();
+    await screen.findByRole("heading", { name: "$test:verb" });
+    expect(screen.queryByRole("button", { name: /^Groups/ })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByRole("button", { name: "Create group" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Upstream source" }));
+    expect(screen.getByRole("row", { name: "URL https://example.test/core.moo" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "$test:verb" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Left unchanged" }));
+    expect(screen.getByText("Existing property values and overrides")).toBeTruthy();
+    expect(screen.getAllByText(/Existing property values and overrides remain unchanged/)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    expect(screen.getByRole("heading", { name: "$test:verb" })).toBeTruthy();
+});
+
+it("preserves the unsaved editor when viewing source details", async () => {
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit resolution" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Proposed program" }), { target: { value: "return 987;" } });
+    fireEvent.click(screen.getByRole("button", { name: "Upstream source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+    expect(screen.getByRole("textbox", { name: "Proposed program" })).toHaveProperty("value", "return 987;");
+    expect(saved).toEqual({});
 });

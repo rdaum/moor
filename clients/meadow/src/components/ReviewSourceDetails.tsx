@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-import type { DiagnosticPage, ReviewStatus } from "../lib/change-review";
+import type { DiagnosticPage, ReviewDiagnostic, ReviewStatus } from "../lib/change-review";
 
 const explanations: Record<string, string> = {
     missing_source: "No upstream definition was supplied for this object.",
@@ -29,13 +29,13 @@ const explanations: Record<string, string> = {
         "Existing property values and overrides remain unchanged. Only approved absent properties can be created.",
 };
 const sourceFields: Record<string, string> = {
-    transport: "Transport",
     repository: "Repository",
-    revision: "Requested revision",
-    commit: "Resolved commit",
-    tree: "Tree",
-    path: "Subdirectory",
     url: "URL",
+    revision: "Branch or revision",
+    commit: "Commit",
+    path: "Subdirectory",
+    transport: "Fetched with",
+    tree: "Tree",
     etag: "ETag",
     digest: "Source digest",
 };
@@ -45,67 +45,134 @@ const outcomes: Record<string, string> = {
     edited: "Used edited program",
     defer: "Deferred",
 };
-export function ReviewSourceDetails({ status, diagnostics, busy, onMore }: {
+const noteTitles: Record<string, string> = {
+    missing_source: "Objects missing from the source",
+    live_definition_unmatched: "Local verbs missing from the source",
+    unsupported_creation: "New objects without an assigned ID",
+    outside_managed_scope: "Objects outside this package",
+    unsupported_removal: "Removals are not supported",
+    unsupported_or_ambiguous_definition: "Verb definitions that cannot be matched",
+    definition_fields_unmanaged: "Verb ownership, permissions, and metadata",
+    property_fields_unmanaged: "Existing property values and overrides",
+};
+function sourceValue(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        return Object.entries(value).map(([key, entry]) =>
+            key === "ref" || key === "commit" ? String(entry) : `${key}: ${String(entry)}`
+        ).join(", ");
+    }
+    return String(value);
+}
+
+export function ReviewSourceDetails({ view, status, diagnostics, busy, onMore }: {
+    view: "source" | "unchanged" | "results";
     status: ReviewStatus | null;
     diagnostics: DiagnosticPage | null;
     busy: boolean;
     onMore: () => void;
 }) {
-    const provenance = Object.entries(status?.provenance ?? {}).filter(([key]) => Object.hasOwn(sourceFields, key));
+    const provenance = Object.keys(sourceFields)
+        .map(key => [key, status?.provenance?.[key]] as const)
+        .filter(([, value]) => value != null && sourceValue(value) !== "");
     const receipt = status?.receipt;
+    const notes = new Map<string, ReviewDiagnostic[]>();
+    for (const item of diagnostics?.rows ?? []) {
+        notes.set(item.code, [...(notes.get(item.code) ?? []), item]);
+    }
     return (
-        <details className="change-review-source">
-            <summary>Source and checks{diagnostics ? ` (${diagnostics.total})` : ""}</summary>
-            <p>
-                Apply updates selected programs and installs declared object, verb, and property additions. Grouping
-                does not establish compatibility with omitted structural changes.
-            </p>
-            {provenance.length > 0 && (
-                <dl>
-                    {provenance.map(([key, value]) => (
-                        <div key={key}>
-                            <dt>{sourceFields[key]}</dt>
-                            <dd>{typeof value === "string" ? value : JSON.stringify(value)}</dd>
-                        </div>
-                    ))}
-                </dl>
-            )}
-            {diagnostics && (
+        <section
+            className="change-review-details"
+            aria-label={view === "source" ? "Upstream source" : view === "results" ? "Apply receipt" : "Left unchanged"}
+        >
+            {view === "source" && (
                 <>
-                    {diagnostics.rows.map((item, index) => (
-                        <p key={`${item.code}:${index}`}>
-                            <strong>{item.label}</strong>{" "}
-                            {item.message ?? explanations[item.code] ?? item.code.replaceAll("_", " ")}
-                        </p>
+                    <h3>Upstream source</h3>
+                    <p>This identifies the source used for this review.</p>
+                    <table className="change-review-table change-review-source-table">
+                        <tbody>
+                            {provenance.map(([key, value]) => (
+                                <tr key={key}>
+                                    <th scope="row">{sourceFields[key]}</th>
+                                    <td>
+                                        <code>{sourceValue(value)}</code>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </>
+            )}
+            {view === "unchanged" && (
+                <>
+                    <h3>Left unchanged</h3>
+                    <p>
+                        Apply does not change these parts of the supplied source. Expand a reason to see the affected
+                        items.
+                    </p>
+                    {[...notes].map(([code, items]) => (
+                        <details className="change-review-note" key={code}>
+                            <summary>
+                                {noteTitles[code] ?? code.replaceAll("_", " ")} <span>({items.length})</span>
+                            </summary>
+                            <p>{explanations[code] ?? "These items cannot be applied by this review."}</p>
+                            <table className="change-review-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Item</th>
+                                        {items.some(item => item.message) && <th scope="col">Reason</th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.map((item, index) => (
+                                        <tr key={index}>
+                                            <th scope="row">
+                                                <code>{item.label}</code>
+                                            </th>
+                                            {items.some(item => item.message) && (
+                                                <td>{item.message ?? explanations[code]}</td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </details>
                     ))}
-                    {diagnostics.next > 0 && (
-                        <button type="button" disabled={busy} onClick={onMore}>More checks</button>
+                    {diagnostics && diagnostics.next > 0 && (
+                        <button type="button" disabled={busy} onClick={onMore}>Load more items</button>
                     )}
                 </>
             )}
-            {receipt && (
-                <section aria-label="Apply receipt">
-                    <h3>Committed outcome</h3>
+            {view === "results" && receipt && (
+                <>
+                    <h3>Results</h3>
                     <p>
-                        {receipt.decisionCount} decisions committed at{" "}
+                        {receipt.decisionCount} choices applied at{" "}
                         {new Date(receipt.completedAt * 1000).toLocaleString()}.
                     </p>
-                    <p>
-                        Program decisions acknowledge upstream baselines. Local and edited choices can retain different
-                        code. Existing properties retain their live state and accepted baselines.
-                    </p>
-                    <ul>
-                        {receipt.decisions.map(item => (
-                            <li key={item.id}>
-                                <code>{item.label}</code>: {outcomes[item.choice] ?? item.choice}
-                            </li>
-                        ))}
-                    </ul>
+                    <table className="change-review-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Item</th>
+                                <th scope="col">Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {receipt.decisions.map(item => (
+                                <tr key={item.id}>
+                                    <th scope="row">
+                                        <code>{item.label}</code>
+                                    </th>
+                                    <td>{outcomes[item.choice] ?? item.choice}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                     {receipt.decisions.length < receipt.decisionCount && (
-                        <p>The receipt retains details for the first {receipt.decisions.length} decisions.</p>
+                        <p>Details are available for the first {receipt.decisions.length} choices.</p>
                     )}
-                </section>
+                </>
             )}
-        </details>
+        </section>
     );
 }

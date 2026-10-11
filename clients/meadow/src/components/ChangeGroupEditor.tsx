@@ -19,7 +19,7 @@ interface Props {
     generation: number;
     groups: ChangeGroup[];
     group?: string;
-    onSaved: (generation: number) => void;
+    onSaved: (generation: number, removed: boolean) => void;
     onClose: () => void;
 }
 
@@ -83,7 +83,7 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
                 remove ? [] : [...requires],
             );
             setDirty(false);
-            onSaved(next);
+            onSaved(next, remove);
         } catch (failure) {
             setError(failure instanceof Error ? failure.message : "Could not save the group.");
             setBusy(false);
@@ -91,7 +91,7 @@ export function ChangeGroupEditor({ client, generation, groups, group, onSaved, 
     };
     return (
         <DialogSheet
-            title={group ? `Edit group: ${group}` : "Create a change group"}
+            title={group ? `Edit group: ${group}` : "Create group"}
             titleId={`${id}-title`}
             onCancel={close}
             maxWidth="760px"

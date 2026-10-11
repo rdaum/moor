@@ -121,10 +121,15 @@ test("Git review preserves choices and edited drafts across restart, then applie
         review,
         generation: status.generation,
     });
-    await page.getByText(/^Source and checks/).click();
-    await expect(page.locator(".change-review-source")).toContainText(`sha1:${fixture.revisionB}`);
-    await expect(page.locator(".change-review-source")).toContainText("does not establish compatibility");
-    await page.getByText(/^Source and checks/).click();
+    await expect(page.getByRole("button", { name: /^Groups/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Upstream source", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Upstream source" })).toContainText(`sha1:${fixture.revisionB}`);
+    await expect(page.getByRole("table")).toBeVisible();
+    await page.getByRole("button", { name: "Left unchanged", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Left unchanged" })).toContainText(
+        "Existing property values and overrides",
+    );
+    await page.getByRole("button", { name: "Changes", exact: true }).click();
     await page.getByRole("button", { name: /:edited, Verb/ }).click();
     await page.getByRole("button", { name: "Edit resolution", exact: true }).click();
     const editor = page.locator(".change-review-draft").getByRole("textbox", { name: "Editor content", exact: true });
@@ -363,9 +368,9 @@ test("workspace configures bindings, fetches, discards, and adopts uploaded sour
         .click();
     await expect(page.getByText("Updates applied.", { exact: true })).toBeVisible();
     expect(await programs(page)).toEqual([1, 3, 3, 3, 3]);
-    await page.getByText(/^Source and checks/).click();
+    await page.getByRole("button", { name: "Results", exact: true }).click();
     await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("#9500:edited");
-    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("8 decisions committed");
+    await expect(page.getByRole("region", { name: "Apply receipt" })).toContainText("8 choices applied");
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Configure upstream" }).click();
     await page.getByRole("combobox", { name: "Source", exact: true }).selectOption("http");
@@ -553,8 +558,8 @@ test("a declared group installs a helper and property with its caller through Me
     await expect(page.getByRole("region", { name: "New verb definition" })).toContainText("Flags: rxd");
     await expect(page.getByText("Declare which changes must be installed together before selecting this program."))
         .toBeVisible();
-    await page.getByRole("button", { name: "Create a change group", exact: true }).click();
-    const editor = page.getByRole("dialog", { name: "Create a change group", exact: true });
+    await page.getByRole("button", { name: "Create group", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Create group", exact: true });
     await editor.getByLabel("Group name").fill("helper-update");
     await editor.getByRole("checkbox", { name: "#9500:added_helper — new verb", exact: true }).check();
     await editor.getByRole("checkbox", { name: "#9500:upstream — existing program", exact: true }).check();
@@ -613,8 +618,8 @@ test("workspace binds a new object before preview and installs it without initia
         "does not run initialization verbs",
     );
     expect(await page.evaluate(() => window.changes.evaluate("return valid(#9600);"))).toBe(false);
-    await page.getByRole("button", { name: "Create a change group", exact: true }).click();
-    const editor = page.getByRole("dialog", { name: "Create a change group", exact: true });
+    await page.getByRole("button", { name: "Create group", exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Create group", exact: true });
     await editor.getByLabel("Group name").fill("install-helper");
     await editor.getByRole("checkbox", { name: "#9600 — new object and contents", exact: true }).check();
     await editor.getByRole("button", { name: "Save group and clear choices", exact: true }).click();

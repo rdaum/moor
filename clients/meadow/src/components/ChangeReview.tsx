@@ -109,6 +109,7 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
     const id = useId();
     const { theme } = useTheme();
     const client = useMemo(() => new ChangeReviewClient(authToken, target), [authToken, target]);
+    const [view, setView] = useState<"changes" | "groups" | "source" | "unchanged" | "results">("changes");
     const [generation, setGeneration] = useState(target.generation);
     const [status, setStatus] = useState<ReviewStatus | null>(null);
     const [groupEditor, setGroupEditor] = useState<{ generation: number; group?: string } | null>(null);
@@ -549,85 +550,152 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                 )}
                 {notice && <p role="status" className="change-review-notice">{notice}</p>}
                 {status?.error?.message && <p role="alert">{status.error.message}</p>}
-                <ReviewSourceDetails
-                    status={status}
-                    diagnostics={diagnostics}
-                    busy={busy}
-                    onMore={() => {
-                        if (!diagnostics?.next) return;
-                        const request = sequence.current;
-                        setBusy(true);
-                        void client.diagnostics(generation, diagnostics.next).then(next => {
-                            if (request === sequence.current) {
-                                setDiagnostics({ ...next, rows: [...diagnostics.rows, ...next.rows] });
-                            }
-                        }).catch(failure => {
-                            if (request === sequence.current) fail(failure);
-                        }).finally(() => {
-                            if (request === sequence.current) setBusy(false);
-                        });
-                    }}
-                />
-                {page && !applying && service?.supports("set_group") && page.operation !== "adopt" && (
-                    <details
-                        className="change-review-groups"
-                        open={rows.some(row => row.operation?.startsWith("add_"))
-                            || Boolean(page.groupValidation.length)}
-                    >
-                        <summary>Changes that belong together ({page.groups.length} groups)</summary>
-                        <p>
-                            A group keeps a program and its required additions together. Select every required group,
-                            then review the choices before applying.
-                        </p>
-                        <p>
-                            New objects and members appear only when you apply. A conflicting address or name blocks
-                            creation. Existing property values stay unchanged.
-                        </p>
-                        {page.groups.map(group => (
-                            <div className="change-review-group" key={group.name}>
-                                <strong>{group.name}</strong>
-                                <span>{group.count} required changes</span>
-                                {group.requires.length > 0 && <span>Also requires: {group.requires.join(", ")}</span>}
-                                {!group.complete && <span>Some required changes are missing or blocked.</span>}
-                                <button
-                                    type="button"
-                                    disabled={busy || dirty}
-                                    onClick={() => setGroupEditor({ generation, group: group.name })}
-                                >
-                                    Edit {group.name}
-                                </button>
-                                {service.supports("resolve_group") && (
-                                    <>
-                                        <button
-                                            type="button"
-                                            disabled={busy || dirty || !group.complete || Boolean(error)}
-                                            onClick={() => void resolveGroup(group.name, "incoming")}
-                                        >
-                                            Select {group.name}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={busy || dirty || Boolean(error)}
-                                            onClick={() => void resolveGroup(group.name, "defer")}
-                                        >
-                                            Skip {group.name}
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        ))}
-                        {page.groupValidation.map(message => <p key={message} role="status">{message}</p>)}
+                <nav className="change-review-nav" aria-label="Review sections">
+                    <button type="button" aria-pressed={view === "changes"} onClick={() => setView("changes")}>
+                        Changes
+                    </button>
+                    {!!page?.groups.length && (
                         <button
                             type="button"
+                            aria-pressed={view === "groups"}
+                            onClick={() => setView("groups")}
+                        >
+                            Groups ({page.groups.length})
+                        </button>
+                    )}
+                    {!!diagnostics?.total && (
+                        <button
+                            type="button"
+                            aria-pressed={view === "unchanged"}
+                            onClick={() => setView("unchanged")}
+                        >
+                            Left unchanged
+                        </button>
+                    )}
+                    {Object.keys(status?.provenance ?? {}).length > 0 && (
+                        <button
+                            type="button"
+                            aria-pressed={view === "source"}
+                            onClick={() => setView("source")}
+                        >
+                            Upstream source
+                        </button>
+                    )}
+                    {status?.receipt && (
+                        <button
+                            type="button"
+                            aria-pressed={view === "results"}
+                            onClick={() => setView("results")}
+                        >
+                            Results
+                        </button>
+                    )}
+                    {page && !applying && service?.supports("set_group") && page.operation !== "adopt" && (
+                        <button
+                            type="button"
+                            className="change-review-new-group"
                             disabled={busy || dirty || Boolean(error)}
                             onClick={() => setGroupEditor({ generation })}
                         >
-                            Create a change group
+                            Create group
                         </button>
-                    </details>
+                    )}
+                </nav>
+                {view !== "changes" && view !== "groups" && (
+                    <ReviewSourceDetails
+                        view={view}
+                        status={status}
+                        diagnostics={diagnostics}
+                        busy={busy}
+                        onMore={() => {
+                            if (!diagnostics?.next) return;
+                            const request = sequence.current;
+                            setBusy(true);
+                            void client.diagnostics(generation, diagnostics.next).then(next => {
+                                if (request === sequence.current) {
+                                    setDiagnostics({ ...next, rows: [...diagnostics.rows, ...next.rows] });
+                                }
+                            }).catch(failure => {
+                                if (request === sequence.current) fail(failure);
+                            }).finally(() => {
+                                if (request === sequence.current) setBusy(false);
+                            });
+                        }}
+                    />
+                )}
+                {view === "groups" && page && (
+                    <section className="change-review-details" aria-label="Change groups">
+                        <h3>Groups</h3>
+                        <p>Each group applies together. If one change fails, none of the group's changes are saved.</p>
+                        <table className="change-review-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Group</th>
+                                    <th scope="col">Changes</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {page.groups.map(group => (
+                                    <tr key={group.name}>
+                                        <th scope="row">
+                                            {group.name}
+                                            {group.requires.length > 0 && (
+                                                <small>Requires: {group.requires.join(", ")}</small>
+                                            )}
+                                        </th>
+                                        <td>{group.count}</td>
+                                        <td>
+                                            {group.complete
+                                                ? "Ready to select"
+                                                : "Required changes are missing or blocked"}
+                                        </td>
+                                        <td>
+                                            <div className="change-group-actions">
+                                                {service?.supports("set_group") && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={busy || dirty || applying}
+                                                        aria-label={`Edit ${group.name}`}
+                                                        onClick={() =>
+                                                            setGroupEditor({ generation, group: group.name })}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                )}
+                                                {service?.supports("resolve_group") && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`Select ${group.name}`}
+                                                            disabled={busy || dirty || applying || !group.complete
+                                                                || Boolean(error)}
+                                                            onClick={() => void resolveGroup(group.name, "incoming")}
+                                                        >
+                                                            Select
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`Skip ${group.name}`}
+                                                            disabled={busy || dirty || applying || Boolean(error)}
+                                                            onClick={() => void resolveGroup(group.name, "defer")}
+                                                        >
+                                                            Skip
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {page.groupValidation.map(message => <p key={message} role="status">{message}</p>)}
+                    </section>
                 )}
                 {page && !applying && (
-                    <div className="change-review-workspace" aria-busy={busy}>
+                    <div className="change-review-workspace" aria-busy={busy} hidden={view !== "changes"}>
                         <aside className="change-review-sidebar" aria-label="Changes">
                             <label htmlFor={`${id}-filter`}>Show</label>
                             <select
@@ -1168,8 +1236,9 @@ export function ChangeReview({ target, authToken, onClose, connectionRevision = 
                     groups={page.groups}
                     group={groupEditor.group}
                     onClose={() => setGroupEditor(null)}
-                    onSaved={next => {
+                    onSaved={(next, removed) => {
                         setGroupEditor(null);
+                        setView(removed ? "changes" : "groups");
                         void load(next, row?.id, category);
                     }}
                 />
