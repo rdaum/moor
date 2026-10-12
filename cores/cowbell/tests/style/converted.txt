@@ -179,6 +179,7 @@ actor.moo:give
 actor.moo:do_give
 
 format/format.moo:unpack
+format/format_table.moo
 format/format_annotation.moo:object
 format/format_annotation.moo:command
 format/format_annotation.moo:exit

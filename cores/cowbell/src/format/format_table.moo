@@ -10,165 +10,143 @@ object FORMAT_TABLE [
   override description (owner: HACKER, flags: "rc") = "Flyweight delegate for table content in events.";
 
   method mk owner: HACKER
-    "Create table flyweight with headers and rows";
-    {headers, rows} = args;
-    typeof(headers) != TYPE_LIST && raise(E_TYPE, "Headers must be a list");
-    typeof(rows) != TYPE_LIST && raise(E_TYPE, "Rows must be a list");
+    "Create a table flyweight from header cells and rows of cells.";
+    const {headers, rows} = args;
+    typeof(headers) == TYPE_LIST || raise(E_TYPE, "Headers must be a list");
+    typeof(rows) == TYPE_LIST || raise(E_TYPE, "Rows must be a list");
     return toflyweight(this, ['headers -> headers, 'rows -> rows]);
   endmethod
 
   method compose owner: HACKER
-    "Compose table content into appropriate format";
-    {render_for, content_type, event} = args;
-    const {rendered_headers, header_annotations} = $format:compose_parts(this.headers, @args);
-    headers = rendered_headers;
+    "Compose cells in order, then render the table with their combined annotations.";
+    const {render_for, content_type, event} = args;
+    const {headers, header_annotations} =
+      $format:compose_parts(this.headers, render_for, content_type, event);
     let annotations = header_annotations;
-    rows = {};
+    let rows = {};
     for raw_row in (this.rows)
-      const {rendered_row, row_annotations} = $format:compose_parts(raw_row, @args);
-      rows = {@rows, rendered_row};
+      const {row, row_annotations} =
+        $format:compose_parts(raw_row, render_for, content_type, event);
+      rows = {@rows, row};
       annotations = $format:merge_annotations(annotations, row_annotations);
     endfor
     if (!headers || !rows)
-      if (content_type == 'text_html)
-        return <$html, {"p", {}, {"(empty table)"}}>;
-      else
-        return "(empty table)";
-      endif
+      return content_type == 'text_html ? <$html, {"p", {}, {"(empty table)"}}> | "(empty table)";
     endif
     if (content_type == 'text_html)
-      "Build HTML table structure";
-      table_children = {};
-      "Add header row if present";
-      if (headers)
-        header_cells = {};
-        for header in (headers)
-          header_content = header;
-          header_cells = {@header_cells, <$html, {"th", {}, {header_content}}>};
-        endfor
-        thead = <$html, {"thead", {}, {<$html, {"tr", {}, header_cells}>}}>;
-        table_children = {@table_children, thead};
-      endif
-      "Add body rows";
-      body_rows = {};
-      row_num = 0;
-      for row in (rows)
-        row_num = row_num + 1;
-        if (row_num % 50 == 0)
-          suspend_if_needed();
-        endif
-        row_cells = {};
-        for cell in (row)
-          cell_content = cell;
-          row_cells = {@row_cells, <$html, {"td", {}, {cell_content}}>};
-        endfor
-        body_rows = {@body_rows, <$html, {"tr", {}, row_cells}>};
-      endfor
-      tbody = <$html, {"tbody", {}, body_rows}>;
-      table_children = {@table_children, tbody};
-      return $format:result(<$html, {"table", {}, table_children}>, annotations);
+      return $format:result(this:_render_html(headers, rows), annotations);
     elseif (content_type == 'text_djot)
-      "Djot pipe table output - no padding needed";
-      result = {};
-      "Build header line";
-      header_cells = { tostr(h) for h in (headers) };
-      result = {@result, "| " + header_cells:join(" | ") + " |"};
-      "Build separator";
-      separators = { "-" for _ in (headers) };
-      result = {@result, "| " + separators:join(" | ") + " |"};
-      "Build data rows";
-      row_num = 0;
-      for row in (rows)
-        row_num = row_num + 1;
-        if (row_num % 50 == 0)
-          suspend_if_needed();
-        endif
-        row_cells = { tostr(cell) for cell in (row) };
-        result = {@result, "| " + row_cells:join(" | ") + " |"};
-      endfor
-      return $format:result(result:join("\n"), annotations);
+      return $format:result(this:_render_djot(headers, rows), annotations);
     endif
-    "Plain text table output";
-    result = {};
-    "Calculate column widths";
-    widths = {};
-    for i in [1..length(headers)]
-      widths = {@widths, length(tostr(headers[i]))};
-    endfor
-    row_num = 0;
-    for row in (rows)
-      row_num = row_num + 1;
-      if (row_num % 50 == 0)
+    return $format:result(this:_render_plain(headers, rows), annotations);
+  endmethod
+
+  method _render_html owner: HACKER
+    "Build an HTML table tree from composed headers and rows.";
+    const {headers, rows} = args;
+    const header_cells = {<$html, {"th", {}, {header}}> for header in (headers)};
+    const head = <$html, {"thead", {}, {<$html, {"tr", {}, header_cells}>}}>;
+    let body_rows = {};
+    for row_index in [1..length(rows)]
+      if (row_index % 50 == 0)
         suspend_if_needed();
       endif
+      const cells = {<$html, {"td", {}, {cell}}> for cell in (rows[row_index])};
+      body_rows = {@body_rows, <$html, {"tr", {}, cells}>};
+    endfor
+    return <$html, {"table", {}, {head, <$html, {"tbody", {}, body_rows}>}}>;
+  endmethod
+
+  method _render_djot owner: HACKER
+    "Join composed cells into an unpadded Djot pipe table.";
+    const {headers, rows} = args;
+    fn pipe_row(cells)
+      return "| " + {tostr(cell) for cell in (cells)}:join(" | ") + " |";
+    endfn
+    const separator = "| " + {"-" for header in (headers)}:join(" | ") + " |";
+    let lines = {pipe_row(headers), separator};
+    for row_index in [1..length(rows)]
+      if (row_index % 50 == 0)
+        suspend_if_needed();
+      endif
+      lines = {@lines, pipe_row(rows[row_index])};
+    endfor
+    return lines:join("\n");
+  endmethod
+
+  method _render_plain owner: HACKER
+    "Align composed cells in header columns. Fill missing cells and omit extra ones.";
+    const {headers, rows} = args;
+    fn padded_row(cells, widths)
+      return {$str_proto:pad_right(i <= length(cells) ? tostr(cells[i]) | "", widths[i])
+        for i in [1..length(widths)]}:join(" | ");
+    endfn
+    let widths = {length(tostr(header)) for header in (headers)};
+    for row_index in [1..length(rows)]
+      if (row_index % 50 == 0)
+        suspend_if_needed();
+      endif
+      const row = rows[row_index];
       for i in [1..min(length(row), length(widths))]
-        cell_width = length(tostr(row[i]));
-        if (cell_width > widths[i])
-          widths[i] = cell_width;
-        endif
+        widths[i] = max(widths[i], length(tostr(row[i])));
       endfor
     endfor
-    "Build header line";
-    line = "";
-    for i in [1..length(headers)]
-      if (i > 1)
-        line = line + " | ";
-      endif
-      line = line + $str_proto:pad_right(tostr(headers[i]), widths[i]);
-    endfor
-    result = {@result, line};
-    "Build separator";
-    line = "";
-    for i in [1..length(headers)]
-      if (i > 1)
-        line = line + "-+-";
-      endif
-      line = line + $str_proto:space(widths[i], "-");
-    endfor
-    result = {@result, line};
-    "Build data rows";
-    row_num = 0;
-    for row in (rows)
-      row_num = row_num + 1;
-      if (row_num % 50 == 0)
+    const separator = {$str_proto:space(width, "-") for width in (widths)}:join("-+-");
+    let lines = {padded_row(headers, widths), separator};
+    for row_index in [1..length(rows)]
+      if (row_index % 50 == 0)
         suspend_if_needed();
       endif
-      line = "";
-      for i in [1..length(headers)]
-        if (i > 1)
-          line = line + " | ";
-        endif
-        cell = i <= length(row) ? tostr(row[i]) | "";
-        line = line + $str_proto:pad_right(cell, widths[i]);
-      endfor
-      result = {@result, line};
+      lines = {@lines, padded_row(rows[row_index], widths)};
     endfor
-    return $format:result(result:join("\n"), annotations);
+    return lines:join("\n");
   endmethod
 
   method test_simple_table owner: HACKER
-    "Test creating simple HTML table";
-    headers = {"Name", "Age"};
-    rows = {{"Alice", "25"}, {"Bob", "30"}};
-    table_obj = this:mk(headers, rows);
-    html_result = table_obj:compose($nothing, 'text_html, $nothing);
-    xml_result = html_result:render('text_html);
-    parsed = xml_parse(xml_result, TYPE_LIST);
-    "Verify basic table structure";
-    parsed[1] != "table" && return E_ASSERT;
-    "Should have thead and tbody";
-    length(parsed) < 3 && raise(E_INVARG, "parsed structure: " + toliteral(parsed));
+    "HTML preserves the header and every row and cell in order.";
+    const table = this:mk({"Name", "Age"}, {{"Alice", "25"}, {"Bob", "30"}});
+    const html = table:compose($nothing, 'text_html, $nothing);
+    const expected = {"table", {},
+      {"thead", {}, {"tr", {}, {"th", {}, "Name"}, {"th", {}, "Age"}}},
+      {"tbody", {},
+        {"tr", {}, {"td", {}, "Alice"}, {"td", {}, "25"}},
+        {"tr", {}, {"td", {}, "Bob"}, {"td", {}, "30"}}}};
+    $test_utils:assert_eq(html:to_xml_tag(), expected, "HTML table structure");
     return true;
   endmethod
 
   method test_plain_text_table owner: HACKER
-    "Test plain text table output";
-    headers = {"Item", "Price"};
-    rows = {{"Apple", "$1.00"}, {"Banana", "$0.50"}};
-    table_obj = this:mk(headers, rows);
-    text_result = table_obj:compose($nothing, 'text_plain, $nothing);
-    "Should contain headers and separator";
-    index(text_result, "Item") && index(text_result, "Price") && index(text_result, "---") && index(text_result, "Apple") && index(text_result, "$1.00") || raise(E_ASSERT, "text result: " + toliteral(text_result));
+    "Plain text aligns columns and pads missing cells without adding extra columns.";
+    const table = this:mk({"Item", "Price"},
+      {{"Apple", "$1.00"}, {"Banana"}, {"Pear", "$0.50", "extra"}});
+    const text = table:compose($nothing, 'text_plain, $nothing);
+    const expected = "Item   | Price\n-------+------\nApple  | $1.00\nBanana |      \nPear   | $0.50";
+    $test_utils:assert_eq(strcmp(text, expected), 0, "Plain table spacing");
+    return true;
+  endmethod
+
+  method test_djot_table owner: HACKER
+    "Djot preserves the supplied cells without column padding.";
+    const table = this:mk({"Item", "Price"},
+      {{"Apple", "$1.00"}, {"Banana"}, {"Pear", "$0.50", "extra"}});
+    const text = table:compose($nothing, 'text_djot, $nothing);
+    const expected = "| Item | Price |\n| - | - |\n| Apple | $1.00 |\n"
+      + "| Banana |\n| Pear | $0.50 | extra |";
+    $test_utils:assert_eq(strcmp(text, expected), 0, "Djot table spacing");
+    return true;
+  endmethod
+
+  method test_empty_table owner: HACKER
+    "Tables without headers or rows use the empty-table placeholder in each format.";
+    for cells in ({{{}, {}}, {{"Header"}, {}}, {{}, {{"Cell"}}}})
+      const table = this:mk(@cells);
+      const html = table:compose($nothing, 'text_html, $nothing);
+      $test_utils:assert_eq(html:to_xml_tag(), {"p", {}, "(empty table)"}, "Empty HTML table");
+      for format in ({'text_plain, 'text_djot})
+        $test_utils:assert_eq(table:compose($nothing, format, $nothing), "(empty table)",
+          "Empty text table");
+      endfor
+    endfor
     return true;
   endmethod
 endobject
