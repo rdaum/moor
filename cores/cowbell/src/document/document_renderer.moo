@@ -108,7 +108,7 @@ object DOCUMENT_RENDERER [
     elseif (kind == 'thematic_break)
       return html ? "<hr>" | "---";
     elseif (kind == 'list)
-      return $document_renderer:_list(node, format, path);
+      return $document_renderer:_list(source, node, format, path);
     elseif (kind == 'definition_list)
       return $document_renderer:_definitions(node["items"], format, path);
     elseif (kind == 'table)
@@ -308,9 +308,10 @@ object DOCUMENT_RENDERER [
   endmethod
   method _list owner: HACKER
     "Render list items with block separation, nesting, numbering, and read-only task state.";
-    const {node, format, path} = args;
+    const {source, node, format, path} = args;
     const html = format == 'text_html;
     const numbered = node["style"] == "numbered";
+    const columns = format != 'text_plain && $document_renderer:_reference_list(source);
     const start = maphaskey(node, "start") ? node["start"] | 1;
     if (format == 'text_djot && numbered && start < 0)
       let definitions = {};
@@ -351,9 +352,35 @@ object DOCUMENT_RENDERER [
     if (html)
       const tag = numbered ? "ol" | "ul";
       const start_attribute = numbered ? " start=\"" + tostr(start) + "\"" | "";
-      return "<" + tag + start_attribute + ">" + body + "</" + tag + ">";
+      const layout = columns ? " class=\"reference-columns\"" | "";
+      return "<" + tag + start_attribute + layout + ">" + body + "</" + tag + ">";
     endif
-    return body;
+    return (columns ? "{.reference-columns}\n" | "") + body;
+  endmethod
+
+  method _reference_list owner: HACKER
+    "Use compact columns for reference lists, including adjacent command and source links.";
+    const {node} = args;
+    node["style"] == "bullet" && length(node["items"]) || return false;
+    for item in (node["items"])
+      if (maphaskey(item, "checked") || length(item["blocks"]) != 1)
+        return false;
+      endif
+      const block = item["blocks"][1];
+      if (block["kind"] != "paragraph")
+        return false;
+      endif
+      let has_reference = false;
+      for child in (block["children"])
+        if (child["kind"] == "reference")
+          has_reference = true;
+        elseif (child["kind"] != "text" || length(child["text"]:trim()))
+          return false;
+        endif
+      endfor
+      has_reference || return false;
+    endfor
+    return true;
   endmethod
 
   method _definitions owner: HACKER

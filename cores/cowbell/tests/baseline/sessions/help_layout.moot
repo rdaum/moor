@@ -1,0 +1,14 @@
+// Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com>
+// This program is free software under the GNU General Public License, version 3.
+// It is distributed without any warranty. See <https://www.gnu.org/licenses/>.
+
+// Capture the actual programmer help command, including its adjacent source links.
+@wizard
+; add_property(#90101, "captured_help", false, {#90101, "r"}); add_verb(#90101, {#90101, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90101, "inform_current", {"this.captured_help = args[1];"});
+0
+@programmer
+% help
+@quiet
+@wizard
+; const document = #90101.captured_help:resolve(#90101); const html = $document:render(document, 'text_html)['body]; const djot = $document:render(document, 'text_djot)['body]; return {index(html, "<h4>Things you can do</h4>\n<ul class=\"reference-columns\">") != 0, index(djot, "#### Things you can do\n\n{.reference-columns}") != 0};
+{true, true}

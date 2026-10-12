@@ -26,6 +26,8 @@ Cowbell entries.
 
 ### Fixed
 
+- Help topics and command lists use columns again in rich clients, including commands with separate
+  programmer source links. Ordinary prose and numbered lists keep their existing layout.
 - Closed-container looks resolve denial messages with the container binding and preserve structured
   descriptions. Code documentation no longer appears empty when supplied as a code-block value.
 - `string:to_list("")` returns the whole input as one field instead of looping indefinitely.
