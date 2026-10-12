@@ -143,7 +143,9 @@ object HEADLESS_EVENT_SCENARIOS
       #90122.calls = 0;
       const event = $event:mk_info(player, $sub:nc(), " picked up ", $sub:d(), ". ",
         $format:producer_inline(<#90122, .mode = 'count>)):with_dobj(receiver);
-      const outputs = receiver:render_test(event);
+      const batch = receiver:render_test(event);
+      const outputs = batch['connections];
+      $test_utils:assert_eq(batch['document]["version"], 1, "all connections share the document envelope");
       $test_utils:assert_eq(length(outputs), 3, "all attached connections receive their negotiated format");
       $test_utils:assert_eq(typeof(outputs[1][3]), TYPE_STR, "HTML is one delivery string");
       $test_utils:assert_eq(length(outputs[1][4]), 3, "HTML owns its annotation table");

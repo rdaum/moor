@@ -22,6 +22,25 @@ object FORMAT [
 
   override description (owner: HACKER, flags: "rc") = "Container for formatting objects like block, list, table, and title.";
 
+  method connection_format owner: HACKER
+    "Decode a connection's advertised MIME types and select a supported core format.";
+    const {offered} = args;
+    typeof(offered) == TYPE_LIST || raise(E_TYPE);
+    !length(offered) && return 'text_plain;
+    const types = ["text/html" -> 'text_html, "text/djot" -> 'text_djot,
+      "text/plain" -> 'text_plain, "text_html" -> 'text_html,
+      "text_djot" -> 'text_djot, "text_plain" -> 'text_plain];
+    for format in ({'text_html, 'text_djot, 'text_plain})
+      for spelling in (offered)
+        const name = tostr(spelling);
+        if (maphaskey(types, name) && types[name] == format)
+          return format;
+        endif
+      endfor
+    endfor
+    raise(E_INVARG, "Connection has no supported narrative content type");
+  endmethod
+
   method authored owner: HACKER
     "Convert an explicitly selected source kind to inline or block content. Never infer markup.";
     const {kind, source} = args;

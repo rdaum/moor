@@ -363,3 +363,26 @@ it.each<{ owner: Value; expected: string }>([{ owner: { oid: 7 }, expected: "oid
         });
     },
 );
+
+it("carries the same opaque Cowbell document through live delivery and historical replay", () => {
+    const document: Value = {
+        version: 1,
+        blocks: [{ kind: "paragraph", children: [{ kind: "strong", children: [{ kind: "text", text: "brass" }] }] }],
+    };
+    const { live: wireLive, historyBytes } = notify("text/html", "<p><strong>brass</strong></p>", {
+        cowbell_document: document,
+        annotations: {},
+    });
+    const live = parseWsNarrativeEventMessage(wireLive, decode, string);
+    if (live?.kind !== "notify") throw new Error("notification missing");
+    const history = parseHistoricalNarrativeEvent(
+        NarrativeEvent.getRootAsNarrativeEvent(new ByteBuffer(historyBytes)),
+        decode,
+        string,
+    );
+    if (history?.kind !== "notify") throw new Error("history missing");
+    expect(live.eventMeta?.cowbellDocument).toEqual(document);
+    expect(history.eventMeta?.cowbellDocument).toEqual(document);
+    expect(history.content).toBe(live.content);
+    expect(history.eventMeta?.annotations).toEqual(live.eventMeta?.annotations);
+});

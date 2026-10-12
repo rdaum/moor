@@ -73,6 +73,12 @@ and validation before description and note edits. It also parses and resolves al
 articles. Each article has its own execution slice; the sweep does not combine their costs into one
 command quota. The parser and renderer cases check all three output formats.
 
+Fixture `#90125` checks delivery: one encoding per viewer, shared renderings for equivalent
+options, matching live and historical documents, utility connection scope, complete rewrites,
+public welcome output, literal banner substitutions, and contextual help authoring.
+Meadow checks document transport through FlatBuffers and encrypted history, plus rewrite ownership,
+expiry, complete content replacement, and rejection without consuming the target.
+
 Fixture `#90124` checks room capture: shared description resolution, literal labels, retained
 references after object recycling, caller permissions, and ambient and integrated content.
 Meadow tests verify rendered panel ingestion and separation from historical narrative.

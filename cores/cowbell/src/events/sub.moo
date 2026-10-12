@@ -172,7 +172,7 @@ object SUB [
     "        player.location:announce(event);",
     "",
     "        \"Tell actor they failed\";",
-    "        notify(player, \"The cat doesn't want to be petted right now.\");",
+    "        player:inform_current($event:mk_info(player, \"The cat doesn't want to be petted right now.\"));",
     "        return;",
     "    endif",
     "",

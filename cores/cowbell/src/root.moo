@@ -461,7 +461,7 @@ object ROOT [
     if (is_player(grantee))
       grant_display = $grant_utils:format_grant_with_name(target_obj, category, cap_list);
       message = "You have been granted " + grant_display + ".";
-      notify(grantee, message);
+      grantee:inform_all($event:mk_info(grantee, message));
     endif
     return new_cap;
   endmethod

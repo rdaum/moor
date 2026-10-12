@@ -8,8 +8,36 @@ object DOCUMENT_RENDERER [
   readable: true
 
   method render owner: HACKER
-    "Validate a canonical document once, then render only its inert metadata with fixed dispatch.";
+    "Validate a canonical document, then render its inert metadata with fixed dispatch.";
     const {document, format, ?options = []} = args;
+    const settings = this:_settings(format, options);
+    return this:_render($document_schema:encode(document), format, settings);
+  endmethod
+
+  method render_many owner: HACKER
+    "Finalize references and encode once; equivalent requests share one serialization.";
+    const {document, requests} = args;
+    typeof(requests) == TYPE_LIST || raise(E_TYPE, "Rendering requests must be a list");
+    length(requests) <= 1024 || raise(E_QUOTA, "Too many rendering requests");
+    const checked = $document_schema:_checked(document, false, true);
+    let cache = [];
+    let results = {};
+    for request in (requests)
+      const format = request['format];
+      const settings = this:_settings(format, `request['options] ! E_RANGE => []');
+      const key = tostr(format, ":", settings['width], ":", settings['code_line_numbers]);
+      if (!maphaskey(cache, key))
+        cache[key] = this:_render(checked['encoded], format, settings);
+      endif
+      results = {@results, cache[key]};
+    endfor
+    return ['document -> checked['encoded], 'results -> results,
+      'diagnostics -> checked['diagnostics]];
+  endmethod
+
+  method _settings owner: HACKER
+    "Validate and normalize format options before calculating a cache key.";
+    const {format, options} = args;
     (typeof(format) == TYPE_SYM && format in {'text_html, 'text_djot, 'text_plain})
       || raise(E_INVARG, "render.content_type: unsupported content type");
     typeof(options) == TYPE_MAP || raise(E_INVARG, "render.options: expected map");
@@ -21,12 +49,21 @@ object DOCUMENT_RENDERER [
       || raise(E_INVARG, "render.options.width: expected integer from 1 through 1024");
     const numbered = maphaskey(options, 'code_line_numbers) ? options['code_line_numbers] | true;
     typeof(numbered) == TYPE_BOOL || raise(E_INVARG, "render.options.code_line_numbers: expected boolean");
-    const checked = $document_schema:encode(document);
+    return ['width -> width, 'code_line_numbers -> numbered];
+  endmethod
+
+  method _render owner: HACKER
+    "Serialize checked metadata. Only renderer entry points may bypass document validation.";
+    caller == this || raise(E_PERM);
+    const {checked, format, settings} = args;
     const state = ['annotations -> [], 'next_anchor -> 1];
-    const settings = ['width -> width, 'code_line_numbers -> numbered];
-    const {body, finished} = $document_renderer:_walk(
-      checked, 'document, format, settings, state, "document", true);
-    return ['content_type -> format, 'body -> body, 'annotations -> finished['annotations]];
+    try
+      const {body, finished} = $document_renderer:_walk(
+        checked, 'document, format, settings, state, "document", true);
+      return ['content_type -> format, 'body -> body, 'annotations -> finished['annotations]];
+    except error (ANY)
+      raise(error[1], tostr(format) + " " + error[2]);
+    endtry
   endmethod
 
   method _walk owner: HACKER

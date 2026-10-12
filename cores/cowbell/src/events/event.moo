@@ -66,17 +66,28 @@ object EVENT [
   endmethod
 
   method resolve owner: ARCH_WIZARD
-    "Resolve this event for a viewer under the actual caller's permissions, without choosing a format.";
-    "Pass false for public content before authentication. Perspective substitutions require a viewer.";
+    "Resolve a canonical document under the caller's authority. False is a public, absent viewer.";
     set_task_perms(caller_perms());
     const {viewer} = args;
+    return $document_resolver:resolve(flycontents(this), viewer, this:_facts());
+  endmethod
+
+  method render_for owner: ARCH_WIZARD
+    "Resolve for one viewer and produce a shared document envelope for all output requests.";
+    set_task_perms(caller_perms());
+    const {viewer, requests} = args;
+    return $document_resolver:render_for(flycontents(this), viewer, this:_facts(), requests);
+  endmethod
+
+  method _facts owner: HACKER
+    "Select only captured event facts for resolution; metadata cannot supply its own principal.";
     this:validate() || raise(E_INVARG, "Malformed event");
     const fields = flyslots(this);
     let facts = [];
     for key in ({'actor, 'actor_name, 'verb, 'dobj, 'iobj, 'this_obj, 'location, 'timestamp, 'bindings})
       facts[key] = fields[key];
     endfor
-    return $document_resolver:resolve(flycontents(this), viewer, facts);
+    return facts;
   endmethod
 
   method validate owner: HACKER
@@ -94,11 +105,6 @@ object EVENT [
     {key, value} = args;
     this.(key) = value;
     return this;
-  endmethod
-
-  method preferred_content_types owner: HACKER
-    "Return the event's preferred content types for negotiation.";
-    return `this.preferred_content_types ! E_PROPNF => {}';
   endmethod
 
   method audience owner: HACKER
@@ -163,23 +169,10 @@ object EVENT [
     return this;
   endmethod
 
-  verb with_content_type (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Add a preferred content type for rendering. Additive - chain calls to add multiple.";
-    {content_type} = args;
-    existing = `this.preferred_content_types ! E_PROPNF => {}';
-    this.preferred_content_types = {@existing, content_type};
-    return this;
-  endverb
-
   verb as_inset (none none none) owner: ARCH_WIZARD flags: "rxd"
     "Mark event for inset presentation.";
     this.presentation_hint = 'inset;
     return this;
   endverb
 
-  verb as_djot (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Set preferred content type to text_djot.";
-    this.preferred_content_types = {'text_djot};
-    return this;
-  endverb
 endobject

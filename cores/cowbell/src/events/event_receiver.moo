@@ -12,28 +12,38 @@ object EVENT_RECEIVER [
   override description (owner: ARCH_WIZARD, flags: "rc") = "Generic event receiver prototype providing event broadcasting and connection notification capabilities.";
 
   method tell owner: HACKER
-    "Resolve one viewer document, then send its Djot history and negotiated live representations.";
+    "Deliver and store one captured document, reusing history and connection renderings.";
     const {event, @rest} = args;
     this:_is_gagged_event(event) && return;
-    const document = this:_resolve_event(event);
-    let event_slots = flyslots(event);
-    event_slots["delivery_id"] = uuid();
-    const history = $document:render(document, 'text_djot);
-    let log_slots = event_slots;
-    log_slots["annotations"] = history['annotations];
-    this:_event_log(this, history['body], 'text_djot, log_slots);
-    const connections = this:_connections();
-    const contents = this:_event_render(connections, event, document);
-    for content in (contents)
+    return this:_deliver(event, this:_event_render(this:_connections(), event, true));
+  endmethod
+
+  method _deliver owner: HACKER
+    "Pair bodies with the shared document and their own annotations, preserving history policy.";
+    caller == this || raise(E_PERM);
+    const {event, batch} = args;
+    let metadata = mapdelete(flyslots(event), 'bindings);
+    metadata['delivery_id] = uuid();
+    metadata['cowbell_document] = batch['document];
+    const history = batch['history];
+    if (typeof(history) == TYPE_MAP)
+      let log_metadata = metadata;
+      log_metadata['annotations] = history['annotations];
+      this:_event_log(this, history['body], 'text_djot, log_metadata);
+    endif
+    for content in (batch['connections])
       const {connection, content_type, body, annotations} = content;
-      let metadata = event_slots;
-      metadata["annotations"] = annotations;
+      let rendered_metadata = metadata;
+      rendered_metadata['annotations] = annotations;
       try
-        this:_notify(connection, body, false, false, content_type, metadata);
+        this:_notify(connection, body, false, false, content_type, rendered_metadata);
+      except (E_PERM)
+        "A connection may detach or switch players while content callbacks run.";
       except error (ANY)
         this:_delivery_error("Event notification failed: " + toliteral(error));
       endtry
     endfor
+    return 0;
   endmethod
 
   method _delivery_error owner: ARCH_WIZARD
@@ -43,35 +53,24 @@ object EVENT_RECEIVER [
     server_log(tostr(this) + ": " + message);
   endmethod
 
-  method _resolve_event owner: ARCH_WIZARD
-    "Resolve content with this receiver's permissions. Context never inherits delivery's wizard owner.";
-    caller == this || raise(E_PERM);
-    set_task_perms(this);
-    const {event} = args;
-    return event:resolve(this);
-  endmethod
-
   method inform_connection owner: HACKER
-    "Deliver utility output only to the requested attached connection. Unavailable destinations are discarded.";
+    "Deliver utility output only to the requested attached connection; detached destinations are discarded.";
     this:_can_inform_as(caller, caller_perms()) || raise(E_PERM);
     const {connection_obj, original_event} = args;
     const info = `this:_connection_entry(connection_obj) ! E_INVARG => 0';
     info == 0 && return 0;
     const event = original_event:with_audience('utility);
-    const contents = this:_event_render({info}, event);
-    const event_slots = flyslots(event);
-    for content in (contents)
-      const {conn, content_type, output, annotations} = content;
-      try
-        let rendered_slots = event_slots;
-        rendered_slots["annotations"] = annotations;
-        this:_notify(conn, output, false, false, content_type, rendered_slots);
-      except (E_PERM)
-        "Rendering may suspend while the destination disconnects or changes player.";
-        return 0;
-      endtry
-    endfor
-    return 0;
+    return this:_deliver(event, this:_event_render({info}, event));
+  endmethod
+
+  method inform_all owner: HACKER
+    "Deliver utility output to all attached connections without adding player history.";
+    this:_can_inform_as(caller, caller_perms()) || raise(E_PERM);
+    const {original_event} = args;
+    const event = original_event:with_audience('utility);
+    const connections = this:_connections();
+    !length(connections) && return 0;
+    return this:_deliver(event, this:_event_render(connections, event));
   endmethod
 
   method inform_current owner: HACKER
@@ -107,58 +106,43 @@ object EVENT_RECEIVER [
   method _connections owner: ARCH_WIZARD
     this:_can_inform_as(caller, caller_perms()) || raise(E_PERM);
     set_task_perms(this);
-    return connections(this);
+    return `connections(this) ! E_INVARG => {}';
   endmethod
 
   method _event_render owner: ARCH_WIZARD
-    "Serialize one resolved document for attached connections, reusing each negotiated representation.";
+    "Resolve and encode once for this receiver, sharing each format between history and connections.";
     caller == this || raise(E_PERM);
     set_task_perms(this);
-    const {connections, event, ?resolved = false} = args;
-    const document = typeof(resolved) == TYPE_FLYWEIGHT ? resolved | event:resolve(this);
-    let results = {};
-    let rendered = [];
-    const types = ["text/html" -> 'text_html, "text/djot" -> 'text_djot,
-      "text/plain" -> 'text_plain, "text_html" -> 'text_html,
-      "text_djot" -> 'text_djot, "text_plain" -> 'text_plain];
-    for connection in (connections)
-      const {connection_obj, peer_addr, idle_seconds, content_types, @rest} = connection;
-      const supported = length(content_types) ? content_types | {'text_plain};
-      let preferred = event:preferred_content_types();
-      if (typeof(preferred) != TYPE_LIST || !length(preferred))
-        preferred = {'text_html, 'text_djot, 'text_plain};
-      endif
-      let selected = false;
-      for desired in ({@preferred, 'text_html, 'text_djot, 'text_plain})
-        const wanted = tostr(desired);
-        if (!maphaskey(types, wanted))
-          continue;
-        endif
-        for offered in (supported)
-          const available = tostr(offered);
-          if (maphaskey(types, available) && types[available] == types[wanted])
-            selected = types[wanted];
-            break;
-          endif
-        endfor
-        if (typeof(selected) == TYPE_SYM)
-          break;
-        endif
-      endfor
-      if (typeof(selected) != TYPE_SYM)
-        this:_delivery_error("Connection has no supported narrative content type: " + tostr(connection_obj));
+    const {connections, event, ?history = false} = args;
+    let requests = history ? {['format -> 'text_djot]} | {};
+    let destinations = {};
+    for entry in (connections)
+      const {connection, peer, idle, offered, @rest} = entry;
+      let format;
+      try
+        format = $format:connection_format(offered);
+      except error (E_INVARG)
+        this:_delivery_error(tostr(connection) + ": " + error[2]);
         continue;
-      endif
-      if (!maphaskey(rendered, selected))
-        rendered[selected] = $document:render(document, selected);
-      endif
-      const result = rendered[selected];
-      if (length(result['body]))
-        const mime = tosym(strsub(tostr(selected), "_", "/", 1));
-        results = {@results, {connection_obj, mime, result['body], result['annotations]}};
+      endtry
+      requests = {@requests, ['format -> format]};
+      destinations = {@destinations, {connection, length(requests)}};
+    endfor
+    const batch = event:render_for(this, requests);
+    for diagnostic in (batch['diagnostics])
+      this:_delivery_error(diagnostic);
+    endfor
+    let outputs = {};
+    for destination in (destinations)
+      const {connection, index} = destination;
+      const rendered = batch['results][index];
+      const mime = tosym(strsub(tostr(rendered['content_type]), "_", "/", 1));
+      if (length(rendered['body]))
+        outputs = {@outputs, {connection, mime, rendered['body], rendered['annotations]}};
       endif
     endfor
-    return results;
+    return ['document -> batch['document], 'connections -> outputs,
+      'history -> history ? batch['results][1] | false];
   endmethod
 
   method _connection_entry owner: ARCH_WIZARD
@@ -358,6 +342,7 @@ object EVENT_RECEIVER [
     receiver = $test_utils:anonymous($event_receiver);
     event = $event:mk_info(receiver, "hidden");
     $test_utils:assert_raises(E_PERM, receiver, "inform_current", {event}, "inform_current should reject unrelated callers");
+    $test_utils:assert_raises(E_PERM, receiver, "inform_all", {event}, "inform_all should reject unrelated callers");
     $test_utils:assert_raises(E_PERM, receiver, "_connections", {}, "_connections should reject unrelated callers");
     $test_utils:assert_raises(E_PERM, receiver, "rewrite_event", {"rewrite-id", "replacement"}, "rewrite_event should reject unrelated callers");
     $test_utils:assert_raises(E_PERM, receiver, "emit_room_snapshot_state", {receiver, $prototype_box}, "emit_room_snapshot_state should reject unrelated callers");

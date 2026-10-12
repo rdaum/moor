@@ -81,35 +81,104 @@ object LOGIN [
     "",
     "You will probably want to change this text which is stored in $login.welcome_message property."
   };
-  property welcome_message_content_type (owner: ARCH_WIZARD, flags: "rc") = "text/djot";
+  property welcome_message_kind (owner: ARCH_WIZARD, flags: "rc") = 'djot_blocks;
 
   override description (owner: ARCH_WIZARD, flags: "rc") = "Login service handling player authentication, character creation, and OAuth2 integration.";
 
   verb welcome (any none any) owner: ARCH_WIZARD flags: "rxd"
-    "Present the welcome message property to the user.";
+    "Show the authored welcome message through the public document delivery boundary.";
     caller == #0 || caller == this || caller_perms().wizard || raise(E_PERM);
-    message = this.welcome_message:join("\n");
-    message = this:_apply_template(message);
-    notify(player, message, false, false, this.welcome_message_content_type);
+    this:_public_output(this:welcome_content());
   endverb
 
-  method _apply_template owner: ARCH_WIZARD
-    "Apply template substitutions (TITLE, VERSION, CORE_VERSION) to a message.";
-    "Accepts string or list of strings.";
+  method welcome_content owner: ARCH_WIZARD
+    "Parse explicit banner syntax before inserting literal server facts into text nodes.";
     set_task_perms(caller_perms());
-    {message} = args;
-    if (typeof(message) == TYPE_LIST)
-      result = {};
-      for line in (message)
-        line = this:_apply_template(line);
-        result = {@result, line};
-      endfor
-      return result;
+    const source = this.welcome_message:join("\n");
+    const authored = $format:authored(this.welcome_message_kind, source);
+    const bindings = ["TITLE" -> this.moo_title, "VERSION" -> server_version(),
+      "CORE_VERSION" -> $sysobj.core_version];
+    return $document_template:mk('blocks,
+      {this:_welcome_node(block, 'block, bindings) for block in (flycontents(authored))});
+  endmethod
+
+  method _welcome_node owner: HACKER
+    "Replace placeholders only in parsed text nodes; code, destinations, and labels stay authored.";
+    const {value, expected, bindings} = args;
+    const node = expected in {'inline, 'block};
+    const kind = node ? value.kind | expected;
+    if (kind == 'text)
+      const text = value.text;
+      let result = "";
+      let cursor = 1;
+      while (cursor <= length(text))
+        let position = length(text) + 1;
+        let token = "";
+        for name in (mapkeys(bindings))
+          const offset = index(text[cursor..$], "{" + name + "}", 1);
+          if (offset && cursor + offset - 1 < position)
+            position = cursor + offset - 1;
+            token = name;
+          endif
+        endfor
+        result = result + text[cursor..position - 1];
+        if (!length(token))
+          break;
+        endif
+        result = result + bindings[token];
+        cursor = position + length(token) + 2;
+      endwhile
+      return $format.text:mk(result);
     endif
-    message = message:replace_all("{TITLE}", this.moo_title);
-    message = message:replace_all("{VERSION}", server_version());
-    message = message:replace_all("{CORE_VERSION}", $sysobj.core_version);
-    return message;
+    kind in {'code_block, 'inline_code, 'link, 'reference} && return value;
+    const shape = $document_schema:_shape(kind, "welcome");
+    let fields = node ? flyslots(value) | value;
+    node && (fields = mapdelete(fields, 'kind));
+    const contents_key = shape['contents];
+    if (typeof(contents_key) == TYPE_SYM)
+      fields[contents_key] = flycontents(value);
+    endif
+    for child in (shape['children])
+      const {key, child_kind, cardinality} = child;
+      if (!maphaskey(fields, key))
+        continue;
+      endif
+      let children = {};
+      for entry in (fields[key])
+        if (cardinality == 'matrix_optional)
+          children = {@children, {this:_welcome_node(cell, child_kind, bindings) for cell in (entry)}};
+        else
+          children = {@children, this:_welcome_node(entry, child_kind, bindings)};
+        endif
+      endfor
+      fields[key] = children;
+    endfor
+    !node && return fields;
+    let contents = {};
+    if (typeof(contents_key) == TYPE_SYM)
+      contents = fields[contents_key];
+      fields = mapdelete(fields, contents_key);
+    endif
+    return $document_template:mk(kind, contents, fields);
+  endmethod
+
+  method _public_output owner: ARCH_WIZARD
+    "Send public login content to the current connection, or the HTTP output-capture session.";
+    "No player object or history entry is created for unauthenticated output.";
+    caller == this || raise(E_PERM);
+    const {content} = args;
+    const connections = connections();
+    const target = length(connections) ? connections[1][1] | player;
+    const format = length(connections) ? $format:connection_format(connections[1][4]) | 'text_djot;
+    const event = $event:mk_login(false, content):with_audience('utility);
+    const batch = event:render_for(false, {['format -> format]});
+    for diagnostic in (batch['diagnostics])
+      server_log("Login content: " + diagnostic);
+    endfor
+    const rendered = batch['results][1];
+    const metadata = ['cowbell_document -> batch['document],
+      'annotations -> rendered['annotations], 'delivery_id -> uuid(), 'audience -> 'utility];
+    notify(target, rendered['body], false, false, tosym(strsub(tostr(format), "_", "/", 1)), metadata);
   endmethod
 
   verb "co*nnect @co*nnect" (any none any) owner: ARCH_WIZARD flags: "rxd"
@@ -122,7 +191,7 @@ object LOGIN [
       {name, ?password = 0} = args;
       name = strsub(name, " ", "_");
     except (E_ARGS)
-      notify(player, tostr("Usage:  ", verb, " <existing-player-name> <password>"));
+      this:_public_output(tostr("Usage:  ", verb, " <existing-player-name> <password>"));
       return 0;
     endtry
     try
@@ -137,7 +206,7 @@ object LOGIN [
       elseif (status == 'missing)
         "We assume the password is a $password frob; prompt for it interactively.";
         set_connection_option(player, "binary", 1);
-        notify(player, "Password: ");
+        this:_public_output("Password: ");
         set_connection_option(player, "binary", 0);
         set_connection_option(player, "client-echo", 0);
         this:add_interception(player, "intercepted_password", candidate);
@@ -156,7 +225,7 @@ object LOGIN [
       "Log the player in!";
       return candidate;
     except (E_INVARG)
-      notify(player, "Either that player does not exist, or has a different password.");
+      this:_public_output("Either that player does not exist, or has a different password.");
       return 0;
     endtry
   endverb
@@ -169,7 +238,7 @@ object LOGIN [
     try
       {provider, external_id} = args;
     except (E_ARGS)
-      notify(player, "OAuth2 check failed: invalid arguments");
+      this:_public_output("OAuth2 check failed: invalid arguments");
       return 0;
     endtry
     candidate = this:find_by_oauth2(provider, external_id);
@@ -191,27 +260,27 @@ object LOGIN [
     " => objnum (for successful creation)";
     caller == #0 && callers()[1][2] == "do_oauth_login" || raise(E_PERM);
     if (!this.player_creation_enabled)
-      notify(player, this.registration_string);
+      this:_public_output(this.registration_string);
       return 0;
     endif
     try
       {provider, external_id, email, name, username, player_name} = args;
       player_name = strsub(player_name, " ", "_");
     except (E_ARGS)
-      notify(player, "OAuth2 create failed: invalid arguments");
+      this:_public_output("OAuth2 create failed: invalid arguments");
       return 0;
     endtry
     if (!player_name || player_name == "<>")
-      notify(player, "You can't have a blank name!");
+      this:_public_output("You can't have a blank name!");
       return 0;
     elseif (player_name[1] == "<" && player_name[$] == ">")
-      notify(player, "Don't use angle brackets in your player name.");
+      this:_public_output("Don't use angle brackets in your player name.");
       return 0;
     elseif (index(player_name, " "))
-      notify(player, "Sorry, no spaces are allowed in player names.  Use dashes or underscores.");
+      this:_public_output("Sorry, no spaces are allowed in player names.  Use dashes or underscores.");
       return 0;
     elseif (this:_match_player(player_name) != $failed_match)
-      notify(player, "Sorry, that name is not available.  Please choose another.");
+      this:_public_output("Sorry, that name is not available.  Please choose another.");
       return 0;
     endif
     valid(this:find_by_oauth2(provider, external_id)) && return 0;
@@ -230,27 +299,27 @@ object LOGIN [
       {provider, external_id, email, name, username, existing_name, existing_password} = args;
       existing_name = strsub(existing_name, " ", "_");
     except (E_ARGS)
-      notify(player, "OAuth2 connect failed: invalid arguments");
+      this:_public_output("OAuth2 connect failed: invalid arguments");
       return 0;
     endtry
     if (!valid(candidate = this:_match_player(existing_name)))
-      notify(player, "That player does not exist.");
+      this:_public_output("That player does not exist.");
       return 0;
     endif
     {status, _} = this:_password_state(candidate, existing_password);
     if (status == 'ok)
       "Password verified for linking.";
     elseif (status == 'external_only)
-      notify(player, "Set an account password before linking another login identity.");
+      this:_public_output("Set an account password before linking another login identity.");
       return 0;
     elseif (status == 'missing)
-      notify(player, "Invalid password for existing account.");
+      this:_public_output("Invalid password for existing account.");
       return 0;
     elseif (status == 'invalid_type)
-      notify(player, "Cannot link to that account.");
+      this:_public_output("Cannot link to that account.");
       return 0;
     else
-      notify(player, "Invalid password for existing account.");
+      this:_public_output("Invalid password for existing account.");
       return 0;
     endif
     this:_claim_oauth_identity(candidate, provider, external_id);
@@ -272,39 +341,39 @@ object LOGIN [
   verb "cr*eate @cr*eate" (any none any) owner: ARCH_WIZARD flags: "rxd"
     caller == #0 || caller == this || caller_perms().wizard || raise(E_PERM);
     if (!this.player_creation_enabled)
-      notify(player, this.registration_string);
+      this:_public_output(this.registration_string);
       return;
     endif
     if (length(args) != 2)
-      notify(player, tostr("Usage:  ", verb, " <new-player-name> <new-password>"));
+      this:_public_output(tostr("Usage:  ", verb, " <new-player-name> <new-password>"));
       return;
     endif
     if (!(name = args[1]) || name == "<>")
-      notify(player, "You can't have a blank name!");
+      this:_public_output("You can't have a blank name!");
       if (name)
-        notify(player, "Also, don't use angle brackets (<>).");
+        this:_public_output("Also, don't use angle brackets (<>).");
       endif
       return;
     endif
     if (name[1] == "<" && name[$] == ">")
-      notify(player, "Try that again but without the angle brackets, e.g.,");
-      notify(player, tostr(" ", verb, " ", name[2..$ - 1], " ", strsub(strsub(args[2], "<", ""), ">", "")));
-      notify(player, "This goes for other commands as well.");
+      this:_public_output("Try that again but without the angle brackets, e.g.,");
+      this:_public_output(tostr(" ", verb, " ", name[2..$ - 1], " ", strsub(strsub(args[2], "<", ""), ">", "")));
+      this:_public_output("This goes for other commands as well.");
       return;
     endif
     if (index(name, " "))
-      notify(player, "Sorry, no spaces are allowed in player names.  Use dashes or underscores.");
+      this:_public_output("Sorry, no spaces are allowed in player names.  Use dashes or underscores.");
       "... lots of routines depend on there not being spaces in player names...";
       return;
     endif
     if (this:_match_player(name) != $failed_match)
-      notify(player, "Sorry, that name is not available.  Please choose another.");
+      this:_public_output("Sorry, that name is not available.  Please choose another.");
       "... note the :_match_player call is not strictly necessary...";
       "... it is merely there to handle the case that $player_db gets corrupted.";
       return;
     endif
     if (!(password = args[2]))
-      notify(player, "You must set a password for your player.");
+      this:_public_output("You must set a password for your player.");
       return;
     endif
     return this:_create_player(name, password, "", {});
@@ -506,7 +575,7 @@ object LOGIN [
     caller == #0 || caller_perms().wizard || raise(E_PERM);
     const {new_player} = args;
     !valid(new_player) && return;
-    const title = $format.title:mk(this:_apply_template("Welcome to {TITLE}!"));
+    const title = $format.title:mk("Welcome to " + this.moo_title + "!");
     const tips_list = $format.list:mk({"Set your description: @describe me as <text>", "Set your pronouns: @pronouns they/them (or she/her, he/him, etc.)"});
     const content = $format.block:mk(title,
       $format.paragraph:mk("Try entering ", $format.code:inline("help"), " to see what kind of things you can do where you are."),
@@ -562,7 +631,7 @@ object LOGIN [
     caller == #0 || raise(E_PERM);
     this:delete_interception(player);
     set_connection_option(player, "client-echo", 1);
-    notify(player, "");
+    this:_public_output("");
     try
       {candidate, ?password = ""} = args;
     except (E_ARGS)
@@ -597,8 +666,8 @@ object LOGIN [
         endtry
       endfor
     endfor
-    notify(player, "I don't understand that. Available commands:");
-    notify(player, "   " + setremove(clist, "?"):join(", "));
+    this:_public_output("I don't understand that. Available commands:");
+    this:_public_output("   " + setremove(clist, "?"):join(", "));
     return 0;
   endverb
 
@@ -612,8 +681,8 @@ object LOGIN [
   verb "h*elp @h*elp" (any none any) owner: ARCH_WIZARD flags: "rxd"
     "Display help message for login screen.";
     caller == #0 || caller == this || caller_perms().wizard || raise(E_PERM);
-    msg = {"## Getting Started", "", "To sign in to an existing account, use your **player name** and **password**.", "", "To create a new account, choose a unique player name and password.", "", "### Available commands", "", "- `connect <name> <password>` - Sign in to an existing account", "- `connect <name>` - Sign in (will prompt for password)", "- `create <name> <password>` - Create a new account", "- `quit` - Disconnect from the server", "", "For more detailed help once you're logged in, type `help` after connecting."};
-    notify(player, msg:join("\n"), false, false, "text/djot");
+    msg = {"## Getting Started", "", "To sign in to an existing account, use your *player name* and *password*.", "", "To create a new account, choose a unique player name and password.", "", "### Available commands", "", "- `connect <name> <password>` - Sign in to an existing account", "- `connect <name>` - Sign in (will prompt for password)", "- `create <name> <password>` - Create a new account", "- `quit` - Disconnect from the server", "", "For more detailed help once you're logged in, type `help` after connecting."};
+    this:_public_output($format:authored('djot_blocks, msg:join("\n")));
     return 0;
   endverb
 

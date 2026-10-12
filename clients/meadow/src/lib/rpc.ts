@@ -23,7 +23,6 @@ import {
     compileVerbFlatBuffer,
     getPropertiesFlatBuffer,
     getPropertyFlatBuffer,
-    getSystemPropertyFlatBuffer,
     getVerbCodeFlatBuffer,
     getVerbsFlatBuffer,
     invokeVerbFlatBuffer,
@@ -250,59 +249,4 @@ export function curieORef(curie: string): ObjectRef {
  */
 export async function performEval(authToken: string, expr: string): Promise<unknown> {
     return performEvalFlatBuffer(authToken, expr);
-}
-
-/**
- * Retrieves the welcome message and content type from the server
- *
- * The welcome message is returned as an array of strings that are joined
- * together to form a single document.
- *
- * Uses FlatBuffer protocol for efficient binary communication.
- *
- * @returns Promise resolving to an object with welcomeMessage and contentType
- */
-export async function retrieveWelcome(): Promise<{
-    welcomeMessage: string;
-    contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback";
-}> {
-    try {
-        // Fetch welcome message using FlatBuffer protocol
-        const welcomeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message");
-        let welcomeMessage = "";
-
-        if (welcomeValue && Array.isArray(welcomeValue)) {
-            // Join array of strings
-            welcomeMessage = welcomeValue.join("\n");
-        } else if (welcomeValue && typeof welcomeValue === "string") {
-            welcomeMessage = welcomeValue;
-        } else {
-            console.warn("Unexpected welcome message format:", welcomeValue);
-            welcomeMessage = "Welcome to mooR";
-        }
-
-        // Fetch content type using FlatBuffer protocol
-        let contentType: "text/plain" | "text/djot" | "text/html" | "text/traceback" = "text/plain";
-        try {
-            const typeValue = await getSystemPropertyFlatBuffer(["login"], "welcome_message_content_type");
-            if (typeof typeValue === "string") {
-                // Validate the content type
-                if (
-                    typeValue === "text/html" || typeValue === "text/djot" || typeValue === "text/plain"
-                    || typeValue === "text/traceback"
-                ) {
-                    contentType = typeValue;
-                }
-            }
-            // If 404 or invalid value, default to text/plain (already set)
-        } catch (error) {
-            console.log("Content type not available, defaulting to text/plain:", error);
-        }
-
-        return { welcomeMessage, contentType };
-    } catch (err) {
-        const errorMsg = `Exception retrieving welcome text: ${err instanceof Error ? err.message : String(err)}`;
-        console.error(errorMsg);
-        return { welcomeMessage: "Welcome to mooR", contentType: "text/plain" };
-    }
 }

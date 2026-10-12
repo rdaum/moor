@@ -12,7 +12,6 @@ object SYSOBJ [
   property agent_room (owner: ARCH_WIZARD, flags: "rc") = AGENT_ROOM;
   property agentic (owner: ARCH_WIZARD, flags: "rc") = AGENTIC;
   property ambiguous_match (owner: HACKER, flags: "r") = #-2;
-  property ansi (owner: HACKER, flags: "r") = ANSI;
   property arch_wizard (owner: HACKER, flags: "r") = ARCH_WIZARD;
   property architects_compass (owner: HACKER, flags: "r") = ARCHITECTS_COMPASS;
   property area (owner: HACKER, flags: "r") = AREA;
@@ -69,7 +68,6 @@ object SYSOBJ [
   property help_utils (owner: HACKER, flags: "r") = HELP_UTILS;
   property henri (owner: HACKER, flags: "r") = HENRI;
   property housekeeping (owner: HACKER, flags: "r") = HOUSEKEEPING;
-  property html (owner: HACKER, flags: "r") = HTML;
   property int_proto (owner: HACKER, flags: "r") = INT_PROTO;
   property kibble_cupboard (owner: HACKER, flags: "r") = KIBBLE_CUPBOARD;
   property letter (owner: HACKER, flags: "r") = LETTER;

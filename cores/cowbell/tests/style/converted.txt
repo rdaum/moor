@@ -236,7 +236,6 @@ format/format_title.moo
 events/sub.moo:resolve_inline
 events/sub.moo:content_binding
 events/event_receiver.moo:tell
-events/event_receiver.moo:_resolve_event
 events/event_receiver.moo:_event_render
 world/passage.moo:movement_event
 look.moo
@@ -245,3 +244,13 @@ world/room.moo:room_snapshot
 events/event_receiver.moo:_capture_room
 events/event_receiver.moo:emit_room_look
 events/event_receiver.moo:emit_room_snapshot_state
+
+events/event_receiver.moo:_deliver
+events/event_receiver.moo:inform_all
+auth/login.moo:welcome
+auth/login.moo:welcome_content
+auth/login.moo:_welcome_node
+auth/login.moo:_public_output
+events/event.moo:resolve
+events/event.moo:render_for
+events/event.moo:_facts
