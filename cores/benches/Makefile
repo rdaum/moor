@@ -1,3 +1,15 @@
+# Copyright (C) 2026 Ryan Daum <ryan.daum@gmail.com>
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
 OPTIONS = --use-boolean-returns true \
           --use-symbols-in-builtins true \
           --custom-errors true \
@@ -27,73 +39,65 @@ SLOW_DB_PATH ?= /tmp/moor-slow-mount/bench.db
 PERF_STAT_OUTPUT ?= perf-combat.stat
 PERF_STAT_EVENTS ?= task-clock,cycles:u,instructions:u,branches:u,branch-misses:u,cache-references:u,cache-misses:u,context-switches,cpu-migrations,page-faults
 
-SRC_DIRECTORY = src
-TEST_DIRECTORY = tests
-OUTPUT_DIRECTORY = .
-MOORC = cargo run --release -p moorc -- $(OPTIONS)
+MOORC_PROFILE ?= release
+TEST_WIZARD ?= 2
+TEST_PROGRAMMER ?= 2
+TEST_PLAYER ?= 4
+CORE_HELP = 'make bench              Run all benchmark methods.' \
+            'make bench-write-stress / bench-string-history / bench-combat-stress' \
+            'make bench-intent-match Run intent matching measurements.'
+include ../make/core.mk
 
-.PHONY: rebuild bench bench-game-update bench-write-stress bench-string-history bench-combat-stress bench-intent-match clean
+.PHONY: bench bench-game-update bench-write-stress bench-string-history bench-combat-stress bench-intent-match bench-write-stress-perf bench-combat-stress-perf bench-combat-stress-perf-stat bench-write-stress-perf-sched bench-write-stress-slow
 
-SRC_FILES := $(wildcard src/*.moo src/*/*.moo)
+bench: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+	$(TEST_PRINCIPALS) --run-tests true
 
-gen.objdir: Makefile $(SRC_FILES)
-	rm -rf gen.objdir
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir
-
-rebuild: gen.objdir
-	test -d gen.objdir
-	rm -rf src
-	mkdir -p src
-	cp -r gen.objdir/* ./src/
-
-bench: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
-	--test-directory $(TEST_DIRECTORY) --test-wizard=2 --test-programmer=2 --test-player=4 --run-tests true
-
-bench-game-update: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+bench-game-update: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_run_bench"
 
-bench-write-stress: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+bench-write-stress: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_write_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(APPEND_MODE)}"
 
-bench-string-history: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+bench-string-history: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_string_history_append" --test-timeout $(HISTORY_TIMEOUT) --test-args "{$(HISTORY_WRITERS), $(HISTORY_ENTRIES), $(HISTORY_ENTRY_BYTES), $(HISTORY_APPENDS), $(HISTORY_APPEND_DELAY), $(HISTORY_SETTLE_SECONDS), $(HISTORY_APPEND_WIDTH), $(HISTORY_MUTATION_MODE)}"
 
-bench-combat-stress: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+bench-combat-stress: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
 
-bench-intent-match: $(SRC_FILES)
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+bench-intent-match: check-sources
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--test-wizard=2 --run-tests true --test-filter "#669:test_intent_match" --test-args "{$(INTENT_ITERATIONS)}"
 
 # Profile with perf to identify blocking spots
 # After running, analyze with: perf report -g or perf report --stdio
-bench-write-stress-perf: $(wildcard src/*.moo)
-	cargo build --release -p moorc
+bench-write-stress-perf: check-sources
+	$(CARGO) build --release -p moorc
 	perf record -g --call-graph dwarf -o perf.data -- \
-		../../target/release/moorc $(OPTIONS) \
+		$(abspath $(CARGO_TARGET_DIR))/release/moorc $(OPTIONS) \
 		--src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 		--test-wizard=2 --run-tests true --test-filter "#668:test_write_stress" --test-timeout 60
 	@echo "Perf data written to perf.data"
 	@echo "Analyze with: perf report -g"
 
-bench-combat-stress-perf: $(wildcard src/*.moo)
-	cargo build --release -p moorc
+bench-combat-stress-perf: check-sources
+	$(CARGO) build --release -p moorc
 	perf record -e cycles:u -F 999 -g --call-graph dwarf -o perf-combat.data -- \
-		../../target/release/moorc $(OPTIONS) \
+		$(abspath $(CARGO_TARGET_DIR))/release/moorc $(OPTIONS) \
 		--src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 		--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
 	@echo "Perf data written to perf-combat.data"
 	@echo "Analyze with: perf report -i perf-combat.data --stdio --sort comm,dso,symbol --no-children"
 
-bench-combat-stress-perf-stat: $(wildcard src/*.moo)
-	cargo build --release -p moorc
+bench-combat-stress-perf-stat: check-sources
+	$(CARGO) build --release -p moorc
 	perf stat -x, -e $(PERF_STAT_EVENTS) -o $(PERF_STAT_OUTPUT) -- \
-		../../target/release/moorc $(OPTIONS) \
+		$(abspath $(CARGO_TARGET_DIR))/release/moorc $(OPTIONS) \
 		--src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 		--test-wizard=2 --run-tests true --test-filter "#668:test_combat_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(FANOUT), $(CHECKS_PER_TICK), $(STATE_WRITES), $(DELAY_RATIO), $(UPDATE_HZ)}"
 	@echo "Perf stat written to $(PERF_STAT_OUTPUT)"
@@ -102,15 +106,15 @@ bench-combat-stress-perf-stat: $(wildcard src/*.moo)
 # Profile with scheduler tracing to see blocking/sleeping (requires root or perf_event_paranoid=-1)
 # Build first without sudo, then run perf with sudo
 # Also captures iostat for I/O analysis
-bench-write-stress-perf-sched: $(wildcard src/*.moo)
-	cargo build --release -p moorc
+bench-write-stress-perf-sched: check-sources
+	$(CARGO) build --release -p moorc
 	@echo "Running perf with sudo (will prompt for password)..."
 	@echo "Starting iostat logging to iostat.log..."
 	@rm -f iostat.log && \
 	iostat -x 1 > iostat.log & \
 	IOSTAT_PID=$$! && \
 	sudo perf record -g --call-graph dwarf -e sched:sched_switch,sched:sched_stat_sleep -o perf-sched.data -- \
-		../../target/release/moorc $(OPTIONS) \
+		$(abspath $(CARGO_TARGET_DIR))/release/moorc $(OPTIONS) \
 		--src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 		--test-wizard=2 --run-tests true --test-filter "#668:test_write_stress" --test-timeout 60 ; \
 	kill $$IOSTAT_PID 2>/dev/null || true
@@ -121,7 +125,7 @@ bench-write-stress-perf-sched: $(wildcard src/*.moo)
 
 # Run benchmark on simulated slow storage (requires setup-slow-disk.sh first)
 # Usage: make bench-write-stress-slow SLOW_DB_PATH=/tmp/moor-slow-mount/bench.db DURATION=300
-bench-write-stress-slow: $(wildcard src/*.moo)
+bench-write-stress-slow: check-sources
 	@if [ ! -d "$$(dirname $(SLOW_DB_PATH))" ]; then \
 		echo "Error: Slow disk not mounted. Run: ../../scripts/setup-slow-disk.sh setup"; \
 		exit 1; \
@@ -130,11 +134,8 @@ bench-write-stress-slow: $(wildcard src/*.moo)
 	@rm -f iostat-slow.log && \
 	iostat -x 1 > iostat-slow.log & \
 	IOSTAT_PID=$$! && \
-	$(MOORC) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
+	$(CORE_COMPILER) --src-objdef-dir $(SRC_DIRECTORY) --include-baselines=false --out-objdef-dir $(OUTPUT_DIRECTORY)/gen.objdir \
 	--db-path $(SLOW_DB_PATH) \
 	--test-wizard=2 --run-tests true --test-filter "#668:test_write_stress" --test-timeout $$(($(DURATION) + 60)) --test-args "{$(DURATION), $(SUBSCRIBERS), $(WORK_PER_TICK), $(APPEND_MODE)}" ; \
 	kill $$IOSTAT_PID 2>/dev/null || true
 	@echo "I/O stats written to iostat-slow.log"
-
-clean:
-	rm -rf gen.objdir

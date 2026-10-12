@@ -102,3 +102,10 @@ The client controls visual wrapping and long-output paging. Private `page` messa
 Byte quotas are the supported default. The object-count alternative depends on native quota support
 that is not implemented. Some runtime compatibility issues remain; the separate
 [runtime findings](../../docs/modern-lambda-runtime-findings.md) record their evidence and status.
+
+The core Makefiles share compiler, export, roundtrip, and method-test rules in `cores/make/`. Use
+`make help` to list targets. `MOORC_TYPE=direct` uses an existing `target/debug/moorc`;
+`MOORC_TYPE=docker` uses `MOORC_IMAGE`. `MOORC_PROFILE=release` selects a release compiler for Cargo
+or direct mode. `MOORC=...` still overrides the compiler command, and `FEATURES` still sets Snore's
+language options. `runtime-headless` and `runtime-session` are aliases for `test-headless` and
+`test-session`. `make check` also tests the shared Makefile rules.

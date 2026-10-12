@@ -48,14 +48,14 @@ make -C cores/minimal-core MOORC_TYPE=docker
 
 ## Testing
 
-Run the import tests with the minimal wizard as the test wizard, programmer, and player:
+Validate the source import and export:
 
 ```sh
 make -C cores/minimal-core test
 ```
 
-This verifies that the objdef source imports cleanly and that any embedded tests can run with object
-`#3` as the active authority.
+This core has no method test suite. The target verifies that its objdef source imports and exports
+successfully. Use `make check` to check the shared rules and export/reimport stability too.
 
 ## Rebuilding Source
 
@@ -66,8 +66,9 @@ Use `rebuild` after changing source files when you want to round-trip through `m
 make -C cores/minimal-core rebuild
 ```
 
-Review the resulting diff before committing. The rebuild target deletes and recreates `src/` from
-`gen.objdir`.
+The target checks export/reimport stability before copying normalized objdef into `src/`. It
+preserves other source files. Export removes source comments, so review the diff before committing.
+`make reformat` is an alias for the same operation.
 
 ## Importing
 
@@ -79,3 +80,8 @@ cores/minimal-core/src
 
 After import, the login path should authenticate as `#3`. The `eval` verb is on `#2`, so basic
 expression evaluation works once the connected player is in the first room.
+
+The Makefile includes the shared rules in `cores/make/`. `make help` lists the common targets and
+compiler settings. `make build` and `make output` also build `gen.objdir/`. `MOORC_PROFILE=release`
+selects the release compiler in Cargo or direct mode. `MOORC=...` overrides the compiler command;
+the core's feature options still apply.

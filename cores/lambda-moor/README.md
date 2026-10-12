@@ -29,19 +29,17 @@ The `Makefile` provides several useful targets for working with this codebase:
 
 ### Basic compilation
 
-- `make` or `make gen.moo-textdump` - Compiles the objdef sources into a traditional MOO textdump
-  for validation
-- `make gen.objdir` - Compiles into a new [objdef](../../book/src/the-system/objdef-file-format.md)
-  directory structure
+- `make`, `make build`, or `make gen.objdir` exports normalized
+  [objdef](../../book/src/the-system/objdef-file-format.md) into `gen.objdir/`.
+- `make gen.moo-textdump` or `make output` exports a traditional MOO textdump.
+- `make roundtrip` exports, reimports, and compares the two objdef trees.
+- `make check` checks the shared Makefile rules, imports the core, and checks the roundtrip.
 
 ### Development workflow
 
-- `make rebuild` - **WARNING: DESTRUCTIVE** - Builds a new
-  [objdef](../../book/src/the-system/objdef-file-format.md) dump and overwrites your local `src/`
-  files with the compiled result. Use this as the last step before committing changes.
-- `make test` - Runs the test suite using the compiled code -- though this core doesn't really have
-  a test suite. Note that by default it will scan the entire core for verbs prefixed `test_` and run
-  them, which may not make sense for LambdaCore
+- `make reformat` or `make rebuild` checks roundtrip stability, then overwrites `src/` files with
+  normalized objdef. This removes source comments. Review the diff before committing.
+- `make test` validates import and export. This core has no method test suite.
 - `make clean` - Removes generated files
 
 ### Configuration
@@ -54,3 +52,8 @@ The Makefile automatically enables mooR's modern features:
 - UUID-style object IDs
 
 Set `DEBUG=1` to run the compiler under gdb for debugging compilation issues.
+
+All cores include the rules in `cores/make/`. Use `make help` to list targets. The default compiler
+launcher is Cargo. `MOORC_TYPE=direct` uses `target/debug/moorc`; `MOORC_TYPE=docker` uses
+`MOORC_IMAGE` (default: `moor-moor-daemon`). `MOORC_PROFILE=release` selects a release build for
+Cargo or direct mode. `MOORC=...` overrides the command; the core's feature options still apply.

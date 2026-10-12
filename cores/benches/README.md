@@ -7,8 +7,8 @@ Run `make bench-string-history` to measure appends to large string-list properti
 starts four writer tasks by default. Each task appends 20 strings to a list that contains 1,024
 distinct strings. Each string contains 2,048 bytes.
 
-Use this configuration for one property with approximately 9.7 MB of string data and enough
-appends to exercise one foreground rollup:
+Use this configuration for one property with approximately 9.7 MB of string data and enough appends
+to exercise one foreground rollup:
 
 ```shell
 make bench-string-history HISTORY_WRITERS=1 HISTORY_ENTRIES=1024 \
@@ -34,3 +34,13 @@ make bench-string-history HISTORY_WRITERS=8 HISTORY_ENTRIES=1024 \
 
 This preset submits 1,200 property updates. The `HISTORY_APPEND_RESULT` line reports the time that
 the producer tasks require. The batch-writer counters report queue-full events and blocked time.
+
+Build commands use the shared rules in `cores/make/`. `make` or `make build` exports `gen.objdir/`.
+`make test` validates import and export without running benchmarks. `make check` also tests the
+shared rules and export/reimport stability. Benchmark workloads remain under the `bench*` targets.
+`make rebuild` (also `make reformat`) checks the roundtrip before overwriting source files with
+normalized objdef. Export removes comments.
+
+This core defaults to `MOORC_PROFILE=release`. `MOORC_TYPE=direct` uses the existing release
+compiler; `MOORC_TYPE=docker` uses `MOORC_IMAGE`. Use `MOORC_PROFILE=dev` for a debug compiler.
+`make help` lists the common targets and compiler settings.

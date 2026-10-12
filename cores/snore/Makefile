@@ -10,15 +10,6 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
-.DEFAULT_GOAL := build
-.DELETE_ON_ERROR:
-
-CARGO ?= cargo
-MOORC ?= $(CARGO) run -p moorc --
-
-# Keep build output in the workspace target directory regardless of where make runs.
-export CARGO_TARGET_DIR ?= ../../target
-
 # Method-harness principals. The wizard and programmer are core characters; the
 # non-programmer player is the fixture at #101 in the test overlay.
 TEST_WIZARD ?= 2
@@ -29,7 +20,6 @@ TEST_TASK_PLAYER ?=
 TEST_FILTER ?=
 TEST_TIMEOUT ?= 30
 
-TESTSRC := gen.testsrc
 TEST_LOG := gen.test.log
 FIXTURES := tests/fixtures
 
@@ -41,6 +31,7 @@ FEATURES = --bool-type true \
            --use-uuobjids true \
            --flyweight-type false \
            --rich-notify false
+OPTIONS = $(FEATURES)
 
 # Local launcher: all state stays under RUN_DIR inside this core directory, so
 # it cannot touch the databases of the other cores. The daemon receives the same
@@ -58,40 +49,24 @@ RUN_LISTEN = --rpc-listen ipc://$(RUN_ABS)/rpc.sock \
              --workers-request-listen ipc://$(RUN_ABS)/workers-request.sock \
              --enrollment-listen ipc://$(RUN_ABS)/enrollment.sock
 
-.PHONY: check audit-style check-style build rebuild reformat gen.objdir check-sources test test-headless test-session test-harness test-wire test-extraction test-collection-roundtrip measure roundtrip run run-telnet run-clean clean help
+TEST_MODE = methods
+TEST_SRC_DIRECTORY = gen.testsrc
+TEST_PREREQUISITES = gen.testsrc
+CHECK_TARGETS = check-style test test-headless test-session test-harness roundtrip test-collection-roundtrip
+CLEAN_EXTRA = gen.testsrc gen.test.log gen.harness.log gen.collections.rt gen.collections.rt.in-progress gen.collections.log
+CORE_HELP = 'make test-headless      Run command scenarios (alias: runtime-headless).' \
+            'make test-session       Run session scenarios (alias: runtime-session).' \
+            'make test-wire          Run TCP tests.' \
+            'make test-extraction    Check extraction and restart in disposable worlds.' \
+            'make measure            Run measurement workloads.' \
+            'make run / run-telnet   Start an isolated world and telnet host.' \
+            'make run-clean          Remove the isolated launcher state.'
+include ../make/core.mk
 
-# These targets share the test overlay and log. Do not run them concurrently.
-.NOTPARALLEL:
-
-check:
-	$(MAKE) check-style
-	$(MAKE) test
-	$(MAKE) test-headless
-	$(MAKE) test-session
-	$(MAKE) test-harness
-	$(MAKE) roundtrip
-	$(MAKE) test-collection-roundtrip
-
-# Always import the complete tree, including nested sources and removed files.
-build: gen.objdir
-
-# Normalize working sources only after the export survives reimport unchanged.
-# Export regenerates objdef formatting and does not preserve source comments.
-reformat: roundtrip
-	cp -r gen.objdir/. src/
-
-rebuild: reformat
-
-gen.objdir: check-sources
-	rm -rf gen.objdir gen.objdir.in-progress
-	$(MOORC) $(FEATURES) --src-objdef-dir src --include-baselines=false --out-objdef-dir gen.objdir
-	@test -d gen.objdir || { echo "FAIL: compiler did not produce an export" >&2; exit 1; }
-
-check-sources:
-	@test -n "$$(find src -type f -name '*.moo' -print -quit)" || { \
-		echo "No core sources yet. Add objdef files under src/ before building." >&2; \
-		exit 1; \
-	}
+.PHONY: audit-style check-style test-headless test-session test-harness test-wire test-extraction test-collection-roundtrip measure run run-telnet run-clean runtime-headless runtime-session runtime-test-src runtime-headless-src
+runtime-headless: test-headless
+runtime-session: test-session
+runtime-test-src runtime-headless-src: gen.testsrc
 
 # Test overlay: shipped core plus fixtures. Fixtures never enter src/.
 gen.testsrc: check-sources $(wildcard src/*.moo) $(wildcard $(FIXTURES)/*.moo)
@@ -101,24 +76,9 @@ gen.testsrc: check-sources $(wildcard src/*.moo) $(wildcard $(FIXTURES)/*.moo)
 	cat $(FIXTURES)/fixture_constants.moo >> gen.testsrc/constants.moo
 	rm -f gen.testsrc/fixture_constants.moo
 
-# Method harness. Fails when discovery finds no test_ entry points.
-test: gen.testsrc
-	@$(MOORC) $(FEATURES) --src-objdef-dir gen.testsrc \
-		--run-tests true --test-wizard $(TEST_WIZARD) \
-		--test-programmer $(TEST_PROGRAMMER) --test-player $(TEST_PLAYER) \
-		--test-timeout $(TEST_TIMEOUT) \
-		$(if $(TEST_TASK_PLAYER),--test-task-player $(TEST_TASK_PLAYER),) \
-		$(if $(TEST_FILTER),--test-filter "$(TEST_FILTER)",) \
-		> $(TEST_LOG) 2>&1; status=$$?; cat $(TEST_LOG); \
-		grep -qE 'Found [1-9][0-9]* tests' $(TEST_LOG) || { \
-			echo "FAIL: method suite discovered no tests" >&2; exit 1; }; \
-		if grep -qE 'Filtered tests from [0-9]+ to 0' $(TEST_LOG); then \
-			echo "FAIL: TEST_FILTER selected no methods" >&2; exit 1; fi; \
-		exit $$status
-
 # Headless command scenarios through the scheduler. Fails when none are found.
 test-headless: gen.testsrc
-	@$(MOORC) $(FEATURES) --src-objdef-dir gen.testsrc \
+	@$(CORE_COMPILER) --src-objdef-dir gen.testsrc \
 		--test-wizard $(TEST_WIZARD) --test-programmer $(TEST_PROGRAMMER) \
 		--test-player $(TEST_PLAYER) \
 		--test-files 'tests/moot/*.moot' \
@@ -170,9 +130,9 @@ test-extraction:
 # Execute a stored captured closure after fixture export and reimport.
 test-collection-roundtrip: gen.testsrc
 	rm -rf gen.collections.rt gen.collections.rt.in-progress
-	$(MOORC) $(FEATURES) --src-objdef-dir gen.testsrc --include-baselines=false --out-objdef-dir gen.collections.rt
+	$(CORE_COMPILER) --src-objdef-dir gen.testsrc --include-baselines=false --out-objdef-dir gen.collections.rt
 	@test -d gen.collections.rt || { echo "FAIL: compiler did not produce an export" >&2; exit 1; }
-	@$(MOORC) $(FEATURES) --src-objdef-dir gen.collections.rt \
+	@$(CORE_COMPILER) --src-objdef-dir gen.collections.rt \
 		--run-tests true --test-wizard $(TEST_WIZARD) \
 		--test-programmer $(TEST_PROGRAMMER) --test-player $(TEST_PLAYER) \
 		--test-filter '#$(TEST_HARNESS):test_collection_callbacks' \
@@ -190,17 +150,10 @@ check-style:
 
 # Measurements are explicit workloads, separate from test_ method discovery.
 measure: gen.testsrc
-	$(MOORC) $(FEATURES) --src-objdef-dir gen.testsrc \
+	$(CORE_COMPILER) --src-objdef-dir gen.testsrc \
 		--test-wizard $(TEST_WIZARD) --test-programmer $(TEST_PROGRAMMER) \
 		--test-player $(TEST_PLAYER) --test-timeout 120 \
 		--test-files tests/measurements.moot
-
-# Core identities must survive export and reimport unchanged.
-roundtrip: gen.objdir
-	rm -rf gen.objdir.rt
-	$(MOORC) $(FEATURES) --src-objdef-dir gen.objdir --include-baselines=false --out-objdef-dir gen.objdir.rt
-	diff -r gen.objdir gen.objdir.rt
-	@echo "roundtrip: export is stable across reimport"
 
 # Start the core from its own isolated data directory. The first run imports
 # gen.objdir and generates the host keypair and enrollment token under RUN_DIR;
@@ -215,14 +168,14 @@ run: gen.objdir
 			--public-key $(RUN_ABS)/config/moor-verifying-key.pem \
 			--private-key $(RUN_ABS)/config/moor-signing-key.pem \
 			--enrollment-token-file $(RUN_ABS)/config/enrollment-token \
-			$(RUN_LISTEN) $(FEATURES); \
+			$(RUN_LISTEN) $(OPTIONS); \
 	else \
 		echo "Resuming $(RUN_ABS)/data/world.db"; \
 		$(DAEMON) $(RUN_ABS)/data --db world.db \
 			--public-key $(RUN_ABS)/config/moor-verifying-key.pem \
 			--private-key $(RUN_ABS)/config/moor-signing-key.pem \
 			--enrollment-token-file $(RUN_ABS)/config/enrollment-token \
-			$(RUN_LISTEN) $(FEATURES); \
+			$(RUN_LISTEN) $(OPTIONS); \
 	fi
 
 # Connect a telnet host to a daemon started with `make run` (in another shell).
@@ -239,31 +192,3 @@ run-telnet:
 
 run-clean:
 	rm -rf $(RUN_DIR)
-
-clean:
-	rm -rf gen.objdir gen.objdir.in-progress gen.objdir.rt gen.objdir.rt.in-progress gen.testsrc gen.test.log gen.harness.log gen.collections.rt gen.collections.rt.in-progress gen.collections.log
-
-help:
-	@printf '%s\n' \
-		'make check              Run style, method, command, session, and roundtrip checks in order.' \
-		'make                    Import src/ and export normalized objdef to gen.objdir/.' \
-		'make reformat           Validate export/reimport and overwrite src/ with normalized objdef.' \
-		'make rebuild            Alias for reformat.' \
-		'make audit-style        Print parser-backed source findings.' \
-		'make check-style        Require explicit locals, initial contracts, and separate conditional assignments.' \
-		'make test               Run test_ methods from the core plus tests/fixtures overlay.' \
-		'make test-headless      Run .moot command scenarios under tests/moot.' \
-		'make test-session       Run mock-session scenarios under tests/sessions.' \
-		'make test-harness       Check runner exception handling and builtin map keys.' \
-		'make test-wire          Run isolated TCP login and authoring scenarios.' \
-		'make test-extraction    Check isolated extraction, restart/resume, and export.' \
-		'make test-collection-roundtrip  Execute a saved closure after export/reimport.' \
-		'make measure            Run the measurement tests and print MEASURE lines.' \
-		'make roundtrip          Export, reimport, and compare objdef for identity stability.' \
-		'make run                Start the daemon from isolated state under gen.run/.' \
-		'make run-telnet         Connect a telnet host to a running `make run` daemon.' \
-		'make run-clean          Remove the launcher state (does not touch src/).' \
-		'make clean              Remove generated output.' \
-		'MOORC=...               Override the compiler command, including its arguments.' \
-		'CARGO="cargo +toolchain" Use a specific cargo toolchain.' \
-		'TEST_FILTER=#100:test_x Only run matching test_ verbs.'
