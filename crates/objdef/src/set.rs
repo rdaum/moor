@@ -109,6 +109,7 @@ impl ProposedObjectGraph {
 /// `ObjDefSet` is read-only with respect to the database. It validates constants, parses all sources
 /// through one `ObjFileContext`, detects duplicate object IDs, and derives incoming identity
 /// metadata. Applying the result is a separate loader concern.
+#[derive(Clone)]
 pub struct ObjDefSet {
     graph: ProposedObjectGraph,
     constants: HashMap<Symbol, Var>,

@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Mock-session scenarios for Snore Core.
+//! Mock-session scenarios for Cowbell and Snore cores.
 //!
 //! Imports an objdef overlay into a temporary database, starts the kernel scheduler, and runs
 //! `.moot` scenarios with one `TestSession` per player. Commands go through the real command
@@ -18,7 +18,7 @@
 //!
 //! This harness captures committed output. `tests/wire.py` separately exercises daemon and telnet I/O.
 //!
-//! usage: session-runner --core-dir DIR --moot FILE_OR_DIR [--wizard N] [--programmer N]
+//! usage: core-session-runner --core-dir DIR --moot FILE_OR_DIR [--wizard N] [--programmer N]
 //!                       [--nonprogrammer N]
 
 mod scenario;
@@ -36,7 +36,7 @@ use moor_kernel::config::{Config, FeaturesConfig};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TaskHandle, TaskNotification};
 use moor_moot::MootRunner;
-use moor_objdef::{ObjDefLoaderOptions, ObjectDefinitionLoader};
+use moor_objdef::{ObjDefLoaderOptions, ObjDefSet, ObjectDefinitionLoader};
 use moor_var::{
     E_VERBNF, List, Obj, SYSTEM_OBJECT, Symbol, Var, v_bool, v_empty_str, v_obj, v_string,
 };
@@ -592,9 +592,24 @@ fn run() -> Result<()> {
         ));
     }
 
+    let features = Arc::new(FeaturesConfig {
+        anonymous_objects: args.cowbell,
+        bool_type: true,
+        symbol_type: true,
+        custom_errors: true,
+        use_uuobjids: true,
+        flyweight_type: args.cowbell,
+        rich_notify: args.cowbell,
+        use_boolean_returns: true,
+        use_symbols_in_builtins: true,
+        ..Default::default()
+    });
+    let core = ObjDefSet::read_directory(&features.compile_options(), &args.core_dir)
+        .map_err(|err| eyre!("objdef compile failed: {err}"))?;
+
     let mut failures = Vec::new();
     for path in &moot_files {
-        match run_scenario(&args, path) {
+        match run_scenario(&args, path, &core, features.clone()) {
             Ok(()) => println!("PASS {}", path.display()),
             Err(err) => {
                 eprintln!("FAIL {}: {err:?}", path.display());
@@ -615,22 +630,8 @@ fn run() -> Result<()> {
     }
 }
 
-/// Each scenario gets its own database and scheduler so state and output queues
-/// do not leak between files.
-fn run_scenario(args: &Args, path: &Path) -> Result<()> {
-    let features = Arc::new(FeaturesConfig {
-        anonymous_objects: args.cowbell,
-        bool_type: true,
-        symbol_type: true,
-        custom_errors: true,
-        use_uuobjids: true,
-        flyweight_type: args.cowbell,
-        rich_notify: args.cowbell,
-        use_boolean_returns: true,
-        use_symbols_in_builtins: true,
-        ..Default::default()
-    });
-
+/// Reuse compiled definitions, but give every scenario an independent database.
+fn load_database(core: &ObjDefSet) -> Result<TxDB> {
     let (database, _) = TxDB::try_open(None, DatabaseConfig::default())
         .map_err(|err| eyre!("unable to open temporary database: {err}"))?;
     let mut loader = database
@@ -639,17 +640,23 @@ fn run_scenario(args: &Args, path: &Path) -> Result<()> {
     {
         let mut object_loader = ObjectDefinitionLoader::new(loader.as_mut());
         object_loader
-            .load_objdef_directory(
-                features.compile_options(),
-                &args.core_dir,
-                ObjDefLoaderOptions::default(),
-            )
+            .load_objdef_set(core.clone(), ObjDefLoaderOptions::default())
             .map_err(|err| eyre!("objdef import failed: {err}"))?;
     }
     loader
         .commit()
         .map_err(|err| eyre!("import commit failed: {err:?}"))?;
+    Ok(database)
+}
 
+/// Each scenario gets its own scheduler and output queues so state cannot leak.
+fn run_scenario(
+    args: &Args,
+    path: &Path,
+    core: &ObjDefSet,
+    features: Arc<FeaturesConfig>,
+) -> Result<()> {
+    let database = load_database(core)?;
     let config = Config {
         features: features.clone(),
         ..Default::default()
@@ -704,6 +711,44 @@ fn main() -> std::process::ExitCode {
         Err(err) => {
             eprintln!("session runner failed: {err:?}");
             std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use moor_common::model::{TaskPermissions, WorldStateSource};
+    use moor_common::util::BitEnum;
+    use moor_objdef::ObjDefSource;
+
+    #[test]
+    fn compiled_core_does_not_share_scenario_mutations() {
+        let core = ObjDefSet::parse_sources(
+            &FeaturesConfig::default().compile_options(),
+            None,
+            None,
+            [ObjDefSource::new(
+                "fixture",
+                "object #1\nname: \"Original\"\nowner: #-1\nreadable: true\nendobject\n",
+            )],
+        )
+        .unwrap();
+        let first = load_database(&core).unwrap();
+        let mut transaction = first.loader_client().unwrap();
+        transaction
+            .set_object_name(&Obj::mk_id(1), "Changed".to_owned())
+            .unwrap();
+        transaction.commit().unwrap();
+
+        let second = load_database(&core).unwrap();
+        let permissions = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
+        for (database, expected) in [(first, "Changed"), (second, "Original")] {
+            let transaction = database.new_world_state().unwrap();
+            assert_eq!(
+                transaction.name_of(&permissions, &Obj::mk_id(1)).unwrap(),
+                expected
+            );
         }
     }
 }

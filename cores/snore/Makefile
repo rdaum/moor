@@ -89,10 +89,10 @@ test-headless: gen.testsrc
 
 # Mock-session scenarios through the kernel scheduler against the test overlay.
 test-session: gen.testsrc
-	@$(CARGO) run --manifest-path tools/session-runner/Cargo.toml -- \
+	@$(CARGO) run -p core-session-runner -- \
 		--core-dir gen.testsrc --moot tests/sessions \
 		> $(TEST_LOG) 2>&1; s1=$$?; \
-	$(CARGO) run --manifest-path tools/session-runner/Cargo.toml -- \
+	$(CARGO) run -p core-session-runner -- \
 		--core-dir gen.testsrc --moot tests/sessions-game --nonprogrammer 108 \
 		>> $(TEST_LOG) 2>&1; s2=$$?; cat $(TEST_LOG); \
 	grep -q 'Test definition: tests/sessions/' $(TEST_LOG) || { \
@@ -103,10 +103,10 @@ test-session: gen.testsrc
 
 # Command exceptions must fail even when the scenario has no output assertions.
 test-harness: gen.testsrc
-	$(CARGO) test --manifest-path tools/session-runner/Cargo.toml
-	$(CARGO) run --manifest-path tools/session-runner/Cargo.toml -- \
+	$(CARGO) test -p core-session-runner
+	$(CARGO) run -p core-session-runner -- \
 		--core-dir gen.testsrc --moot tests/harness/eval_errors.moot
-	@$(CARGO) run --manifest-path tools/session-runner/Cargo.toml -- \
+	@$(CARGO) run -p core-session-runner -- \
 		--core-dir gen.testsrc --moot tests/harness/command_exception.moot \
 		> gen.harness.log 2>&1; status=$$?; cat gen.harness.log; \
 	[ $$status -ne 0 ] && grep -q 'command task aborted:.*harness command exception' gen.harness.log || { \
@@ -121,7 +121,7 @@ test-wire: gen.testsrc
 
 # Destructive extraction checks always import src into disposable databases.
 test-extraction:
-	$(CARGO) run --manifest-path tools/session-runner/Cargo.toml -- \
+	$(CARGO) run -p core-session-runner -- \
 		--core-dir src --moot tests/extraction --wizard 2 --programmer 2 --nonprogrammer 2
 	$(CARGO) build -p moor-server --bin moor -p moorc --bin moorc
 	python3 tests/extraction.py --server $(CARGO_TARGET_DIR)/debug/moor \
@@ -143,10 +143,10 @@ test-collection-roundtrip: gen.testsrc
 
 # Check source contracts, bindings, and conditional assignments.
 audit-style:
-	$(CARGO) run --manifest-path tools/style-audit/Cargo.toml -- src
+	$(CARGO) run -p core-style-audit -- src
 
 check-style:
-	$(CARGO) run --manifest-path tools/style-audit/Cargo.toml -- src --strict
+	$(CARGO) run -p core-style-audit -- src --strict
 
 # Measurements are explicit workloads, separate from test_ method discovery.
 measure: gen.testsrc

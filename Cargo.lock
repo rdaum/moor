@@ -1016,6 +1016,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "core-session-runner"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "flume",
+ "moor-common",
+ "moor-db",
+ "moor-kernel",
+ "moor-moot",
+ "moor-objdef",
+ "moor-var",
+ "semver",
+ "uuid 1.26.1",
+]
+
+[[package]]
+name = "core-style-audit"
+version = "0.1.0"
+dependencies = [
+ "moor-compiler",
+ "moor-objdef",
+ "moor-var",
+]
+
+[[package]]
 name = "core_detect"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

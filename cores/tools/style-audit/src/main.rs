@@ -55,7 +55,7 @@ fn read_baseline(source: &str) -> Result<BTreeMap<String, usize>, Box<dyn Error>
 fn run() -> Result<bool, Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let directory = PathBuf::from(args.next().ok_or(
-        "usage: style-audit SRC_DIR [--strict] [--check RELATIVE_PATH] [--baseline FILE] [--write-baseline FILE]",
+        "usage: core-style-audit SRC_DIR [--strict] [--check RELATIVE_PATH] [--baseline FILE] [--write-baseline FILE]",
     )?);
     let mut strict = false;
     let mut selected = Vec::new();

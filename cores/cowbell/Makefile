@@ -39,21 +39,38 @@ TEST_TIMEOUT = $(HEADLESS_TIMEOUT)
 TEST_PREREQUISITES = runtime-test-src
 EXPORT_FORBIDDEN_IDS = = \#(900[0-9]+|901[0-9]+);
 CHECK_TARGETS = check-style test test-headless test-session test-harness roundtrip test-wire test-git-worker test-build-inventory
-CLEAN_EXTRA = $(HEADLESS_SRC_DIRECTORY) $(TEST_SRC_DIRECTORY) gen.empty.log gen.exception.log gen.event-control.log
+CLEAN_EXTRA = $(HEADLESS_SRC_DIRECTORY) $(TEST_SRC_DIRECTORY) gen.empty.log gen.exception.log gen.event-control.log gen.style.log gen.style-strict.log
 CORE_HELP = 'make test-headless      Run headless methods (alias: runtime-headless).' \
             'make test-session       Run session scenarios (alias: runtime-session).' \
             'make test-wire          Run TCP and restart tests.' \
             'make test-git-worker    Run Git worker integration tests.'
 include ../make/core.mk
 
-.PHONY: check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-harness test-build-inventory test-wire test-git-worker
+TEST_BIN_DIR = $(MOORC_BIN_DIR)
+SESSION_RUNNER = $(TEST_BIN_DIR)/core-session-runner
+EXPECT_FAILURE = $(PYTHON) $(CORE_MAKE_DIR)expect_failure.py
+TEST_TOOL_PACKAGES = moorc core-style-audit core-session-runner moor-server moor-daemon moor-telnet-host moor-git-worker
+
+.PHONY: build-test-tools check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-harness test-build-inventory test-wire test-git-worker
+# Keep one dependency feature set for every binary used by these checks.
+build-test-tools:
+	$(CARGO) build --locked --manifest-path $(MOOR_ROOT)/Cargo.toml --profile $(MOORC_PROFILE) $(foreach package,$(TEST_TOOL_PACKAGES),-p $(package)) --bins
+
+RUNTIME_CHECK_TARGETS = $(filter-out roundtrip test-headless test-session,$(CHECK_TARGETS)) runtime-headless runtime-session
+$(RUNTIME_CHECK_TARGETS): build-test-tools
+ifeq ($(MOORC_TYPE),cargo)
+check $(RUNTIME_CHECK_TARGETS): MOORC = $(MOORC_BIN_DIR)/moorc
+endif
+
 test-headless: runtime-headless
 test-session: runtime-session
 
 check-style:
-	$(CARGO) run --manifest-path ../snore/tools/style-audit/Cargo.toml -- src --baseline tests/style/baseline.tsv
-	$(CARGO) run --manifest-path ../snore/tools/style-audit/Cargo.toml -- src --strict $(foreach unit,$(STYLE_CONVERTED_UNITS),--check $(unit))
-	bash tests/style/check-audit.sh $(CARGO_TARGET_DIR)/debug/snore-style-audit
+	@$(TEST_BIN_DIR)/core-style-audit src --baseline tests/style/baseline.tsv > gen.style.log 2>&1 || { cat gen.style.log; exit 1; }
+	@echo "PASS style baseline (details: gen.style.log)"
+	@$(TEST_BIN_DIR)/core-style-audit src --strict $(foreach unit,$(STYLE_CONVERTED_UNITS),--check $(unit)) > gen.style-strict.log 2>&1 || { cat gen.style-strict.log; exit 1; }
+	@echo "PASS converted source style (details: gen.style-strict.log)"
+	bash tests/style/check-audit.sh $(TEST_BIN_DIR)/core-style-audit
 
 runtime-test-src: FORCE
 	rm -rf $(TEST_SRC_DIRECTORY)
@@ -93,46 +110,40 @@ runtime-headless: runtime-headless-src
 	done
 
 runtime-session: runtime-headless-src
-	$(CARGO) run --manifest-path ../snore/tools/session-runner/Cargo.toml -- --cowbell \
+	$(SESSION_RUNNER) --cowbell \
 		--core-dir $(HEADLESS_SRC_DIRECTORY) --moot tests/baseline/sessions \
 		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER)
 
 test-harness: runtime-headless-src
-	$(CARGO) test --manifest-path ../snore/tools/session-runner/Cargo.toml
-	@$(CHECKED_METHODS) $(CORE_COMPILER) --src-objdef-dir $(HEADLESS_SRC_DIRECTORY) --run-tests true \
-		--test-wizard=$(TEST_WIZARD) --test-filter '#999999' > gen.empty.log 2>&1; status=$$?; \
-	cat gen.empty.log; test $$status -ne 0 && grep -q 'FAIL: filter selected no tests' gen.empty.log
+	@$(EXPECT_FAILURE) --name empty-method-filter --match 'FAIL: filter selected no tests' -- \
+		$(CHECKED_METHODS) $(CORE_COMPILER) --src-objdef-dir $(HEADLESS_SRC_DIRECTORY) --run-tests true \
+		--test-wizard=$(TEST_WIZARD) --test-filter '#999999'
 
-	@$(CARGO) run --manifest-path ../snore/tools/session-runner/Cargo.toml -- --cowbell \
+	@$(EXPECT_FAILURE) --name command-exception --match 'caught command exception for connection' -- \
+		$(SESSION_RUNNER) --cowbell \
 		--core-dir $(HEADLESS_SRC_DIRECTORY) --moot tests/baseline/negative/command_exception.moot \
-		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER) \
-		> gen.exception.log 2>&1; status=$$?; cat gen.exception.log; \
-	test $$status -ne 0 && grep -q 'caught command exception for connection' gen.exception.log
+		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER)
 
 	@set -e; for scenario in wrong_type wrong_audience wrong_recipient; do \
-		set +e; $(CARGO) run --manifest-path ../snore/tools/session-runner/Cargo.toml -- --cowbell \
+		$(EXPECT_FAILURE) --name $$scenario --match 'event contract failed|no committed event for recipient' -- \
+			$(SESSION_RUNNER) --cowbell \
 			--core-dir $(HEADLESS_SRC_DIRECTORY) --moot tests/baseline/negative/$$scenario.moot \
-			--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER) \
-			> gen.event-control.log 2>&1; status=$$?; set -e; cat gen.event-control.log; \
-		test $$status -ne 0; grep -qE 'event contract failed|no committed event for recipient' gen.event-control.log; \
+			--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER); \
 	done
 
-	@$(CARGO) run --manifest-path ../snore/tools/session-runner/Cargo.toml -- --cowbell \
+	@$(EXPECT_FAILURE) --name empty-scenario --match 'scenario contains no command or eval steps' -- \
+		$(SESSION_RUNNER) --cowbell \
 		--core-dir $(HEADLESS_SRC_DIRECTORY) --moot tests/baseline/negative/empty.moot \
-		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER) \
-		> gen.event-control.log 2>&1; status=$$?; cat gen.event-control.log; \
-	test $$status -ne 0 && grep -q 'scenario contains no command or eval steps' gen.event-control.log
+		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER)
 
 test-build-inventory:
-	python3 tests/baseline/check_inventory.py $(CORE_COMPILER)
+	python3 tests/baseline/check_inventory.py $(MOORC)
 
 # Verify actual telnet connections and persistent native schedules after restart.
 test-wire:
-	$(CARGO) build --manifest-path ../../Cargo.toml -p moor-server --bin moor
 	python3 -m unittest discover -s tests -p test_wire.py
-	python3 tests/wire.py --server $(CARGO_TARGET_DIR)/debug/moor --core-dir src
+	python3 tests/wire.py --server $(TEST_BIN_DIR)/moor --core-dir src
 
 # Exercise the Cowbell wrapper through the standalone worker and a local Git HTTP fixture.
 test-git-worker:
-	$(CARGO) build --manifest-path ../../Cargo.toml -p moor-daemon -p moor-telnet-host -p moor-git-worker
-	python3 tests/git_worker.py --bin-dir $(CARGO_TARGET_DIR)/debug --core-dir src
+	python3 tests/git_worker.py --bin-dir $(TEST_BIN_DIR) --core-dir src

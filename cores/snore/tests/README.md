@@ -57,8 +57,8 @@ Their recorded failures are not accepted core-test results.
 
 ## Session scenarios
 
-`tools/session-runner` uses the merged runtime APIs. Its session implementation and extra directives
-live in this core directory. Pending output belongs to one transaction; committed output retains its
+`cores/tools/session-runner` provides the shared session implementation and extra directives for both cores.
+Pending output belongs to one transaction; committed output retains its
 recipient and accumulates until drained. Presence is shared across sessions and forks. The mock
 assigns one synthetic connection per player and retains it across task forks. It does not model
 multiple connections per player, connection attributes, or elapsed time. TCP tests cover multiple

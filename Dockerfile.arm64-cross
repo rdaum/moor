@@ -59,6 +59,7 @@ ENV PKG_CONFIG_ALLOW_CROSS=1
 # Copy source code
 COPY ./crates ./crates
 COPY ./tools ./tools
+COPY ./cores/tools ./cores/tools
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./.git ./.git

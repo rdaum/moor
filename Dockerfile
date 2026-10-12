@@ -35,6 +35,7 @@ RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git lib
 # Stuff we'll need from the host to make the build work
 COPY ./crates ./crates
 COPY ./tools ./tools
+COPY ./cores/tools ./cores/tools
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 

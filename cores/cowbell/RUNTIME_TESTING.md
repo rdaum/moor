@@ -6,16 +6,20 @@ Run the same check as CI from the repository root:
 make -C cores/cowbell check
 ```
 
+The check builds all required Rust binaries together, then runs them directly.
+The test tools use the main workspace and lockfile. CI caches Rust dependencies between runs.
 The check runs the style audit, method tests, headless scenarios, session scenarios, harness checks,
-export roundtrip, real telnet/restart checks, and source inventory checks. Targets run in order because they share generated
-directories.
+export roundtrip, real telnet/restart checks, Git worker checks, and source inventory checks.
+Targets run in order because they share generated directories.
+Style details stay in `gen.style.log` and `gen.style-strict.log`; a failed audit prints its log.
 
 `make -C cores/cowbell test-git-worker` checks Git access through the daemon, telnet host, and Git worker.
 It uses a temporary local HTTP repository and requires the Git CLI for the fixture.
 It checks binary contents, symlinks, tree metadata, worker errors, and reads pinned to a commit after a branch moves.
 It also stages and applies Git `@changes` reviews, checks saved source after a branch moves, and
-tests discard, changed settings, and wizard revocation during a fetch. A full Cowbell subtree review
-checks installed constants and preserves local package settings through apply.
+tests discard, changed settings, and wizard revocation during a fetch.
+The full Cowbell subtree update is disabled by default because debug builds can exceed the runtime task budget.
+To run that scenario manually, add `--full-core` to `tests/git_worker.py`.
 The method suite also checks wizard-only dispatch, forged descriptors, local lookup, and malformed responses.
 
 `make -C cores/cowbell` exports the shipped core. `make rebuild` first checks export stability, then
@@ -55,9 +59,10 @@ Method selection must discover at least one test. An empty filter fails. A metho
 
 ## Commands and committed events
 
-`runtime-session` uses the existing Snore session runner with `--cowbell`. This option enables
-Cowbell's flyweights and rich notifications. The runner imports a fresh temporary database for each
-`.moot` file. Commands pass through the kernel command parser and scheduler.
+`runtime-session` uses the shared runner in `cores/tools/session-runner` with `--cowbell`. This option enables
+Cowbell's flyweights and rich notifications. The runner compiles the core once per invocation.
+Each `.moot` file gets a fresh database loaded from those compiled definitions, plus a separate scheduler and output queues.
+Commands pass through the kernel command parser and scheduler.
 
 ```sh
 make -C cores/cowbell runtime-session
@@ -115,13 +120,18 @@ event scenarios also check that wrong recipient, content type, and audience asse
 marks caught command exceptions with boolean `command_exception` metadata. The runner rejects these
 events. Ordinary denial events remain valid.
 
+Expected failures print `PASS ... (expected failure)`. Unexpected success or the wrong error prints
+the command output and fails the check. The Rust workspace test job runs the session runner's unit
+tests. To run those tests locally, use `cargo test -p core-session-runner`.
+
 `roundtrip` exports shipped sources, reimports the export, and compares both complete directory
 trees. Both exports must contain objdef files. Fixture object IDs must be absent from the shipped
 export.
 
-`test-build-inventory` copies the core into a temporary directory. It adds, edits, and deletes a
-nested object source, rebuilding after each step. It checks the exported object and constants after
-deletion.
+`test-build-inventory` copies the core Makefile and shared rules into a temporary directory with a
+small source fixture. It adds, edits, and deletes a nested object source, rebuilding after each step.
+It checks the exported object and constants after deletion. The roundtrip check covers the complete
+shipped core.
 
 ```sh
 make -C cores/cowbell test-harness
@@ -237,14 +247,13 @@ keyboard navigation, narrow layout, complete effect and result pages, and preser
 Prepare the headless core, then run each focused service and agent scenario:
 
 ```sh
-make -C cores/cowbell runtime-headless-src MOORC_TYPE=direct
+make -C cores/cowbell build-test-tools runtime-headless-src MOORC_TYPE=direct
 for scenario in change_manager_preservation change_manager_results change_tools change_agents change_terminal; do
-  cores/snore/tools/session-runner/target/debug/snore-session-runner \
+  target/debug/core-session-runner \
     --cowbell --core-dir cores/cowbell/.runtime-headless-src \
     --moot "cores/cowbell/tests/baseline/sessions/$scenario.moot" \
     --wizard 90100 --programmer 90101 --nonprogrammer 90102
 done
 ```
 
-Build the session runner as described above before this command. These fixtures use temporary
-worlds. They do not use the development database or require a live GitHub connection.
+These fixtures use temporary worlds. They do not use the development database or require a live GitHub connection.

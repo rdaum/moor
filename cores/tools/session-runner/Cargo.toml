@@ -1,0 +1,16 @@
+[package]
+name = "core-session-runner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eyre.workspace = true
+flume.workspace = true
+moor-common = { path = "../../../crates/common" }
+moor-db = { path = "../../../crates/db" }
+moor-kernel = { path = "../../../crates/kernel" }
+moor-moot = { path = "../../../crates/testing/moot" }
+moor-objdef = { path = "../../../crates/objdef" }
+moor-var = { path = "../../../crates/var" }
+semver.workspace = true
+uuid.workspace = true

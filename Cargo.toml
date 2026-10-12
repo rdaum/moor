@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+    "cores/tools/session-runner",
+    "cores/tools/style-audit",
     "crates/builtin-docs-macro",
     "crates/common",
     "crates/compiler",

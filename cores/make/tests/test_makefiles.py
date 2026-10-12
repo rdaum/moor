@@ -117,6 +117,14 @@ class CoreMakefiles(unittest.TestCase):
         (self.root / "cores/cowbell/src/constants.moo").write_text("define FIXTURE = #90100;\n")
         self.assertIn("test fixtures entered shipped export", self.make("cowbell", success=False))
 
+    def test_cowbell_check_builds_once_and_runs_binaries_directly(self):
+        output = self.make("cowbell", "-n", "check", fake=False)
+        cargo = [line for line in output.splitlines() if line.startswith("cargo ")]
+        self.assertEqual(len(cargo), 1, output)
+        self.assertTrue(cargo[0].startswith("cargo build --locked "), cargo)
+        self.assertNotIn("cargo run", output)
+        self.assertIn("/debug/core-session-runner --cowbell", output)
+
     def test_textdump_and_legacy_aliases(self):
         self.make("lambda-moor", "output")
         self.assertTrue((self.root / "cores/lambda-moor/gen.moo-textdump").is_file())
@@ -146,6 +154,38 @@ class CoreMakefiles(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
             self.assertEqual(self.log.read_text(), output + "\n")
+
+    def test_inventory_fixture_includes_shared_rules(self):
+        import json
+        scripts = self.root / "cores/cowbell/tests/baseline"
+        scripts.mkdir(parents=True)
+        shutil.copy(CORES / "cowbell/tests/baseline/check_inventory.py", scripts)
+        output = self.make("cowbell", "test-build-inventory", "CARGO=true")
+        self.assertIn("PASS: nested additions, edits, and deletions", output)
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual(len(calls), 4)
+        self.assertTrue(all(args.count("--use-boolean-returns") == 1 for args in calls))
+
+    def test_expected_failure_requires_both_error_and_nonzero_exit(self):
+        runner = CORES / "make/expect_failure.py"
+        for output, status, expected in [
+            ("expected diagnostic", 1, 0),
+            ("expected diagnostic", 0, 1),
+            ("unrelated error", 1, 1),
+        ]:
+            with self.subTest(output=output, status=status):
+                result = subprocess.run(
+                    [sys.executable, str(runner), "--name", "negative-fixture",
+                     "--match", "expected diagnostic", "--", sys.executable, "-c",
+                     f"print({output!r}); raise SystemExit({status})"],
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                if expected == 0:
+                    self.assertEqual(result.stdout, "PASS negative-fixture (expected failure)\n")
+                    self.assertEqual(result.stderr, "")
+                else:
+                    self.assertIn(output, result.stderr)
 
 
 if __name__ == "__main__":

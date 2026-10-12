@@ -29,19 +29,30 @@ def build(core):
 
 
 with tempfile.TemporaryDirectory(prefix="cowbell-inventory-") as temporary:
-    core = Path(temporary)
+    core = Path(temporary) / "cores/cowbell"
+    core.mkdir(parents=True)
+    shutil.copytree("../make", core.parent / "make", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy("Makefile", core)
-    shutil.copytree("src", core / "src")
+    # Source discovery belongs to the Makefile. A small core tests it without
+    # compiling all of Cowbell four more times; roundtrip covers the shipped core.
+    (core / "src").mkdir()
+    (core / "src/constants.moo").write_text("define ROOT = #1;\ndefine ARCH_WIZARD = #2;\n")
+    (core / "src/root.moo").write_text(
+        'object ROOT\nname: "Root"\nowner: ARCH_WIZARD\nendobject\n'
+        'object ARCH_WIZARD\nname: "Wizard"\nparent: ROOT\nowner: ARCH_WIZARD\n'
+        'wizard: true\nprogrammer: true\nendobject\n'
+    )
     build(core)
     nested = core / "src" / "inventory" / "nested"
     nested.mkdir(parents=True)
-    probe = nested / "probe.moo"
-    source = '''object #90200
+    probe = nested / "inventory_probe.moo"
+    source = '''object #90200 [
+  import_export_id -> "inventory_probe",
+  import_export_hierarchy -> {"inventory", "nested"}
+]
   name: "inventory probe added"
   parent: #1
   owner: #2
-  override import_export_id = "inventory_probe";
-  override import_export_hierarchy = {"inventory", "nested"};
 endobject
 '''
     probe.write_text(source)

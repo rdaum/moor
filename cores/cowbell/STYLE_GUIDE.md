@@ -163,5 +163,5 @@ Repeat `--check` for several methods. A directory or file selection checks all i
 The checker still compiles the whole source tree for constant resolution and body coverage.
 An empty selection fails. Strict conversion checks supplement the baseline. A recorded finding is not approval for new code.
 
-The shared checker is in `../snore/tools/style-audit`; do not duplicate its crate for Cowbell.
+The shared checker is in `../tools/style-audit`; do not duplicate its crate for Cowbell.
 Record baseline changes deliberately with `--write-baseline FILE`, then review the affected records.
