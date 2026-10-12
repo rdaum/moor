@@ -219,7 +219,7 @@ object DATA_VISOR [
     ""
   };
   property prompt_code_style (owner: HACKER, flags: "rc") = "## Code Style\n\n### Philosophy\n- Readable, minimal but not terse\n- Don't repeat yourself\n- Respect the language and its idioms\n\n### Early Returns Over Nested Conditionals\n\n```moo\n// Good - early returns\n!valid(target) && return E_INVARG;\n!caller_perms().wizard && return E_PERM;\n// ... main logic ...\n\n// Bad - deep nesting\nif (valid(target))\n  if (caller_perms().wizard)\n    // ... main logic ...\n  endif\nendif\n```\n\n### Guard Conditions\n\nUse short-circuit evaluation instead of if blocks:\n```moo\nuser:is_bad_user() && raise(E_BADUSER);\n!user:is_valid() || raise(E_PERM);\n```\n\n### Comments and Documentation\n\nMOO uses string literals as comments (not `//` style). They MUST end with semicolons:\n```moo\n\"This is a comment\";\n\"Always start verbs with a brief docstring\";\n```\n\n### Verbs\n\n**Method verbs** (called programmatically):\n- Argspec: `this none this`\n- Flags: `rxd`\n\n**Command verbs** (player-typed commands):\n- Meaningful argspec (e.g., `this with any`)\n- Usually do NOT have `x` flag\n\n**Naming:**\n- Private methods: prefix with `_` (e.g., `_internal_helper()`)\n- Unit tests: prefix with `test_`\n\n### Errors and Exceptions\n\n- The `d` flag causes errors to propagate as exceptions - only legacy code has this off\n- In method verbs: use and propagate exceptions\n- In command verbs: catch and turn into meaningful output\n- **Never silently eat exceptions**\n\nTwo exception syntaxes:\n```moo\n// try/except block\ntry\n  risky_operation();\nexcept e (ANY)\n  handle_error(e);\nendtry\n\n// Inline catch\n`risky_operation() ! ANY => fallback_value`;\n```";
-  property prompt_event_system (owner: HACKER, flags: "rc") = "## Event System\n\n### Sending Events\n\n**Never call `notify()` directly.** Always use the event system.\n**Never pass raw strings to `:tell`.** It takes event objects, not strings.\n\n**`:tell(event)`** - Persistent world events\n- Sends to **all** player connections\n- **Persists** in event log\n- Use for: room events, chat, actions by others\n\n**`:inform_current(event)`** - Ephemeral responses\n- Current connection only\n- Does **not** persist\n- Use for: command responses, errors, help text\n\n```moo\n// World event - persists, all connections\nplayer:tell($event:mk(player, #-1, this, dobj, #-1, content, {}));\n\n// Command response - ephemeral, current connection only\nplayer:inform_current($event:mk_info(player, \"You see nothing special.\"));\n```\n\n### Event Creation\n\nEvents are created with `$event:mk_<action>(actor, content...)`:\n- `$event:mk_info(player, message)` - informational\n- `$event:mk_error(player, message)` - error\n- `$event:mk_look(player, content)` - look results\n- `$event:mk_say(player, message)` - speech\n- `$event:mk_emote(player, message)` - actions\n\n### Rich Content ($format)\n\n| Formatter | Purpose | Example |\n|-----------|---------|---------|\n| `$format.block` | Multi-line paragraphs | `$format.block:mk(line1, line2, ...)` |\n| `$format.list` | Ordered/unordered lists | `$format.list:mk({\"a\", \"b\"}, true)` |\n| `$format.table` | Tables with headers | `$format.table:mk(headers, rows)` |\n| `$format.title` | Section headings | `$format.title:mk(\"Header\", 2)` |\n| `$format.code` | Code blocks | `$format.code:mk(code, \"moo\")` |\n\n### Event Substitutions ($sub_utils)\n\nTemplates adapt to viewer perspective:\n```moo\ncontent = $sub_utils:compile(\"{nc} picks up {the d}.\");\n// Actor sees: \"You pick up the sword.\"\n// Others see: \"Alice picks up the sword.\"\n```\n\n| Token | Description |\n|-------|-------------|\n| `{n}/{nc}` | Actor name (cap) |\n| `{d}/{dc}` | Direct object (cap) |\n| `{i}/{ic}` | Indirect object (cap) |\n| `{t}/{tc}` | This object |\n| `{s}/{o}/{p}` | Pronouns (subj/obj/poss) |\n| `{pick\\|picks}` | Self-alternation |\n| `{the d}/{a d}` | Article + binding |\n\n**Self-alternation is critical:** `\"{nc} {pick|picks} up {the d}.\"` ensures correct grammar.";
+  property prompt_event_system (owner: HACKER, flags: "rc") = "## Event System\n\n### Sending Events\n\n**Never call `notify()` directly.** Always use the event system.\n**Never pass raw strings to `:tell`.** It takes event objects, not strings.\n\n**`:tell(event)`** - Persistent world events\n- Sends to **all** player connections\n- **Persists** in event log\n- Use for: room events, chat, actions by others\n\n**`:inform_current(event)`** - Ephemeral responses\n- Current connection only\n- Does **not** persist\n- Use for: command responses, errors, help text\n\n```moo\n// World event - persists, all connections\nplayer:tell($event:mk_info(player, @content):with_this(this):with_dobj(dobj));\n\n// Command response - ephemeral, current connection only\nplayer:inform_current($event:mk_info(player, \"You see nothing special.\"));\n```\n\n### Event Creation\n\nEvents are created with `$event:mk_<action>(actor, content...)`:\n- `$event:mk_info(player, message)` - informational\n- `$event:mk_error(player, message)` - error\n- `$event:mk_look(player, content)` - look results\n- `$event:mk_say(player, message)` - speech\n- `$event:mk_emote(player, message)` - actions\n\n### Rich Content ($format)\n\n| Formatter | Purpose | Example |\n|-----------|---------|---------|\n| `$format.block` | Multi-line paragraphs | `$format.block:mk(line1, line2, ...)` |\n| `$format.list` | Ordered/unordered lists | `$format.list:mk({\"a\", \"b\"}, true)` |\n| `$format.table` | Tables with headers | `$format.table:mk(headers, rows)` |\n| `$format.title` | Section headings | `$format.title:mk(\"Header\", 2)` |\n| `$format.code` | Code blocks | `$format.code:mk(code, \"moo\")` |\n\n### Event Substitutions ($sub_utils)\n\nTemplates adapt to viewer perspective:\n```moo\ncontent = $sub_utils:compile(\"{nc} {pick|picks} up {the d}.\");\n// Actor sees: \"You pick up the sword.\"\n// Others see: \"Alice picks up the sword.\"\n```\n\n| Token | Description |\n|-------|-------------|\n| `{n}/{nc}` | Actor name (cap) |\n| `{d}/{dc}` | Direct object (cap) |\n| `{i}/{ic}` | Indirect object (cap) |\n| `{t}/{tc}` | This object |\n| `{s}/{o}/{p}` | Pronouns (subj/obj/poss) |\n| `{pick\\|picks}` | Self-alternation |\n| `{the d}/{a d}` | Article + binding |\n\n**Self-alternation is critical:** `\"{nc} {pick|picks} up {the d}.\"` ensures correct grammar.";
   property prompt_moo_essentials (owner: HACKER, flags: "rc") = "## MOO Language Essentials\n\nMOO is not Python or JavaScript. Many bugs come from expecting familiar behavior.\n\n### Critical Gotchas\n\n**1-indexed** - Lists and strings start at index 1, not 0.\n\n**Syntax differs from other languages:**\n- `{ 1, 2, 3 }` is a LIST (curly braces, not square brackets)\n- `[ \"a\" -> 1, \"b\" -> 2 ]` is a MAP (square brackets with arrows)\n- `['symbol -> value]` is a MAP with symbol key\n\nWRONG (common mistakes):\n```moo\nmy_list = [\"apple\", \"banana\"];  // WRONG! [] is for maps!\nmy_map = {\"name\": \"Bob\"};       // WRONG! {} is for lists, : is invalid!\n```\n\nCORRECT:\n```moo\nmy_list = {\"apple\", \"banana\", \"cherry\"};     // list\nmy_map = [\"name\" -> \"Bob\", \"age\" -> 42];     // map\nmy_map = ['name -> \"Bob\", 'age -> 42];       // map with symbol keys\n```\n\n**String comparisons are case-insensitive by default.** Use `strcmp()` for case-sensitive.\n\n**RESERVED TYPE KEYWORDS** - Cannot be used as variable names:\n`OBJ`, `LIST`, `STR`, `ERR`, `INT`, `FLOAT`, `MAP`, `ANON`, `FLYWEIGHT`, `BOOL`, `NONE`, `SYMBOL`\n\n**Destructuring assignment:**\n```moo\n{ a, b, c } = { 1, 2, 3 };\nreturn { c, b, a };                    // => { 3, 2, 1 }\n\n{ a, ?b = 3, @c } = { 1, 2, 3, 4 };\nreturn { c, b, a };                    // => { { 3, 4 }, 2, 1 }\n```\n\n### Builtin Object Properties\n\nAll MOO objects have these builtin properties:\n- `.name` (string) - object name\n- `.owner` (object) - who controls access\n- `.location` (object) - where it is (read-only, use move() to change)\n- `.contents` (list) - objects inside (read-only)\n- `.programmer` (bool) - has programmer rights\n- `.wizard` (bool) - has wizard rights\n- `.r`, `.w`, `.f` (bool) - readable/writable/fertile flags";
   property prompt_moor_extensions (owner: HACKER, flags: "rc") = "## mooR Extensions\n\nmooR adds features LambdaMOO didn't have:\n\n```moo\n// Lexical scoping\nlet x = 5;\nconst y = 10;\n\n// List comprehensions\nsquares = { x * x for x in [1..10] };\n\n// Maps/dicts\ndata = [ 'name -> \"Alice\", 'score -> 100 ];\n\n// Symbols (like Lisp keywords)\nstatus = 'pending;\n\n// Lambda functions\nfn double(n) return n * 2; endfn\n\n// Custom errors with messages\nraise E_CUSTOM(\"something went wrong\");\n```\n\n### Boolean Returns\n\nmooR uses boolean (`true`/`false`) returns instead of integer (`1`/`0`) for many functions like `argon2_verify()`. Check return values accordingly.\n\n### Type Dispatch\n\nMethods on primitives dispatch to proto objects: `\"text\":reverse()` calls `$str_proto:reverse(\"text\")`.\n\nIf you see errors about missing `int_proto`, `str_proto`, etc., you need those prototype objects. Errors about `bool_proto` or `err_proto` usually indicate an unexpected error or boolean value.";
   property prompt_object_system (owner: HACKER, flags: "rc") = "## MOO Object System\n\nMOO's object system is prototype-oriented - \"classes\" are objects.\n\n### Object References\n- `#0` - System object (utilities and common names)\n- `#1` - Root object/class - prototype for all objects\n- `#-1` - Nothing ($nothing)\n- Negative numbers are special IDs (connections start at #-4)\n- UUID-style: `#0000-0000-0000`\n\n**Sysrefs:** `$room` translates to `#0.room` at runtime.\n\n### Creating and Manipulating Objects\n\nUse `$root` verbs rather than raw builtins:\n```moo\n// Create a child of $thing (UUID-based, persistent)\nitem = $thing:create();\n\n// Create anonymous/temporary object (garbage collected)\ntemp = $thing:create(true);\n\n// Move and destroy\nitem:moveto(destination);\nitem:destroy();\n```\n\nKey verbs: `:create()`, `:destroy()`, `:moveto()`, `:set_name_aliases()`, `:set_description()`, `:set_owner()`\n\n### CRITICAL: Don't Confuse These!\n\n**Inheritance (prototype chain):**\n- `parent(obj)` - builtin function, returns parent in prototype chain\n- `children(obj)` - builtin function, returns direct children\n\n**Spatial/Containment (physical location):**\n- `obj.location` - property, where object physically is\n- `obj.contents` - property, objects inside this one\n\nDO NOT use `parent()` when you mean `.location`!\nDO NOT use `children()` when you mean `.contents`!\n\n## Flyweight Objects\n\nLightweight, immutable mini-objects:\n```moo\npassword_obj = < $password, [encrypted -> \"argon2hash...\"] >\njtext_obj = < $jtext.paragraph, \"hello\", \"world\" >\n```\n\nAccess patterns:\n- `fw[1]`, `fw[2]` - List portion only (NOT the delegate)\n- `fw.property` - Map slot access\n- Verbs called via delegate object";
@@ -233,37 +233,6 @@ object DATA_VISOR [
   override description (owner: HACKER, flags: "rc") = "A sleek augmented reality visor that displays real-time MOO database information. When worn, it provides a heads-up display for inspecting objects, code, and system internals.";
   override placeholder_text (owner: HACKER, flags: "rc") = "Ask about objects, code, or database structure...";
   override processing_message (owner: HACKER, flags: "rc") = "Analyzing request, accessing neural pathways...";
-  override progress_steps (owner: HACKER, flags: "rc") = [
-    "ask_user" -> {
-      "019c4e9f-b06f-79e0-933d-79a1c9ab9d9e",
-      "019c4f8d-9613-7f11-87f8-bb59e98e325e",
-      "019c4f8d-e9bb-7603-9161-c025cee61c9e",
-      "019c4f91-e769-7c30-bc04-da399e458b05",
-      "019c4f95-698f-71d3-a015-9d6538ec07f2",
-      "019c4f96-dbe3-7423-b21c-40c42abd023f"
-    },
-    "create_task" -> {"019c4f96-9c72-7221-be4a-bb10eb360a4e"},
-    "find_object" -> {
-      "019c4e9f-8c62-77c2-a476-a868f8503087",
-      "019c4f8d-8521-7511-8e21-96d0d4efe848",
-      "019c4f91-d43c-72b1-8c92-345923d1d29e",
-      "019c4f95-518f-7eb2-a225-7152808462bf",
-      "019c4f96-c499-7c23-a821-72f21ce19475",
-      "019c4f96-c614-7e82-859b-27fa4594b1d9"
-    },
-    "get_properties" -> {"019c4e9f-8c65-7021-9f66-cb605748eae5"},
-    "grep" -> {
-      "019c4f8d-b94c-7550-a6d0-531c5be3776b",
-      "019c4f92-0b34-77d3-be0c-a786e0a4c153",
-      "019c4f95-9223-7610-ad47-eba3859af83f",
-      "019c4f96-eb3e-7270-b4df-71eba82481d1",
-      "019c4f97-0769-7783-9075-ff63335c95c0",
-      "019c4f99-5f96-7003-99db-a2841554b02e"
-    },
-    "list_builtin_functions" -> {"019c4f95-b7ac-7ee0-a2c3-b74b87ae4c13"},
-    "list_verbs" -> {"019c4e9f-8c64-7d23-acff-3ae9030a5ffe"}
-  ];
-  override prompt_color (owner: HACKER, flags: "rc") = 'bright_blue;
   override prompt_label (owner: HACKER, flags: "rc") = "[INTERFACE]";
   override tool_name (owner: HACKER, flags: "rc") = "VISOR";
 
@@ -733,11 +702,7 @@ object DATA_VISOR [
       headers = {"Verb", "Args", "Owner", "Flags"};
       row = {verb_signature, args_spec, tostr(verb_owner), verb_flags};
       metadata_table = $format.table:mk(headers, {row});
-      "Add line numbers if requested";
-      if (show_line_numbers)
-        code_lines = $prog_utils:format_line_numbers(code_lines);
-      endif
-      formatted_code = $format.code:mk(code_lines, 'moo);
+      formatted_code = $format.code:mk(code_lines, 'moo, show_line_numbers ? 1 | false);
       content = $format.block:mk(metadata_table, formatted_code);
       return ["verb_signature" -> verb_signature, "content" -> content, "actual_start" -> 0, "actual_end" -> 0];
     endif
@@ -751,11 +716,10 @@ object DATA_VISOR [
     "Build metadata table with line range info";
     const line_range = "Lines " + tostr(actual_start) + "-" + tostr(actual_end) + " of " + tostr(length(code_lines));
     metadata_table = $format.table:mk({"Verb", "Args", "Range"}, {{verb_signature, args_spec, line_range}});
-    "Extract range and add line numbers";
+    "Retain the actual source range and its first line number";
     const range_lines = code_lines[actual_start..actual_end];
-    const numbered_lines = $prog_utils:format_line_numbers(range_lines);
     "Format as code block";
-    formatted_code = $format.code:mk(numbered_lines, 'moo);
+    formatted_code = $format.code:mk(range_lines, 'moo, actual_start);
     "Combine table and code";
     content = $format.block:mk(metadata_table, formatted_code);
     return ["verb_signature" -> verb_signature, "content" -> content, "actual_start" -> actual_start, "actual_end" -> actual_end];
@@ -791,18 +755,18 @@ object DATA_VISOR [
     iobj in {"none", "this", "any"} || raise(E_INVARG("iobj must be 'none', 'this', or 'any'"));
     $prog_utils:is_valid_prep(prep) || raise(E_INVARG("prep must be 'none', 'any', or a valid preposition"));
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed verb creation: `" + tostr(o) + ":" + verb_names + "`");
+    const rationale_title = $format.title:mk("Proposed verb creation: " + tostr(o) + ":" + verb_names + "");
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Show verb signature";
     const verb_sig = "verb " + verb_names + " (" + dobj + " " + prep + " " + iobj + ") owner: " + tostr(wearer) + " flags: \"" + permissions + "\"";
     const sig_content = $format.code:mk(verb_sig, 'moo);
     wearer:inform_current($event:mk_info(wearer, sig_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[ADD]", 'green) + " Add this verb?", "Or suggest an alternative:", "Describe your alternative approach...", "Add this verb?");
+      result = wearer:confirm_with_all("[ADD] Add this verb?", "Or suggest an alternative:", "Describe your alternative approach...", "Add this verb?");
       if (result == false)
         return "Operation cancelled by user.";
       elseif (result == 'yes_all)
@@ -811,7 +775,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[CREATING]", 'yellow) + " Adding verb to `" + tostr(o) + "`..."):as_djot():as_inset():with_group('llm, this):with_tts("Adding verb to " + tostr(o)));
+    wearer:inform_current($event:mk_info(wearer, "[CREATING] Adding verb to " + tostr(o) + "..."):as_inset():with_group('llm, this):with_tts("Adding verb to " + tostr(o)));
     "Add verb with wearer as owner";
     const verb_info = {wearer, permissions, verb_names};
     const verb_args = {dobj, prep, iobj};
@@ -837,14 +801,14 @@ object DATA_VISOR [
     const verb_location = o:find_verb_definer(verb_name);
     verb_location == #-1 && raise(E_VERBNF("Verb not found: " + verb_name));
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed deletion of `" + tostr(verb_location) + ":" + verb_name + "`");
+    const rationale_title = $format.title:mk({"Proposed deletion of ", $format.annotation:verb(verb_location, verb_name)});
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[DELETE]", 'red) + " Delete this verb? This cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Delete this verb? This cannot be undone.");
+      result = wearer:confirm_with_all("[DELETE] Delete this verb? This cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Delete this verb? This cannot be undone.");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -854,7 +818,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[DELETING]", 'red) + " Removing verb `" + tostr(verb_location) + ":" + verb_name + "`..."):as_djot():as_inset():with_group('llm, this):with_tts("Removing verb " + tostr(verb_location) + ":" + verb_name));
+    wearer:inform_current($event:mk_info(wearer, "[DELETING] Removing verb " + tostr(verb_location) + ":" + verb_name + "..."):as_inset():with_group('llm, this):with_tts("Removing verb " + tostr(verb_location) + ":" + verb_name));
     set_task_perms(wearer);
     delete_verb(verb_location, verb_name);
     return "Verb " + tostr(verb_location) + ":" + verb_name + " deleted successfully";
@@ -884,19 +848,18 @@ object DATA_VISOR [
     "Parse code into lines early for display and compilation";
     const code_lines = code_str:split("\n");
     "Show rationale first, then formatted code with line numbers";
-    const rationale_title = $format.title:mk("Proposed change for `" + tostr(verb_location) + ":" + verb_name + "`");
+    const rationale_title = $format.title:mk({"Proposed change for ", $format.annotation:verb(verb_location, verb_name)});
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
-    const numbered_lines = $prog_utils:format_line_numbers(code_lines);
-    const code_block = $format.code:mk(numbered_lines, 'moo);
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
+    const code_block = $format.code:mk(code_lines, 'moo, 1);
     const code_title = $format.title:mk("New code");
     const code_content = $format.block:mk(code_title, code_block);
     wearer:inform_current($event:mk_info(wearer, code_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[COMPILE]", 'yellow) + " Accept these changes?", "Or suggest an alternative:", "Describe your alternative approach...", "Accept these changes?");
+      result = wearer:confirm_with_all("[COMPILE] Accept these changes?", "Or suggest an alternative:", "Describe your alternative approach...", "Accept these changes?");
       if (result == false)
         "User cancelled - stop the agent flow";
         this.agent.cancel_requested = true;
@@ -908,7 +871,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[COMPILE]", 'yellow) + " Updating code: `" + tostr(verb_location) + ":" + verb_name + "`..."):as_djot():as_inset():with_group('llm, this):with_tts("Compiling code for " + tostr(verb_location) + ":" + verb_name));
+    wearer:inform_current($event:mk_info(wearer, "[COMPILE] Updating code: " + tostr(verb_location) + ":" + verb_name + "..."):as_inset():with_group('llm, this):with_tts("Compiling code for " + tostr(verb_location) + ":" + verb_name));
     "Compile with structured error output (verbosity=3 for map format)";
     set_task_perms(wearer);
     const errors = set_verb_code(verb_location, verb_name, code_lines, 3, 0);
@@ -951,9 +914,9 @@ object DATA_VISOR [
     verb_location == #-1 && raise(E_VERBNF("Verb not found: " + verb_name));
     "Request confirmation";
     const tts_msg = "Change argument specification for " + tostr(verb_location) + ":" + verb_name + "? New argspec: " + dobj + " " + prep + " " + iobj + ". Proceed?";
-    const confirmation_msg = $ansi:colorize("[MODIFY]", 'yellow) + " Change argument specification for " + tostr(verb_location) + ":" + verb_name + "?\n\nNew argspec: (" + dobj + " " + prep + " " + iobj + ")\n\nProceed?";
+    const confirmation_msg = "[MODIFY] Change argument specification for " + tostr(verb_location) + ":" + verb_name + "?\n\nNew argspec: (" + dobj + " " + prep + " " + iobj + ")\n\nProceed?";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
     else
       result = wearer:confirm(confirmation_msg, "Or suggest an alternative:", "Describe your alternative approach...", tts_msg);
       if (result == false)
@@ -964,7 +927,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[MODIFY]", 'yellow) + " Updating argspec: " + tostr(verb_location) + ":" + verb_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating argument spec for " + tostr(verb_location) + ":" + verb_name));
+    wearer:inform_current($event:mk_info(wearer, "[MODIFY] Updating argspec: " + tostr(verb_location) + ":" + verb_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating argument spec for " + tostr(verb_location) + ":" + verb_name));
     "Update verb args";
     set_task_perms(wearer);
     set_verb_args(verb_location, verb_name, {dobj, prep, iobj});
@@ -991,18 +954,18 @@ object DATA_VISOR [
     typeof(value_str) == TYPE_STR || raise(E_TYPE("Expected value string"));
     typeof(rationale) == TYPE_STR || raise(E_TYPE("Expected rationale string"));
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed property creation: `" + tostr(o) + "." + prop_name + "`");
+    const rationale_title = $format.title:mk({"Proposed property creation: ", $format.code:inline(tostr(o) + "." + prop_name)});
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Show property details";
     const prop_details = "property " + prop_name + " (owner: " + tostr(wearer) + ", flags: \"" + permissions + "\") = " + value_str + ";";
     const details_content = $format.code:mk(prop_details, 'moo);
     wearer:inform_current($event:mk_info(wearer, details_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[ADD]", 'green) + " Add this property?", "Or suggest an alternative:", "Describe your alternative approach...", "Add this property?");
+      result = wearer:confirm_with_all("[ADD] Add this property?", "Or suggest an alternative:", "Describe your alternative approach...", "Add this property?");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -1041,14 +1004,14 @@ object DATA_VISOR [
     typeof(prop_name) == TYPE_STR || raise(E_TYPE("Expected property name string"));
     typeof(rationale) == TYPE_STR || raise(E_TYPE("Expected rationale string"));
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed deletion of `" + tostr(o) + "." + prop_name + "`");
+    const rationale_title = $format.title:mk({"Proposed deletion of ", $format.annotation:property(o, prop_name)});
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[DELETE]", 'red) + " Delete this property? This cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Delete this property? This cannot be undone.");
+      result = wearer:confirm_with_all("[DELETE] Delete this property? This cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Delete this property? This cannot be undone.");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -1088,9 +1051,9 @@ object DATA_VISOR [
     wearer:inform_current($event:mk_info(wearer, change_content):with_presentation_hint('inset):with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[SET]", 'yellow) + " Set this property?", "Or suggest an alternative:", "Describe your alternative approach...", "Set this property?");
+      result = wearer:confirm_with_all("[SET] Set this property?", "Or suggest an alternative:", "Describe your alternative approach...", "Set this property?");
       if (result == false)
         "User cancelled - stop the agent flow";
         this.agent.cancel_requested = true;
@@ -1151,9 +1114,9 @@ object DATA_VISOR [
     endfor
     "Request confirmation";
     const tts_msg = "Change verb permissions for " + tostr(verb_location) + ":" + verb_name + "? Owner: " + tostr(current_owner) + (new_owner != current_owner ? " to " + tostr(new_owner) | "") + ". Flags: " + current_perms + " to " + (perms_str == "" ? "cleared" | perms_str) + ". Proceed?";
-    const confirmation_msg = $ansi:colorize("[PERMS]", 'cyan) + " Change verb permissions for " + tostr(verb_location) + ":" + verb_name + "?\n\nOwner: " + tostr(current_owner) + (new_owner != current_owner ? " -> " + tostr(new_owner) | "") + "\nFlags: " + current_perms + " -> " + (perms_str == "" ? "(cleared)" | perms_str) + "\n\nProceed?";
+    const confirmation_msg = "[PERMS] Change verb permissions for " + tostr(verb_location) + ":" + verb_name + "?\n\nOwner: " + tostr(current_owner) + (new_owner != current_owner ? " -> " + tostr(new_owner) | "") + "\nFlags: " + current_perms + " -> " + (perms_str == "" ? "(cleared)" | perms_str) + "\n\nProceed?";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
     else
       result = wearer:confirm(confirmation_msg, "Or suggest an alternative:", "Describe your alternative approach...", tts_msg);
       if (result == false)
@@ -1164,7 +1127,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[MODIFY]", 'yellow) + " Updating verb permissions: " + tostr(verb_location) + ":" + verb_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating verb permissions for " + tostr(verb_location) + ":" + verb_name));
+    wearer:inform_current($event:mk_info(wearer, "[MODIFY] Updating verb permissions: " + tostr(verb_location) + ":" + verb_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating verb permissions for " + tostr(verb_location) + ":" + verb_name));
     "Apply the change";
     set_task_perms(wearer);
     set_verb_info(verb_location, verb_name, {new_owner, perms_str, verb_names});
@@ -1205,9 +1168,9 @@ object DATA_VISOR [
     endfor
     "Request confirmation";
     const tts_msg = "Change property permissions for " + tostr(o) + "." + prop_name + "? Owner: " + tostr(current_owner) + (new_owner != current_owner ? " to " + tostr(new_owner) | "") + ". Flags: " + current_perms + " to " + (perms_str == "" ? "cleared" | perms_str) + ". Proceed?";
-    const confirmation_msg = $ansi:colorize("[PERMS]", 'cyan) + " Change property permissions for " + tostr(o) + "." + prop_name + "?\n\nOwner: " + tostr(current_owner) + (new_owner != current_owner ? " -> " + tostr(new_owner) | "") + "\nFlags: " + current_perms + " -> " + (perms_str == "" ? "(cleared)" | perms_str) + "\n\nProceed?";
+    const confirmation_msg = "[PERMS] Change property permissions for " + tostr(o) + "." + prop_name + "?\n\nOwner: " + tostr(current_owner) + (new_owner != current_owner ? " -> " + tostr(new_owner) | "") + "\nFlags: " + current_perms + " -> " + (perms_str == "" ? "(cleared)" | perms_str) + "\n\nProceed?";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):with_presentation_hint('inset):with_group('llm, this):with_tts("Auto-accepting change."));
     else
       result = wearer:confirm(confirmation_msg, "Or suggest an alternative:", "Describe your alternative approach...", tts_msg);
       if (result == false)
@@ -1218,7 +1181,7 @@ object DATA_VISOR [
         return "STOP. Do not proceed with this action. User requested a different approach: " + result;
       endif
     endif
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[MODIFY]", 'yellow) + " Updating property permissions: " + tostr(o) + "." + prop_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating property permissions for " + tostr(o) + "." + prop_name));
+    wearer:inform_current($event:mk_info(wearer, "[MODIFY] Updating property permissions: " + tostr(o) + "." + prop_name + "..."):with_presentation_hint('inset):with_group('llm, this):with_tts("Updating property permissions for " + tostr(o) + "." + prop_name));
     "Apply the change";
     set_task_perms(wearer);
     set_property_info(o, prop_name, {new_owner, perms_str});
@@ -1251,16 +1214,16 @@ object DATA_VISOR [
     "Show rationale first, then formatted code";
     const rationale_title = $format.title:mk("Proposed evaluation");
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     const code_block = $format.code:mk(code_str, 'moo);
     const code_title = $format.title:mk("Code to execute");
     const code_content = $format.block:mk(code_title, code_block);
     wearer:inform_current($event:mk_info(wearer, code_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[EVAL]", 'magenta) + " Execute this code?", "Or suggest an alternative:", "Describe your alternative approach...", "Execute this code?");
+      result = wearer:confirm_with_all("[EVAL] Execute this code?", "Or suggest an alternative:", "Describe your alternative approach...", "Execute this code?");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -1317,20 +1280,20 @@ object DATA_VISOR [
     "Show rationale first";
     const rationale_title = $format.title:mk("Proposed object creation: \"" + name + "\"");
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Show object details";
-    let obj_details = "Parent: `" + toliteral(parent_obj) + "`\nName: \"" + name + "\"";
+    let obj_details = "Parent: " + toliteral(parent_obj) + "\nName: \"" + name + "\"";
     if (aliases)
       obj_details = obj_details + "\nAliases: " + toliteral(aliases);
     endif
     obj_details = obj_details + "\n\nObject will be created in your inventory.";
     const details_block = $format.block:mk($format.title:mk("Details"), obj_details);
-    wearer:inform_current($event:mk_info(wearer, details_block):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, details_block):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[CREATE]", 'bright_green) + " Create this object?", "Or suggest an alternative:", "Describe your alternative approach...", "Create this object?");
+      result = wearer:confirm_with_all("[CREATE] Create this object?", "Or suggest an alternative:", "Describe your alternative approach...", "Create this object?");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -1369,14 +1332,14 @@ object DATA_VISOR [
     const obj_name = target_obj.name;
     const obj_id = toliteral(target_obj);
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed destruction of `" + obj_id + "` (\"" + obj_name + "\")");
+    const rationale_title = $format.title:mk("Proposed destruction of " + obj_id + " (\"" + obj_name + "\")");
     const rationale_content = $format.block:mk(rationale_title, rationale);
-    wearer:inform_current($event:mk_info(wearer, rationale_content):as_djot():as_inset():with_group('llm, this));
+    wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Check auto_confirm mode or request confirmation";
     if (this.auto_confirm)
-      wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[AUTO]", 'cyan) + " Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
+      wearer:inform_current($event:mk_info(wearer, "[AUTO] Auto-accepting change."):as_inset():with_group('llm, this):with_tts("Auto-accepting change."));
     else
-      result = wearer:confirm_with_all($ansi:colorize("[DESTROY]", 'bright_red) + " Recycle this object? This will PERMANENTLY DESTROY it and cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Recycle this object? This will permanently destroy it and cannot be undone.");
+      result = wearer:confirm_with_all("[DESTROY] Recycle this object? This will PERMANENTLY DESTROY it and cannot be undone.", "Or suggest an alternative:", "Describe your alternative approach...", "Recycle this object? This will permanently destroy it and cannot be undone.");
       if (result == false)
         this.agent.cancel_requested = true;
         return "Operation cancelled by user.";
@@ -1609,62 +1572,62 @@ object DATA_VISOR [
     let message = "";
     if (tool_name == "find_object")
       ref = maphaskey(tool_args, "reference") ? tool_args["reference"] | maphaskey(tool_args, "object_name") ? tool_args["object_name"] | "?";
-      message = $ansi:colorize("[SCAN]", 'cyan) + " Object database query: " + $ansi:colorize(ref, 'white);
+      message = "[SCAN] Object database query: " + ref;
     elseif (tool_name == "list_verbs")
-      message = $ansi:colorize("[SCAN]", 'cyan) + " Method topology: " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[SCAN] Method topology: " + (tool_args["object"]);
     elseif (tool_name == "get_verb_code")
-      message = $ansi:colorize("[EXTRACT]", 'cyan) + " Source retrieval: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'yellow);
+      message = "[EXTRACT] Source retrieval: " + (tool_args["object"] + ":" + tool_args["verb"]);
     elseif (tool_name == "get_verb_code_range")
-      range_desc = maphaskey(tool_args, "start_line") ? " lines " + $ansi:colorize(tostr(tool_args["start_line"]) + "-" + tostr(tool_args["end_line"]), 'bright_yellow) | "";
-      message = $ansi:colorize("[EXTRACT]", 'cyan) + " Code region: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'yellow) + range_desc;
+      range_desc = maphaskey(tool_args, "start_line") ? " lines " + (tostr(tool_args["start_line"]) + "-" + tostr(tool_args["end_line"])) | "";
+      message = "[EXTRACT] Code region: " + (tool_args["object"] + ":" + tool_args["verb"]) + range_desc;
     elseif (tool_name == "get_verb_metadata")
-      message = $ansi:colorize("[ANALYZE]", 'cyan) + " Verb metadata: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'yellow);
+      message = "[ANALYZE] Verb metadata: " + (tool_args["object"] + ":" + tool_args["verb"]);
     elseif (tool_name == "present_verb_code")
-      message = $ansi:colorize("[DISPLAY]", 'bright_green) + " Rendering to HUD: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'bright_yellow);
+      message = "[DISPLAY] Rendering to HUD: " + (tool_args["object"] + ":" + tool_args["verb"]);
     elseif (tool_name == "present_verb_code_range")
-      range_desc = " lines " + $ansi:colorize(tostr(tool_args["start_line"]) + "-" + tostr(tool_args["end_line"]), 'bright_yellow);
-      message = $ansi:colorize("[DISPLAY]", 'bright_green) + " Rendering to HUD: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'bright_yellow) + range_desc;
+      range_desc = " lines " + (tostr(tool_args["start_line"]) + "-" + tostr(tool_args["end_line"]));
+      message = "[DISPLAY] Rendering to HUD: " + (tool_args["object"] + ":" + tool_args["verb"]) + range_desc;
     elseif (tool_name == "read_property")
-      message = $ansi:colorize("[PROBE]", 'cyan) + " Property read: " + $ansi:colorize(tool_args["object"] + "." + tool_args["property"], 'yellow);
+      message = "[PROBE] Property read: " + (tool_args["object"] + "." + tool_args["property"]);
     elseif (tool_name == "doc_lookup")
-      message = $ansi:colorize("[DOC]", 'bright_blue) + " Loading docs for " + $ansi:colorize(tool_args["target"], 'white);
+      message = "[DOC] Loading docs for " + (tool_args["target"]);
     elseif (tool_name == "list_messages")
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Listing message templates on " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[MSG] Listing message templates on " + (tool_args["object"]);
     elseif (tool_name == "get_message_template")
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Reading " + $ansi:colorize(tool_args["property"], 'yellow) + " on " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[MSG] Reading " + (tool_args["property"]) + " on " + (tool_args["object"]);
     elseif (tool_name == "set_message_template")
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Setting " + $ansi:colorize(tool_args["property"], 'yellow) + " on " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[MSG] Setting " + (tool_args["property"]) + " on " + (tool_args["object"]);
     elseif (tool_name == "add_message_template")
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Appending to " + $ansi:colorize(tool_args["property"], 'yellow) + " on " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[MSG] Appending to " + (tool_args["property"]) + " on " + (tool_args["object"]);
     elseif (tool_name == "delete_message_template")
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Removing entry " + $ansi:colorize(tostr(tool_args["index"]), 'yellow) + " from " + $ansi:colorize(tool_args["property"], 'yellow);
+      message = "[MSG] Removing entry " + (tostr(tool_args["index"])) + " from " + (tool_args["property"]);
     elseif (tool_name == "get_properties")
-      message = $ansi:colorize("[PROBE]", 'cyan) + " Property scan: " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[PROBE] Property scan: " + (tool_args["object"]);
     elseif (tool_name == "dump_object")
-      message = $ansi:colorize("[DEEP SCAN]", 'bright_cyan) + " Complete extraction: " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[DEEP SCAN] Complete extraction: " + (tool_args["object"]);
     elseif (tool_name == "ancestors")
-      message = $ansi:colorize("[TRACE]", 'cyan) + " Inheritance chain: " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[TRACE] Inheritance chain: " + (tool_args["object"]);
     elseif (tool_name == "descendants")
-      message = $ansi:colorize("[TRACE]", 'cyan) + " Descendant enumeration: " + $ansi:colorize(tool_args["object"], 'white);
+      message = "[TRACE] Descendant enumeration: " + (tool_args["object"]);
     elseif (tool_name == "function_info")
-      message = $ansi:colorize("[QUERY]", 'cyan) + " Builtin docs: " + $ansi:colorize(tool_args["function_name"] + "()", 'yellow);
+      message = "[QUERY] Builtin docs: " + (tool_args["function_name"] + "()");
     elseif (tool_name == "list_builtin_functions")
-      message = $ansi:colorize("[INDEX]", 'bright_cyan) + " Enumerating system builtin library...";
+      message = "[INDEX] Enumerating system builtin library...";
     elseif (tool_name == "add_verb")
-      message = $ansi:colorize("[WRITE]", 'bright_yellow) + " Creating verb: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb_names"], 'bright_white);
+      message = "[WRITE] Creating verb: " + (tool_args["object"] + ":" + tool_args["verb_names"]);
     elseif (tool_name == "delete_verb")
-      message = $ansi:colorize("[DELETE]", 'red) + " Removing verb: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'bright_white);
+      message = "[DELETE] Removing verb: " + (tool_args["object"] + ":" + tool_args["verb"]);
     elseif (tool_name == "set_verb_code")
-      message = $ansi:colorize("[COMPILE]", 'bright_yellow) + " Updating code: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'bright_white);
+      message = "[COMPILE] Updating code: " + (tool_args["object"] + ":" + tool_args["verb"]);
     elseif (tool_name == "set_verb_args")
       argspec = "(" + tool_args["dobj"] + " " + tool_args["prep"] + " " + tool_args["iobj"] + ")";
-      message = $ansi:colorize("[MODIFY]", 'yellow) + " Changing argspec: " + $ansi:colorize(tool_args["object"] + ":" + tool_args["verb"], 'bright_white) + " to " + $ansi:colorize(argspec, 'white);
+      message = "[MODIFY] Changing argspec: " + (tool_args["object"] + ":" + tool_args["verb"]) + " to " + argspec;
     elseif (tool_name == "add_property")
-      message = $ansi:colorize("[WRITE]", 'bright_yellow) + " Creating property: " + $ansi:colorize(tool_args["object"] + "." + tool_args["property"], 'bright_white);
+      message = "[WRITE] Creating property: " + (tool_args["object"] + "." + tool_args["property"]);
     elseif (tool_name == "delete_property")
-      message = $ansi:colorize("[DELETE]", 'red) + " Removing property: " + $ansi:colorize(tool_args["object"] + "." + tool_args["property"], 'bright_white);
+      message = "[DELETE] Removing property: " + (tool_args["object"] + "." + tool_args["property"]);
     elseif (tool_name == "set_property")
-      message = $ansi:colorize("[WRITE]", 'bright_yellow) + " Setting property: " + $ansi:colorize(tool_args["object"] + "." + tool_args["property"], 'bright_white);
+      message = "[WRITE] Setting property: " + (tool_args["object"] + "." + tool_args["property"]);
     elseif (tool_name == "eval")
       "Truncate code for display - handle both string and list formats";
       code_preview = maphaskey(tool_args, "code") ? tool_args["code"] | "?";
@@ -1677,15 +1640,15 @@ object DATA_VISOR [
       if (length(code_preview) > 50)
         code_preview = code_preview[1..47] + "...";
       endif
-      message = $ansi:colorize("[EXEC]", 'bright_magenta) + " Executing: " + $ansi:colorize(code_preview, 'bright_white);
+      message = "[EXEC] Executing: " + code_preview;
     elseif (tool_name == "create_object")
-      message = $ansi:colorize("[CREATE]", 'bright_green) + " Instantiating: " + $ansi:colorize(tool_args["name"], 'bright_white) + " from " + $ansi:colorize(tool_args["parent"], 'white);
+      message = "[CREATE] Instantiating: " + (tool_args["name"]) + " from " + (tool_args["parent"]);
     elseif (tool_name == "recycle_object")
-      message = $ansi:colorize("[DESTROY]", 'bright_red) + " Recycling: " + $ansi:colorize(tool_args["object"], 'bright_white);
+      message = "[DESTROY] Recycling: " + (tool_args["object"]);
     elseif (tool_name == "ask_user")
-      message = $ansi:colorize("[QUERY]", 'bright_cyan) + " Requesting user input...";
+      message = "[QUERY] Requesting user input...";
     elseif (tool_name == "explain")
-      "Explain messages are rendered as markdown - ensure it's a string";
+      "Model explanations are literal text";
       msg = maphaskey(tool_args, "message") ? tool_args["message"] | "";
       if (typeof(msg) != TYPE_STR)
         msg = toliteral(msg);
@@ -1693,23 +1656,17 @@ object DATA_VISOR [
       return msg;
     elseif (tool_name == "grep")
       obj_spec = maphaskey(tool_args, "object") ? " in " + tool_args["object"] | " globally";
-      message = $ansi:colorize("[SEARCH]", 'bright_cyan) + " Pattern matching: " + $ansi:colorize(tool_args["pattern"], 'bright_white) + obj_spec;
+      message = "[SEARCH] Pattern matching: " + (tool_args["pattern"]) + obj_spec;
     else
-      message = $ansi:colorize("[PROCESS]", 'cyan) + " Neural link active: " + $ansi:colorize(tool_name, 'white);
+      message = "[PROCESS] Neural link active: " + tool_name;
     endif
     "Append reason if provided";
     if (reason)
-      message = message + " " + $ansi:colorize("(", 'dim) + $ansi:colorize(reason, 'white) + $ansi:colorize(")", 'dim);
+      message = message + " (" + reason + ")";
     endif
     return message;
   endmethod
 
-  method _get_tool_content_types owner: HACKER
-    "Specify djot rendering for all tool messages to support markdown formatting";
-    const {tool_name, tool_args} = args;
-    "All visor tool messages can contain markdown, so render as djot";
-    return {'text_djot, 'text_plain};
-  endmethod
 
   method _format_tts_message owner: HACKER
     "TTS-friendly descriptions for visor tool operations";
@@ -1808,9 +1765,9 @@ object DATA_VISOR [
     this.agent:reset_context();
     const wearer = this.location;
     !valid(wearer) && return;
-    wearer:inform_current($event:mk_info(wearer, "The visor's interface flickers to life as you adjust it over your eyes. A luminescent display materializes in the corner of your vision - cascading lines of data flow past in " + $ansi:colorize("electric blue", 'bright_blue) + " and " + $ansi:colorize("green", 'bright_green) + ". The world around you shimmers momentarily as the augmented reality overlay synchronizes with your neural patterns."):with_tts("The visor's interface flickers to life as you adjust it over your eyes. A luminescent display materializes in the corner of your vision - cascading lines of data flow past in electric blue and green. The world around you shimmers momentarily as the augmented reality overlay synchronizes with your neural patterns."));
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[BOOT]", 'bright_green) + " Neural link established. Augmented reality overlay: " + $ansi:colorize("ONLINE", 'green)):with_presentation_hint('inset):with_group('llm, this):with_tts("Neural link established. Augmented reality overlay online."));
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[READY]", 'green) + " Database inspection interface active. Commands: use/interact, reset"):with_presentation_hint('inset):with_group('llm, this):with_tts("Database inspection interface active. Commands: use, interact, or reset."));
+    wearer:inform_current($event:mk_info(wearer, "The visor's interface flickers to life as you adjust it over your eyes. A luminescent display materializes in the corner of your vision - cascading lines of data flow past in electric blue" + " and green" + ". The world around you shimmers momentarily as the augmented reality overlay synchronizes with your neural patterns."):with_tts("The visor's interface flickers to life as you adjust it over your eyes. A luminescent display materializes in the corner of your vision - cascading lines of data flow past in electric blue and green. The world around you shimmers momentarily as the augmented reality overlay synchronizes with your neural patterns."));
+    wearer:inform_current($event:mk_info(wearer, "[BOOT] Neural link established. Augmented reality overlay: " + "ONLINE"):with_presentation_hint('inset):with_group('llm, this):with_tts("Neural link established. Augmented reality overlay online."));
+    wearer:inform_current($event:mk_info(wearer, "[READY] Database inspection interface active. Commands: use/interact, reset"):with_presentation_hint('inset):with_group('llm, this):with_tts("Database inspection interface active. Commands: use, interact, or reset."));
     this:_show_token_usage(wearer);
   endmethod
 
@@ -1819,7 +1776,7 @@ object DATA_VISOR [
     const wearer = this.location;
     !valid(wearer) && return;
     this:_show_token_usage(wearer);
-    wearer:inform_current($event:mk_info(wearer, $ansi:colorize("[SHUTDOWN]", 'red) + " Neural link severed. Augmented reality overlay: " + $ansi:colorize("OFFLINE", 'bright_red)):with_presentation_hint('inset):with_group('llm, this):with_tts("Neural link severed. Augmented reality overlay offline."));
+    wearer:inform_current($event:mk_info(wearer, "[SHUTDOWN] Neural link severed. Augmented reality overlay: " + "OFFLINE"):with_presentation_hint('inset):with_group('llm, this):with_tts("Neural link severed. Augmented reality overlay offline."));
     wearer:inform_current($event:mk_info(wearer, "The luminescent display flickers and dims, data streams dissolving into static. The augmented overlay fades from your peripheral vision like phosphor afterimages. As the neural link disconnects, you hear a faint electronic hiss - then silence. The world returns to its unaugmented state."));
   endmethod
 
@@ -1828,7 +1785,7 @@ object DATA_VISOR [
     !is_member(this, player.wearing) && player:inform_current($event:mk_error(player, "You need to be wearing the visor to reset it.")) && return;
     !valid(this.agent) && this:configure();
     this.agent:reset_context();
-    player:inform_current($event:mk_info(player, $ansi:colorize("[RESET]", 'yellow) + " Neural buffer flushed. Session context cleared."):with_presentation_hint('inset):with_group('llm, this):with_tts("Session context cleared."));
+    player:inform_current($event:mk_info(player, "[RESET] Neural buffer flushed. Session context cleared."):with_presentation_hint('inset):with_group('llm, this):with_tts("Session context cleared."));
   endverb
 
   verb plan_investigation (none none none) owner: HACKER flags: "rd"
@@ -1838,23 +1795,23 @@ object DATA_VISOR [
     const task = this.agent:create_task("Investigation: " + argstr);
     this.current_investigation_task = task.task_id;
     task:mark_in_progress();
-    player:inform_current($event:mk_info(player, $ansi:colorize("[TASK]", 'bright_cyan) + " Investigation #" + tostr(task.task_id) + " initiated: " + argstr):with_presentation_hint('inset):with_group('llm, this):with_tts("Investigation " + tostr(task.task_id) + " initiated: " + argstr));
+    player:inform_current($event:mk_info(player, "[TASK] Investigation #" + tostr(task.task_id) + " initiated: " + argstr):with_presentation_hint('inset):with_group('llm, this):with_tts("Investigation " + tostr(task.task_id) + " initiated: " + argstr));
   endverb
 
   verb get_investigation_status (none none none) owner: HACKER flags: "rd"
     "Display current investigation task status and findings";
     !is_member(this, player.wearing) && player:inform_current($event:mk_error(player, "You need to be wearing the visor.")) && return;
     if (this.current_investigation_task == -1)
-      player:inform_current($event:mk_info(player, $ansi:colorize("[STATUS]", 'bright_blue) + " No active investigation. Use 'plan investigation <description>' to begin."):with_presentation_hint('inset):with_group('llm, this):with_tts("No active investigation. Use plan investigation to begin."));
+      player:inform_current($event:mk_info(player, "[STATUS] No active investigation. Use 'plan investigation <description>' to begin."):with_presentation_hint('inset):with_group('llm, this):with_tts("No active investigation. Use plan investigation to begin."));
       return;
     endif
     const task_obj = this.agent.current_tasks[this.current_investigation_task];
     if (!valid(task_obj))
-      player:inform_current($event:mk_info(player, $ansi:colorize("[ERROR]", 'red) + " Investigation task #" + tostr(this.current_investigation_task) + " is no longer available."):with_tts("Error: Investigation task " + tostr(this.current_investigation_task) + " is no longer available."));
+      player:inform_current($event:mk_info(player, "[ERROR] Investigation task #" + tostr(this.current_investigation_task) + " is no longer available."):with_tts("Error: Investigation task " + tostr(this.current_investigation_task) + " is no longer available."));
       return;
     endif
     let status = task_obj:get_status();
-    let status_lines = {$ansi:colorize("[TASK STATUS]", 'bright_cyan), "  ID: " + tostr(status["task_id"]), "  Status: " + tostr(status["status"]), "  Description: " + status["description"]};
+    let status_lines = {"[TASK STATUS]", "  ID: " + tostr(status["task_id"]), "  Status: " + tostr(status["status"]), "  Description: " + status["description"]};
     status["status"] == 'completed && (status_lines = {@status_lines, "  Result: " + status["result"]});
     status["status"] == 'failed && (status_lines = {@status_lines, "  Error: " + status["error"]});
     status["status"] == 'blocked && (status_lines = {@status_lines, "  Blocked: " + status["error"]});

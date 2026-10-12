@@ -119,7 +119,7 @@ E_PERM
 ; const id = #0.changes_probe["review_id"]; try $change_manager:review(id, $change_manager:status(id)["generation"], {id, 1, 1}); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "stale_cursor"
 
-; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); const text = $document:render($event:mk_info(player, $format.block:mk(@output)):resolve(player), 'text_plain)['body]; return {index(text, "1: return 4;") != 0, #9500:test(), length($change_manager.pending)};
+; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); const text = $document:render($event:mk_info(player, $format.block:mk(@output)):resolve(player), 'text_plain)['body]; return {index(text, "1 | return 4;") != 0, #9500:test(), length($change_manager.pending)};
 {true, 4, 0}
 
 // Each programmatic request checks current delegation without borrowing another task's elevation.

@@ -224,4 +224,85 @@ object DOCUMENT_RESOLUTION_SCENARIOS
     endfor
     return true;
   endmethod
+  method test_private_message_documents owner: ARCH_WIZARD
+    "DM attribution retains references and body paragraphs without interpreting literal punctuation.";
+    const message = $dm:mk(#90102, #90101, "First *literal*.\n\nSecond <literal>.");
+    const received = message:display_event(#90101):resolve(#90101);
+    const sent = message:sender_echo_event():resolve(#90102);
+    for document in ({received, sent})
+      const encoded = $document:encode(document);
+      $test_utils:assert_eq(length(encoded["blocks"]), 3, "Attribution and both body paragraphs");
+      $test_utils:assert_eq(encoded["blocks"][2]["children"][1]["text"], "First *literal*.",
+        "Message punctuation remains text");
+      for format in ({'text_html, 'text_djot, 'text_plain})
+        const rendered = $document:render(document, format);
+        $test_utils:assert_false(index(rendered['body], "\\x1b["), "No literal ANSI sequence");
+        $test_utils:assert_false(index(rendered['body], binary_to_str(b"Gw==")), "No terminal escape");
+        $test_utils:assert_true(index(rendered['body], "Second"), "Complete body in every format");
+        $test_utils:assert_eq(length(rendered['annotations]), format == 'text_plain ? 0 | 2,
+          "Participant and captured location references");
+      endfor
+    endfor
+    $test_utils:assert_eq(message:sender_echo_event():audience(), 'utility, "Receipt stays private utility output");
+    return true;
+  endmethod
+
+  method test_agent_report_documents owner: ARCH_WIZARD
+    "Agent report tools emit code, tables, and literal prose through the normal room event path.";
+    const room = create($agent_room, player, 2);
+    try
+      add_property(room, "captured_event", false, {player, "r"});
+      add_verb(room, {player, "rxd", "announce"}, {"this", "none", "this"});
+      $test_utils:assert_false(set_verb_code(room, "announce", {"this.captured_event = args[1];"}),
+        "Room capture compiles");
+      const source = "before\n```\n*opaque*";
+      room:_tool_present_code(["title" -> "Source", "code" -> source, "language" -> "moo"], player);
+      const code = room.captured_event:resolve(#90102);
+      const blocks = $document:encode(code)["blocks"];
+      $test_utils:assert_eq({blocks[1]["kind"], blocks[2]["kind"]}, {"heading", "code_block"},
+        "Code presentation uses structural nodes");
+      $test_utils:assert_eq(blocks[2]["text"], source, "Code delimiters stay inside the source buffer");
+      room:_tool_present_table(["title" -> "Cells", "headers" -> {"Left |", "Right"},
+        "rows" -> {{"First\nSecond", "<tag>"}}], player);
+      const table = room.captured_event:resolve(#90102);
+      const encoded = $document:encode(table)["blocks"][2];
+      $test_utils:assert_eq(encoded["kind"], "table", "Table presentation uses a table node");
+      $test_utils:assert_eq(length(encoded["rows"][1]["cells"]), 2, "Punctuation cannot add a column");
+      $test_utils:assert_eq(encoded["rows"][1]["cells"][1]["blocks"][1]["children"][2]["kind"],
+        "hard_break", "Cell newlines retain their structure");
+      room:_tool_present_report(["title" -> "Report", "content" -> "*literal*\n\nSecond paragraph."], player);
+      const report = room.captured_event:resolve(#90102);
+      $test_utils:assert_eq(length($document:encode(report)["blocks"]), 3, "Report paragraphs remain separate");
+      for document in ({code, table, report})
+        for format in ({'text_html, 'text_djot, 'text_plain})
+          $test_utils:assert_true(length($document:render(document, format)['body]), "Report renders in every format");
+        endfor
+      endfor
+    finally
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
+  method test_programmatic_description_blocks owner: ARCH_WIZARD
+    "Both agent room descriptions retain headings and lists through the ordinary look producer.";
+    for prototype in ({$agent_room, $agentic.coding_room})
+      const room = create(prototype, player, 2);
+      try
+        const document = room:look_self():into_event():resolve(player);
+        let lists = 0;
+        for block in ($document:encode(document)["blocks"])
+          block["kind"] == "list" && (lists = lists + 1);
+        endfor
+        $test_utils:assert_true(lists > 0, "Description lists remain top-level blocks");
+        for format in ({'text_html, 'text_djot, 'text_plain})
+          const rendered = $document:render(document, format);
+          $test_utils:assert_true(index(rendered['body], "Queue a task"), "Description commands remain visible");
+        endfor
+      finally
+        recycle(room);
+      endtry
+    endfor
+    return true;
+  endmethod
 endobject

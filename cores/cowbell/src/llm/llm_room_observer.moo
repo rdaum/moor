@@ -293,10 +293,8 @@ object LLM_ROOM_OBSERVER [
 
   method _show_token_usage owner: ARCH_WIZARD
     "Display token usage information to the user";
-    let color = 0;
     let last_tokens = 0;
     let percent_used = 0;
-    let remaining = 0;
     let usage_msg = 0;
     caller == this || caller == this.owner || caller.wizard || raise(E_PERM);
     set_task_perms(caller_perms());
@@ -309,17 +307,8 @@ object LLM_ROOM_OBSERVER [
     const last_usage = this.agent.last_token_usage;
     if (typeof(last_usage) == TYPE_MAP && maphaskey(last_usage, "total_tokens"))
       last_tokens = last_usage["total_tokens"];
-      remaining = budget - used;
       percent_used = used * 100 / budget;
-      "Color code based on usage";
-      if (percent_used >= 90)
-        color = 'bright_red;
-      elseif (percent_used >= 75)
-        color = 'yellow;
-      else
-        color = 'dim;
-      endif
-      usage_msg = $ansi:colorize("[TOKENS]", color) + " Last call: " + $ansi:colorize(tostr(last_tokens), 'white) + " | Total: " + tostr(used) + "/" + tostr(budget) + " (" + tostr(percent_used) + "% used)";
+      usage_msg = "[TOKENS]" + " Last call: " + (tostr(last_tokens)) + " | Total: " + tostr(used) + "/" + tostr(budget) + " (" + tostr(percent_used) + "% used)";
       user:inform_current($event:mk_info(user, usage_msg):with_presentation_hint('inset):with_group('llm, this));
     endif
   endmethod
