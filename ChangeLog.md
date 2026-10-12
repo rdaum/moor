@@ -339,6 +339,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Cowbell event queues now enforce the caller's property permissions for reads and writes. Calling a
+  queue method no longer grants wizard access to another owner's queue.
+
 - Snore change reviews display and count new upstream verbs without failing to render the review
   page.
 - Cowbell change reviews avoid duplicate whole-core comparisons during fetch and apply. Comparisons

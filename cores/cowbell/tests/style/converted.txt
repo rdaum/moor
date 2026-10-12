@@ -232,3 +232,6 @@ features/prog_features.moo:@schedules
 features/prog_features.moo:@schedule
 features/prog_features.moo:@stop-schedule
 change_manager.moo
+
+agentic/agentic_event_queue.moo
+events/msg_bag.moo

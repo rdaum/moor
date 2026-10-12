@@ -15,7 +15,7 @@ object MSG_BAG [
   method add owner: ARCH_WIZARD
     "Add a message template. Returns new flyweight or entry count for objects.";
     set_task_perms(caller_perms());
-    {text} = args;
+    const {text} = args;
     if (typeof(this) == TYPE_FLYWEIGHT)
       return toflyweight($msg_bag, flyslots(this), {@flycontents(this), text});
     endif
@@ -26,11 +26,11 @@ object MSG_BAG [
   method remove owner: ARCH_WIZARD
     "Remove a message by 1-based index. Returns new flyweight or entry count for objects.";
     set_task_perms(caller_perms());
-    {idx} = args;
+    const {idx} = args;
     typeof(idx) == TYPE_INT || raise(E_TYPE);
-    entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
-    idx < 1 || idx > length(entries) && raise(E_RANGE);
-    new_entries = listdelete(entries, idx);
+    const entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
+    (idx >= 1 && idx <= length(entries)) || raise(E_RANGE);
+    const new_entries = listdelete(entries, idx);
     if (typeof(this) == TYPE_FLYWEIGHT)
       return toflyweight($msg_bag, flyslots(this), new_entries);
     endif
@@ -38,7 +38,7 @@ object MSG_BAG [
     return length(this.entries);
   endmethod
 
-  method list owner: ARCH_WIZARD
+  method "list entries" owner: ARCH_WIZARD
     "Return the entries.";
     set_task_perms(caller_perms());
     return typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
@@ -47,7 +47,7 @@ object MSG_BAG [
   method pick owner: ARCH_WIZARD
     "Pick a random entry (or return E_RANGE if empty).";
     set_task_perms(caller_perms());
-    entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
+    const entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
     !length(entries) && return E_RANGE;
     return entries[random(length(entries))];
   endmethod
@@ -55,22 +55,16 @@ object MSG_BAG [
   method set_entry owner: ARCH_WIZARD
     "Replace entry at index. Returns new flyweight or the text for objects.";
     set_task_perms(caller_perms());
-    {idx, text} = args;
+    const {idx, text} = args;
     typeof(idx) == TYPE_INT || raise(E_TYPE);
-    entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
-    idx < 1 || idx > length(entries) && raise(E_RANGE);
+    const entries = typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
+    (idx >= 1 && idx <= length(entries)) || raise(E_RANGE);
     if (typeof(this) == TYPE_FLYWEIGHT)
-      new_entries = listset(entries, text, idx);
+      const new_entries = listset(entries, text, idx);
       return toflyweight($msg_bag, flyslots(this), new_entries);
     endif
     this.entries[idx] = text;
     return text;
-  endmethod
-
-  method entries owner: ARCH_WIZARD
-    "Return the entries.";
-    set_task_perms(caller_perms());
-    return typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | this.entries;
   endmethod
 
   verb mk (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -81,7 +75,8 @@ object MSG_BAG [
 
   verb is_msg_bag (none none none) owner: ARCH_WIZARD flags: "rxd"
     "Check if a value is a message bag (object or flyweight).";
-    {value} = args;
-    return typeof(value) == TYPE_OBJ && isa(value, $msg_bag) || (typeof(value) == TYPE_FLYWEIGHT && value.delegate == $msg_bag);
+    const {value} = args;
+    return (typeof(value) == TYPE_OBJ && isa(value, $msg_bag))
+      || (typeof(value) == TYPE_FLYWEIGHT && value.delegate == $msg_bag);
   endverb
 endobject

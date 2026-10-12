@@ -65,8 +65,6 @@ count	file	verb	kind	detail
 1	actor.moo	mk_think_event owner: HACKER	implicit-local	event
 1	actor.moo	pronouns owner: ARCH_WIZARD	missing-docstring	Describe the contract before executable statements.
 1	actor.moo	put (any in this) owner: HACKER flags: "rd"	implicit-local	event
-1	agentic/agentic_event_queue.moo	pop owner: ARCH_WIZARD	implicit-local	item
-1	agentic/agentic_event_queue.moo	push owner: ARCH_WIZARD	implicit-local	item
 1	auth/login.moo	"?" (any none any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	clist
 1	auth/login.moo	"?" (any none any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	info
 1	auth/login.moo	"?" (any none any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	star
@@ -253,16 +251,6 @@ count	file	verb	kind	detail
 1	events/event_receiver.moo	test_can_inform_as_checks_explicit_authority owner: HACKER	implicit-local	unrelated
 1	events/event_receiver.moo	test_inform_methods_reject_unrelated_receiver owner: HACKER	implicit-local	event
 1	events/event_receiver.moo	test_inform_methods_reject_unrelated_receiver owner: HACKER	implicit-local	receiver
-1	events/msg_bag.moo	add owner: ARCH_WIZARD	implicit-local	text
-1	events/msg_bag.moo	is_msg_bag (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	value
-1	events/msg_bag.moo	pick owner: ARCH_WIZARD	implicit-local	entries
-1	events/msg_bag.moo	remove owner: ARCH_WIZARD	implicit-local	entries
-1	events/msg_bag.moo	remove owner: ARCH_WIZARD	implicit-local	idx
-1	events/msg_bag.moo	remove owner: ARCH_WIZARD	implicit-local	new_entries
-1	events/msg_bag.moo	set_entry owner: ARCH_WIZARD	implicit-local	entries
-1	events/msg_bag.moo	set_entry owner: ARCH_WIZARD	implicit-local	idx
-1	events/msg_bag.moo	set_entry owner: ARCH_WIZARD	implicit-local	new_entries
-1	events/msg_bag.moo	set_entry owner: ARCH_WIZARD	implicit-local	text
 1	events/sub.moo	"a*c" owner: HACKER	implicit-local	binding_name
 1	events/sub.moo	"a*c" owner: HACKER	implicit-local	capitalize_article
 1	events/sub.moo	"a*c" owner: HACKER	implicit-local	capitalize_binding
