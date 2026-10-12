@@ -3127,10 +3127,10 @@ object PROG_FEATURES [
       const inherited_property = flycontents(events[4])[1][2].rows[1][1];
       const local_verb = flycontents(events[6])[1][2].rows[1][1];
       const inherited_verb = flycontents(events[7])[1][2].rows[1][1];
-      $test_utils:assert_eq(local_property.label, ".private_display_prop", "local property should be displayed");
-      $test_utils:assert_eq(inherited_property.label, ".private_display_parent_prop", "inherited property should be displayed");
-      $test_utils:assert_eq(local_verb.label, tostr(fixture) + ":private_display_verb", "local verb should be displayed");
-      $test_utils:assert_eq(inherited_verb.label, tostr(parent_fixture) + ":private_display_parent_verb", "inherited verb should be displayed");
+      $test_utils:assert_eq(local_property:compose(player, 'text_plain, events[3]), ".private_display_prop", "local property should be displayed");
+      $test_utils:assert_eq(inherited_property:compose(player, 'text_plain, events[4]), ".private_display_parent_prop", "inherited property should be displayed");
+      $test_utils:assert_eq(local_verb:compose(player, 'text_plain, events[6]), tostr(fixture) + ":private_display_verb", "local verb should be displayed");
+      $test_utils:assert_eq(inherited_verb:compose(player, 'text_plain, events[7]), tostr(parent_fixture) + ":private_display_parent_verb", "inherited verb should be displayed");
       const receiver_ref = $url_utils:to_curie_str(fixture);
       const parent_ref = $url_utils:to_curie_str(parent_fixture);
       $test_utils:assert_eq(local_property.descriptor, ["kind" -> "property", "object" -> receiver_ref, "name" -> "private_display_prop"], "local property reference should target the inspected object");

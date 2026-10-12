@@ -250,7 +250,7 @@ object HEADLESS_EVENT_SCENARIOS
     const entry = $obj_utils:command_entry($actor, {"give hand", $actor, "any", "at/to", "this"}, #90102);
     $test_utils:assert_eq(entry.descriptor["action"]["label"], "Give", "invocation carries the authored action");
     $test_utils:assert_eq(entry.descriptor["template"], "give {dobj} at " + tostr($actor), "action labels do not rewrite parser commands");
-    $test_utils:assert_eq(entry.label, "give <item> at " + $actor:name(), "caption names the argument using the exact parser preposition");
+    $test_utils:assert_eq(entry:compose(player, 'text_plain, $event:mk_info(player, entry)), "give <item> at " + $actor:name(), "caption names the argument using the exact parser preposition");
     const actor = $actor:create();
     add_verb(actor, {player, "rd", "offer hand"}, {"any", "at", "this"});
     set_verb_metadata(actor, "offer", "ui", ["label" -> "Offer", "icon" -> "give"]);
