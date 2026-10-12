@@ -6,9 +6,7 @@
 =You whisper, "hello there" to Test Programmer.
 
 @programmer
-; return 1;
-1
-=Test Player whispers, "hello there"
+@text Test Player whispers, "hello there"
 
 // Page delivery: the target hears the origin line and the page text.
 @nonprogrammer
@@ -16,10 +14,8 @@
 =Your message has been sent.
 
 @programmer
-; return 1;
-1
-=You sense that Test Player is looking for you in Test Chamber.
-=It pages, "a private hello"
+@text You sense that Test Player is looking for you in Test Chamber.
+@text It pages, "a private hello"
 
 // Refused whispers and pages report the refusal to the sender.
 % @refuse whispers pages from #101 for 2 hours
@@ -59,9 +55,7 @@
 =You say, "checking the gag"
 
 @nonprogrammer
-; return 1;
-1
-=Test Programmer says, "checking the gag"
+@text Test Programmer says, "checking the gag"
 
 // The gagged player's speech was not delivered: lifting the gag lets it through.
 @programmer
@@ -73,9 +67,7 @@
 =You say, "now you can hear me"
 
 @programmer
-; return 1;
-1
-=Test Player says, "now you can hear me"
+@text Test Player says, "now you can hear me"
 
 // Confirmation can preserve or clear every refusal without losing parallel state.
 @programmer

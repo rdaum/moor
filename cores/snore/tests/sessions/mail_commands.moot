@@ -27,18 +27,25 @@ true
 @nonprogrammer
 % @mail-option +sticky
 % @subscribe *testmailbox
-; return player:current_folder();
+@wizard
+; return #101:current_folder();
 #109
+@nonprogrammer
 % @read 1
 % @unread 1
-; return player:get_current_message(#109)[2] == #109:messages_in_seq(1)[2][1] - 1;
+@wizard
+; return #101:get_current_message(#109)[2] == #109:messages_in_seq(1)[2][1] - 1;
 true
+@nonprogrammer
 % @rmm 1 from *testmailbox
 % @unrmm on *testmailbox
+@wizard
 ; return #109:length_all_msgs();
 1
+@nonprogrammer
 % @unsubscribe *testmailbox
-; return player:current_folder();
+@wizard
+; return #101:current_folder();
 #101
 
 // A refusal to update reading markers must survive successful notify().
@@ -47,7 +54,8 @@ true
 1
 @nonprogrammer
 % @ranm no
-; return player:get_current_message();
+@wizard
+; return #101:get_current_message();
 {0, 0}
 
 

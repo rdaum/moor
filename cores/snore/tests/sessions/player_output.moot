@@ -8,9 +8,7 @@
 ~~You whisper
 
 @nonprogrammer
-; return true;
-true
-~~player trace
+@text (Test Programmer #102) Test Programmer whispers, "player trace"
 
 % @paranoid 10
 =Anti-spoofer on and keeping 10 lines.
@@ -20,9 +18,7 @@ true
 ~~You whisper
 
 @nonprogrammer
-; return true;
-true
-=Test Programmer whispers, "recorded trace"
+@text Test Programmer whispers, "recorded trace"
 % @check-full 1
 =Traceback for:
 =Test Programmer whispers, "recorded trace"

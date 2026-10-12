@@ -10,9 +10,6 @@ true
 ; const overview = $string_utils:from_list($change_manager:command({}), "\n"); return {index(overview, "Check for updates") != 0, index(overview, "GENERATION") == 0};
 {true, true}
 
-; const help = $string_utils:from_list($change_manager:command({"help"}), "\n"); return {index(help, "Fetch upstream code, review the differences") != 0, index(help, "ID is the review number") != 0};
-{true, true}
-
 ; $change_manager:command({"upstream", "http://127.0.0.1:1/bundle.moo"}); return true;
 true
 
@@ -63,6 +60,9 @@ true
 
 ; return {#9500:test(), $change_manager:status(2)["status"]};
 {1, "complete"}
+
+% help @changes
+=Fetch upstream code, compare it with your running MOO, then choose what to apply.
 
 @nonprogrammer
 @quiet

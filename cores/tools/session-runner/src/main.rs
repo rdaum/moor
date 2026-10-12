@@ -449,9 +449,16 @@ impl SessionRunner for MockMootRunner {
         // Mirror the connection host: submit the hook as a root task on #0 under system
         // authority, with the target object as both player and argument.
         let target = object.copied().unwrap_or(*player);
-        // The target counts as connected while its connect/reconnect/disconnect hook runs.
-        self.hub.set_connected(target, true);
+        let disconnecting = matches!(verb, "user_disconnected" | "user_client_disconnected");
+        if !disconnecting {
+            self.hub.set_connected(target, true);
+        }
         let session = Arc::new(TestSession::for_player(self.hub.clone(), target));
+        // The daemon removes connections before invoking the disconnect hook.
+        // Retain the removed connection in the task's session metadata.
+        if disconnecting {
+            self.hub.set_connected(target, false);
+        }
         self.sessions.insert(target, session.clone());
         let handle = self
             .scheduler
@@ -481,9 +488,6 @@ impl SessionRunner for MockMootRunner {
                 Err(flume::RecvTimeoutError::Timeout) => self.pump_input()?,
                 Err(err) => return Err(eyre!("system hook {verb} timed out: {err}")),
             }
-        }
-        if matches!(verb, "user_disconnected" | "user_client_disconnected") {
-            self.hub.set_connected(target, false);
         }
         self.harvest_all();
         Ok(())
