@@ -83,8 +83,6 @@ count	file	verb	kind	detail
 1	auth/login.moo	"cr*eate @cr*eate" (any none any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	password
 1	auth/login.moo	"cr*eate @cr*eate" (any none any) owner: ARCH_WIZARD flags: "rxd"	missing-docstring	Describe the contract before executable statements.
 1	auth/login.moo	"h*elp @h*elp" (any none any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	msg
-1	auth/login.moo	_apply_template owner: ARCH_WIZARD	implicit-local	message
-1	auth/login.moo	_apply_template owner: ARCH_WIZARD	implicit-local	result
 1	auth/login.moo	_create_player owner: LOGIN	implicit-local	cap
 1	auth/login.moo	_create_player owner: LOGIN	implicit-local	default_home
 1	auth/login.moo	_create_player owner: LOGIN	implicit-local	email
@@ -181,8 +179,6 @@ count	file	verb	kind	detail
 1	events/event.moo	validate owner: HACKER	implicit-local	required_keys
 1	events/event.moo	validate owner: HACKER	implicit-local	s
 1	events/event.moo	with_audience owner: ARCH_WIZARD	implicit-local	audience
-1	events/event.moo	with_content_type (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	content_type
-1	events/event.moo	with_content_type (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	existing
 1	events/event.moo	with_group owner: HACKER	implicit-local	group_id
 1	events/event.moo	with_group owner: HACKER	implicit-local	prefix
 1	events/event.moo	with_group owner: HACKER	implicit-local	target
@@ -2032,31 +2028,6 @@ count	file	verb	kind	detail
 1	features/wiz_features.moo	help_topics owner: ARCH_WIZARD	implicit-local	sources
 1	features/wiz_features.moo	help_topics owner: ARCH_WIZARD	implicit-local	topic
 1	features/wiz_features.moo	help_topics owner: ARCH_WIZARD	implicit-local	verb_help
-1	format/ansi.moo	"bg_color_256 bg_colour_256" owner: HACKER	implicit-local	color_code
-1	format/ansi.moo	"color_256 colour_256" owner: HACKER	implicit-local	color_code
-1	format/ansi.moo	"colorize colourize" owner: HACKER	implicit-local	color
-1	format/ansi.moo	"colorize colourize" owner: HACKER	implicit-local	color_str
-1	format/ansi.moo	"colorize colourize" owner: HACKER	implicit-local	prefix
-1	format/ansi.moo	"colorize colourize" owner: HACKER	implicit-local	text
-1	format/ansi.moo	bg_rgb owner: HACKER	implicit-local	b
-1	format/ansi.moo	bg_rgb owner: HACKER	implicit-local	g
-1	format/ansi.moo	bg_rgb owner: HACKER	implicit-local	r
-1	format/ansi.moo	rgb owner: HACKER	implicit-local	b
-1	format/ansi.moo	rgb owner: HACKER	implicit-local	g
-1	format/ansi.moo	rgb owner: HACKER	implicit-local	r
-1	format/ansi.moo	strip owner: HACKER	implicit-local	char
-1	format/ansi.moo	strip owner: HACKER	implicit-local	end
-1	format/ansi.moo	strip owner: HACKER	implicit-local	result
-1	format/ansi.moo	strip owner: HACKER	implicit-local	start
-1	format/ansi.moo	strip owner: HACKER	implicit-local	text
-1	format/ansi.moo	test_basic_sequences owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	format/ansi.moo	test_british_aliases owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	format/ansi.moo	test_extended_color_sequences owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	format/ansi.moo	test_wrapping_and_stripping owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	format/ansi.moo	wrap owner: HACKER	implicit-local	code_str
-1	format/ansi.moo	wrap owner: HACKER	implicit-local	codes
-1	format/ansi.moo	wrap owner: HACKER	implicit-local	prefix
-1	format/ansi.moo	wrap owner: HACKER	implicit-local	text
 1	format/format_block.moo	append_to_content owner: HACKER	implicit-local	target_flyweight
 1	format/format_block.moo	compose owner: HACKER	implicit-local	composed
 1	format/format_block.moo	compose owner: HACKER	implicit-local	content
@@ -2123,13 +2094,6 @@ count	file	verb	kind	detail
 1	format/format_link.moo	_compose_inline owner: HACKER	implicit-local	parts
 1	format/format_link.moo	_compose_inline owner: HACKER	implicit-local	render_for
 1	format/format_link.moo	_compose_inline owner: HACKER	implicit-local	result
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	after
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	before
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	description
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	direction
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	idx
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	matched
-1	format/format_link.moo	ambient_passage owner: HACKER	implicit-local	parts
 1	format/format_link.moo	cmd owner: HACKER	implicit-local	command
 1	format/format_link.moo	cmd owner: HACKER	implicit-local	label
 1	format/format_link.moo	compose owner: HACKER	implicit-local	content_type
@@ -2142,13 +2106,6 @@ count	file	verb	kind	detail
 1	format/format_link.moo	inline owner: HACKER	implicit-local	parts
 1	format/format_link.moo	inspect owner: HACKER	implicit-local	label
 1	format/format_link.moo	inspect owner: HACKER	implicit-local	target
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	after
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	before
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	description
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	direction
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	link
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	lowercase
-1	format/format_link.moo	linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	pos
 1	format/format_link.moo	to_djot owner: HACKER	implicit-local	oref
 1	format/format_link.moo	to_djot owner: HACKER	implicit-local	url
 1	format/format_link.moo	to_html owner: HACKER	implicit-local	oref
@@ -2201,17 +2158,6 @@ count	file	verb	kind	detail
 1	format/format_title.moo	compose owner: HACKER	missing-docstring	Describe the contract before executable statements.
 1	format/format_title.moo	mk owner: HACKER	implicit-local	content
 1	format/format_title.moo	mk owner: HACKER	implicit-local	level
-1	format/html.moo	render owner: HACKER	implicit-local	content_type
-1	format/html.moo	render owner: HACKER	implicit-local	tags
-1	format/html.moo	render owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	attributes
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	children
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	contents
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	e
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	entry_num
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	result
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	results
-1	format/html.moo	to_xml_tag owner: HACKER	implicit-local	tag
 1	help/help.moo	matches owner: ARCH_WIZARD	implicit-local	query
 1	help/help.moo	mk owner: ARCH_WIZARD	implicit-local	aliases
 1	help/help.moo	mk owner: ARCH_WIZARD	implicit-local	category

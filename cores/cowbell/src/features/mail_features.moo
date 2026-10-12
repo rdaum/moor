@@ -120,7 +120,7 @@ object MAIL_FEATURES [
     "Return help topics for mail commands.";
     {for_player, ?topic = ""} = args;
     "Main overview topic";
-    overview = $help:mk("mail", "Mail commands", "Send and receive letters from other players:\n\n`mail` - Check your mailbox\n`compose` - Create a new letter\n`send` - Send a letter to someone\n\nLetters can be written on, sealed, and delivered to mailboxes.", {"letters", "mailbox"}, 'mail, {});
+    overview = $help:mk("mail", "Mail commands", "Send and receive letters from other players:\n\n`mail` - Check your mailbox\n`compose` - Create a new letter\n`send` - Send a letter to someone\n\nLetters can be written on, sealed, and delivered to mailboxes.", {"letters", "mailbox"}, 'mail, {}, 'djot_blocks);
     "If asking for all topics, just return overview";
     topic == "" && return {overview};
     "Check if topic matches overview";

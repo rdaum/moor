@@ -281,7 +281,11 @@ describe("Narrative history merge regressions", () => {
         const lines = rendered.split("|").map(line => line.trim()).filter(Boolean);
         expect(lines).toEqual(["SAME LINE"]);
     });
-    it("rewrites content and annotations together and suppresses a duplicate delivery", async () => {
+    it("rewrites complete content envelopes together and preserves rejected rewrite targets", async () => {
+        const document = (text: string) => ({
+            version: 1,
+            blocks: [{ kind: "paragraph", children: [{ kind: "text", text }] }],
+        });
         installMatchMediaMock();
         const ref = createRef<NarrativeRef>();
         const { container } = render(
@@ -297,13 +301,45 @@ describe("Narrative history merge regressions", () => {
                 undefined,
                 undefined,
                 undefined,
-                { eventId: "original", actor: { oid: 2 }, annotations: { a1: { kind: "object", ref: "oid:47" } } },
+                {
+                    eventId: "original",
+                    actor: { oid: 2 },
+                    cowbellDocument: document("old"),
+                    annotations: { a1: { kind: "object", ref: "oid:47" } },
+                },
                 { id: "replace", owner: "oid:2", ttl: 30 },
             )
         );
         await act(async () => {
             await new Promise(resolve => setTimeout(resolve, 100));
         });
+        for (
+            const metadata of [
+                { actor: { oid: 3 }, cowbellDocument: document("wrong owner"), annotations: {} },
+                { actor: { oid: 2 }, annotations: {} },
+                { actor: { oid: 2 }, cowbellDocument: document("missing annotations") },
+            ]
+        ) {
+            act(() =>
+                ref.current!.addNarrativeContent(
+                    "rejected",
+                    "text/plain",
+                    false,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    metadata,
+                    undefined,
+                    "replace",
+                )
+            );
+            const unchanged = JSON.parse(container.querySelector("[data-messages]")!.getAttribute("data-messages")!);
+            expect(unchanged[0].content).toBe("[old]{annotation=a1}");
+            expect(unchanged[0].eventMetadata.cowbellDocument).toEqual(document("old"));
+            expect(unchanged[0].rewritable.owner).toBe("oid:2");
+        }
         act(() =>
             ref.current!.addNarrativeContent(
                 "[new]{annotation=a1}",
@@ -314,7 +350,12 @@ describe("Narrative history merge regressions", () => {
                 undefined,
                 undefined,
                 undefined,
-                { eventId: "replacement", actor: { oid: 2 }, annotations: { a1: { kind: "object", ref: "oid:65" } } },
+                {
+                    eventId: "replacement",
+                    actor: { oid: 2 },
+                    cowbellDocument: document("new"),
+                    annotations: { a1: { kind: "object", ref: "oid:65" } },
+                },
                 undefined,
                 "replace",
             )
@@ -323,6 +364,7 @@ describe("Narrative history merge regressions", () => {
         expect(messages).toHaveLength(1);
         expect(messages[0].content).toBe("[new]{annotation=a1}");
         expect(messages[0].eventMetadata.annotations.a1.ref).toBe("oid:65");
+        expect(messages[0].eventMetadata.cowbellDocument).toEqual(document("new"));
         act(() =>
             ref.current!.addNarrativeContent(
                 "duplicate",

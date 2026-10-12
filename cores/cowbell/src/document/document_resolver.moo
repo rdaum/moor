@@ -8,7 +8,24 @@ object DOCUMENT_RESOLVER [
   readable: true
 
   method resolve owner: ARCH_WIZARD
-    "Resolve block templates for a viewer under the caller's authority, then validate the document.";
+    "Resolve and validate canonical content for callers that need a document value.";
+    set_task_perms(caller_perms());
+    const {blocks, viewer, facts} = args;
+    const document = this:_resolve(blocks, viewer, facts);
+    $document:validate(document);
+    return document;
+  endmethod
+
+  method render_for owner: ARCH_WIZARD
+    "Resolve once, then finalize and encode once for the requested delivery representations.";
+    set_task_perms(caller_perms());
+    const {blocks, viewer, facts, requests} = args;
+    return $document:render_many(this:_resolve(blocks, viewer, facts), requests);
+  endmethod
+
+  method _resolve owner: ARCH_WIZARD
+    "Expand content under the actual caller principal; the public boundary validates the result.";
+    caller == this || raise(E_PERM);
     "An absent viewer is false. Facts are captured values; a supplied principal is never accepted.";
     set_task_perms(caller_perms());
     const {blocks, viewer, facts} = args;
@@ -18,9 +35,7 @@ object DOCUMENT_RESOLVER [
     const context = ['viewer -> viewer, 'principal -> caller_perms(), 'event -> facts];
     const {resolved, state} = $document_resolver:_sequence(
       blocks, 'block, context, "document.blocks", 1, ['expansions -> 0]);
-    const document = $document:mk(resolved);
-    $document:validate(document);
-    return document;
+    return $document:mk(resolved);
   endmethod
 
   method _sequence owner: ARCH_WIZARD

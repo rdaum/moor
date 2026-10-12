@@ -24,6 +24,8 @@ import { Symbol as FbSymbol } from "@moor/schema/generated/moor-common/symbol";
 import { Uuid } from "@moor/schema/generated/moor-common/uuid";
 import { NarrativeEventMessage } from "@moor/schema/generated/moor-rpc/narrative-event-message";
 import { Var } from "@moor/schema/generated/moor-var/var";
+import { VarInt } from "@moor/schema/generated/moor-var/var-int";
+import { VarList } from "@moor/schema/generated/moor-var/var-list";
 import { VarMap } from "@moor/schema/generated/moor-var/var-map";
 import { VarMapPair } from "@moor/schema/generated/moor-var/var-map-pair";
 import { VarStr } from "@moor/schema/generated/moor-var/var-str";
@@ -52,6 +54,33 @@ function notification() {
         });
         return Var.createVar(b, VarUnion.VarMap, VarMap.createVarMap(b, VarMap.createPairsVector(b, pairs)));
     };
+    const list = (values: number[]) =>
+        Var.createVar(b, VarUnion.VarList, VarList.createVarList(b, VarList.createElementsVector(b, values)));
+    const document = map([
+        ["version", Var.createVar(b, VarUnion.VarInt, VarInt.createVarInt(b, 1n))],
+        [
+            "blocks",
+            list([map([
+                ["kind", string("paragraph")],
+                [
+                    "children",
+                    list([
+                        map([["kind", string("text")], ["text", string("You picked up ")]]),
+                        map([["kind", string("reference")], [
+                            "descriptor",
+                            map([["kind", string("object")], ["ref", string("oid:47")]]),
+                        ], ["children", list([map([["kind", string("text")], ["text", string("Compass")]])])]]),
+                        map([["kind", string("text")], ["text", string(".")]]),
+                    ]),
+                ],
+            ])]),
+        ],
+    ]);
+    const documentKey = FbSymbol.createSymbol(b, b.createString("cowbell_document"));
+    EventMetadata.startEventMetadata(b);
+    EventMetadata.addKey(b, documentKey);
+    EventMetadata.addValue(b, document);
+    const documentMetadata = EventMetadata.endEventMetadata(b);
     const table = map([["a1", map([["kind", string("object")], ["ref", string("oid:47")]])]]);
     const key = FbSymbol.createSymbol(b, b.createString("annotations"));
     EventMetadata.startEventMetadata(b);
@@ -63,7 +92,11 @@ function notification() {
     EventMetadata.startEventMetadata(b);
     EventMetadata.addKey(b, titleKey);
     EventMetadata.addValue(b, title);
-    const metadata = NotifyEvent.createMetadataVector(b, [annotations, EventMetadata.endEventMetadata(b)]);
+    const metadata = NotifyEvent.createMetadataVector(b, [
+        annotations,
+        EventMetadata.endEventMetadata(b),
+        documentMetadata,
+    ]);
     const value = string("You picked up [Compass]{annotation=a1}.");
     const contentType = FbSymbol.createSymbol(b, b.createString("text_djot"));
     NotifyEvent.startNotifyEvent(b);
@@ -110,5 +143,7 @@ it("retains nested annotation metadata through live FlatBuffers and encrypted hi
     if (history?.kind !== "notify") throw new Error("history missing");
     expect(history.eventMeta?.annotations).toEqual(live.eventMeta?.annotations);
     expect(history.content).toEqual(live.content);
+    expect(live.eventMeta?.cowbellDocument).toMatchObject({ version: 1, blocks: [{ kind: "paragraph" }] });
+    expect(history.eventMeta?.cowbellDocument).toEqual(live.eventMeta?.cowbellDocument);
     expect(history.eventMeta?.collapseTitle).toBe("Help");
 });

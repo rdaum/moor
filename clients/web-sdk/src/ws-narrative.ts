@@ -40,6 +40,8 @@ export interface WsEventMetadata {
     deliveryId?: string;
     delivery_id?: string;
     annotations?: AnnotationTable;
+    /** Opaque core-owned content; rendered bodies remain the display path. */
+    cowbellDocument?: unknown;
     collapseTitle?: string;
     verb?: string;
     actor?: unknown;
@@ -196,6 +198,8 @@ export function parseNarrativeValue(
                 } else if (keyValue === "delivery_id" && typeof decoded === "string") {
                     eventMeta.deliveryId = decoded;
                     eventMeta.delivery_id = decoded;
+                } else if (keyValue === "cowbell_document") {
+                    eventMeta.cowbellDocument = decoded;
                 } else if (keyValue === "annotations") {
                     eventMeta.annotations = decodeAnnotations(decoded);
                 } else if (keyValue === "presentation_hint" && typeof decoded === "string") {

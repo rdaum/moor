@@ -292,6 +292,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         if (rewriteTarget) {
             const targetMessageId = rewritableIndexRef.current.get(rewriteTarget);
             if (targetMessageId) {
+                let replaced = false;
                 transcript.update(targetMessageId, msg => {
                     // Validate owner matches (security check)
                     // Normalize both to CURIE format for comparison
@@ -319,19 +320,34 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
                         console.warn("[Narrative] Rewrite rejected: TTL expired");
                         return msg;
                     }
-                    // Replace the message content, clear rewritable status
+                    const hasDocument = msg.eventMetadata?.cowbellDocument !== undefined
+                        || eventMetadata?.cowbellDocument !== undefined;
+                    if (
+                        hasDocument && (!contentType || !eventMetadata?.annotations
+                            || !eventMetadata.cowbellDocument || typeof eventMetadata.cowbellDocument !== "object"
+                            || Array.isArray(eventMetadata.cowbellDocument))
+                    ) {
+                        console.warn("[Narrative] Rewrite rejected: incomplete content envelope");
+                        return msg;
+                    }
+                    replaced = true;
+                    // Replace all content representations while preserving the message identity.
                     return {
                         ...msg,
                         content,
                         eventMetadata,
                         contentType: contentType || msg.contentType,
-                        presentationHint: presentationHint, // Clear processing hint
+                        noNewline,
+                        ttsText,
+                        thumbnail,
+                        linkPreview,
+                        presentationHint,
                         rewritable: undefined,
                     };
                 });
-                // Remove from index (one-shot rewrite)
-                rewritableIndexRef.current.delete(rewriteTarget);
-                return; // Successfully rewrote, don't add new message
+                // Rejected attempts must not consume the owner's remaining rewrite opportunity.
+                if (replaced) rewritableIndexRef.current.delete(rewriteTarget);
+                return;
             }
             // Target not found - log and fall through to add as new message
             console.warn("[Narrative] Rewrite target not found, adding as new message:", rewriteTarget);

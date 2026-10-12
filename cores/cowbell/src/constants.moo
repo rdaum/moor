@@ -42,14 +42,12 @@ define ADMIN_FEATURES = #87;
 define MAIL_FEATURES = #97;
 
 // format
-define ANSI = #26;
 define FORMAT = #29;
 define FORMAT_BLOCK = #30;
 define FORMAT_TITLE = #31;
 define FORMAT_LIST = #32;
 define FORMAT_TABLE = #33;
 define FORMAT_CODE = #34;
-define HTML = #35;
 define FORMAT_DEFLIST = #72;
 define FORMAT_LINK = #82;
 define FORMAT_PARAGRAPH = #114;

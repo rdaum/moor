@@ -417,11 +417,11 @@ object ROOM [
   method help_topics owner: ARCH_WIZARD
     "Room-local help topics for passage/door interaction.";
     {for_player, ?topic = ""} = args;
-    doors_help = $help:mk("doors", "Door commands", "Door commands operate only on door-like passages.\n\nA passage is treated as a door when either:\n- `is_door` is true, or\n- it has an `unlock_rule`\n\nBuilders can toggle door behavior with:\n- `@set-passage <dir> is_door true|false`", {"door", "doors", "open", "close", "lock", "unlock"}, 'basics, {"movement", "exits"});
-    open_help = $help:mk("open", "Open a door", "Open a door-like passage from this room.\n\nUsage:\n- `open <direction>`\n- `open door`\n\nIf the door is locked, open may auto-unlock when you have a matching key.", {"open door"}, 'basics, {"close", "lock", "unlock", "doors"});
-    close_help = $help:mk("close", "Close a door", "Close a door-like passage from this room.\n\nUsage:\n- `close <direction>`\n- `close door`", {"close door"}, 'basics, {"open", "lock", "unlock", "doors"});
-    lock_help = $help:mk("lock", "Lock a door", "Lock a lockable door-like passage.\n\nUsage:\n- `lock <direction>`\n- `lock <direction> with <key>`\n- `lock door`\n\nRequires a matching key and an `unlock_rule` on the passage.", {"lock door"}, 'basics, {"unlock", "open", "doors"});
-    unlock_help = $help:mk("unlock", "Unlock a door", "Unlock a lockable door-like passage.\n\nUsage:\n- `unlock <direction>`\n- `unlock <direction> with <key>`\n- `unlock door`\n\nRequires a matching key and an `unlock_rule` on the passage.", {"unlock door"}, 'basics, {"lock", "open", "doors"});
+    doors_help = $help:mk("doors", "Door commands", "Door commands operate only on door-like passages.\n\nA passage is treated as a door when either:\n\n- `is_door` is true, or\n- it has an `unlock_rule`\n\nBuilders can toggle door behavior with:\n\n- `@set-passage <dir> is_door true|false`", {"door", "doors", "open", "close", "lock", "unlock"}, 'basics, {"movement", "exits"}, 'djot_blocks);
+    open_help = $help:mk("open", "Open a door", "Open a door-like passage from this room.\n\nUsage:\n\n- `open <direction>`\n- `open door`\n\nIf the door is locked, open may auto-unlock when you have a matching key.", {"open door"}, 'basics, {"close", "lock", "unlock", "doors"}, 'djot_blocks);
+    close_help = $help:mk("close", "Close a door", "Close a door-like passage from this room.\n\nUsage:\n\n- `close <direction>`\n- `close door`", {"close door"}, 'basics, {"open", "lock", "unlock", "doors"}, 'djot_blocks);
+    lock_help = $help:mk("lock", "Lock a door", "Lock a lockable door-like passage.\n\nUsage:\n\n- `lock <direction>`\n- `lock <direction> with <key>`\n- `lock door`\n\nRequires a matching key and an `unlock_rule` on the passage.", {"lock door"}, 'basics, {"unlock", "open", "doors"}, 'djot_blocks);
+    unlock_help = $help:mk("unlock", "Unlock a door", "Unlock a lockable door-like passage.\n\nUsage:\n\n- `unlock <direction>`\n- `unlock <direction> with <key>`\n- `unlock door`\n\nRequires a matching key and an `unlock_rule` on the passage.", {"unlock door"}, 'basics, {"lock", "open", "doors"}, 'djot_blocks);
     if (topic == "")
       return {doors_help, open_help, close_help, lock_help, unlock_help};
     endif

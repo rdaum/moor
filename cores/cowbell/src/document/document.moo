@@ -47,4 +47,9 @@ object DOCUMENT [
     const {document, content_type, ?options = []} = args;
     return $document_renderer:render(document, content_type, options);
   endmethod
+  method render_many owner: HACKER
+    "Finalize and encode once, rendering each distinct format and option set once.";
+    "Requests are records with format and optional options. Results retain request order.";
+    return $document_renderer:render_many(@args);
+  endmethod
 endobject

@@ -18,6 +18,12 @@ Cowbell entries.
 
 ### Changed
 
+- Notifications and narrative history carry the resolved document in `cowbell_document` metadata.
+  Connections share the captured content and reuse renderings for the same format.
+- Login output uses the document pipeline before authentication. Welcome banners select their
+  authored syntax with `welcome_message_kind`; inserted server names remain literal text.
+- Remove unused `$ansi`, `$html`, and event content-type preference helpers.
+
 - Room narrative and panels share one captured view. Meadow preserves formatted descriptions and
   captured references in its room panel. Room snapshots now carry a rendered body and annotations.
 
@@ -34,6 +40,10 @@ Cowbell entries.
   structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
 ### Fixed
+
+- Meadow rewrites replace the body, annotations, and attached document together. Rejected rewrites
+  leave the original message available for an authorized replacement.
+- Contextual help for doors, social actions, mail, and navigation retains its authored formatting.
 
 - Wearing LLM devices no longer fails with a numeric type error when displaying token usage.
   The diagnostic status method uses the same corrected calculation.
