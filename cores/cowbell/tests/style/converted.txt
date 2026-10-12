@@ -221,7 +221,7 @@ utils/obj_utils.moo:command_with_source
 format/format_paragraph.moo:inline
 help/help_utils.moo:command_usage
 
-types/str_proto.moo:parse_verbref
+types/str_proto.moo
 
 features/prog_features.moo:@ps
 features/prog_features.moo:_schedule_rows
@@ -235,16 +235,3 @@ change_manager.moo
 
 agentic/agentic_event_queue.moo
 events/msg_bag.moo
-
-types/str_proto.moo:is_numeric
-types/str_proto.moo:join_list
-types/str_proto.moo:replace_all
-types/str_proto.moo:space
-types/str_proto.moo:split
-types/str_proto.moo:test_case_whitespace_and_padding
-types/str_proto.moo:test_list_word_and_paragraph_helpers
-types/str_proto.moo:test_padding_boundaries
-types/str_proto.moo:test_split_boundaries
-types/str_proto.moo:test_split_search_and_transform_helpers
-types/str_proto.moo:to_list
-types/str_proto.moo:words_list
