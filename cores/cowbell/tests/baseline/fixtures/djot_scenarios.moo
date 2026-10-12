@@ -100,23 +100,46 @@ object DJOT_SCENARIOS
     return true;
   endmethod
 
-  method test_shipped_help_corpus owner: ARCH_WIZARD
-    "Every shipped article parses and resolves its prose and command references for the viewer.";
-    let count = 0;
-    for provider in (this.providers)
-      for topic in (provider:help_topics(player))
-        $test_utils:assert_eq(topic.content_kind, 'djot_blocks, topic.name + " explicitly selects Djot");
-        const blocks = $format.djot:blocks(topic.content);
-        const content = $help_utils:annotate_prose(blocks, player);
-        const document = $event:mk_info(player, content):resolve(player);
-        $test_utils:assert_true(length($document:render(document, 'text_html)['body]), topic.name);
-        count = count + 1;
-        "Each article is an independent read-only check with its own runtime task quota.";
-        suspend(0);
-      endfor
+  method _check_help_provider owner: ARCH_WIZARD
+    "Parse and resolve each article; separate provider tests keep within the runner timeout.";
+    const {provider, expected_count} = args;
+    const topics = provider:help_topics(player);
+    $test_utils:assert_eq(length(topics), expected_count, "All articles in the provider are covered");
+    for topic in (topics)
+      $test_utils:assert_eq(topic.content_kind, 'djot_blocks, topic.name + " explicitly selects Djot");
+      const blocks = $format.djot:blocks(topic.content);
+      const content = $help_utils:annotate_prose(blocks, player);
+      const document = $event:mk_info(player, content):resolve(player);
+      $test_utils:assert_true(length($document:render(document, 'text_html)['body]), topic.name);
+      "Each article is an independent read-only check with its own runtime task quota.";
+      suspend(0);
     endfor
-    $test_utils:assert_eq(count, 69, "the complete shipped help corpus is covered");
     return true;
+  endmethod
+
+  method test_shipped_general_help owner: ARCH_WIZARD
+    "Check every general help article.";
+    return this:_check_help_provider(this.providers[1], 32);
+  endmethod
+
+  method test_shipped_programmer_help owner: ARCH_WIZARD
+    "Check every programmer help article.";
+    return this:_check_help_provider(this.providers[2], 8);
+  endmethod
+
+  method test_shipped_builder_help owner: ARCH_WIZARD
+    "Check every builder help article.";
+    return this:_check_help_provider(this.providers[3], 6);
+  endmethod
+
+  method test_shipped_admin_help owner: ARCH_WIZARD
+    "Check every administrator help article.";
+    return this:_check_help_provider(this.providers[4], 10);
+  endmethod
+
+  method test_shipped_wizard_help owner: ARCH_WIZARD
+    "Check every wizard help article.";
+    return this:_check_help_provider(this.providers[5], 13);
   endmethod
 
   method test_authored_producers_and_edit_validation owner: ARCH_WIZARD

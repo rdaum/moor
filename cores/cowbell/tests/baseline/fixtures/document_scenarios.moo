@@ -298,19 +298,26 @@ object DOCUMENT_SCENARIOS
   endmethod
 
   method test_reference_budget owner: ARCH_WIZARD
-    "The 513th reference becomes its label before encoding and rendering any format.";
+    "Start one reference below the limit to check the boundary without building 513 references.";
     const reference = this:_reference("x");
-    const document = $document:mk({this:_paragraph({reference for i in [1..513]})});
-    this:_invalid(document, "more than 512 references", E_QUOTA);
-    const prepared = $document:prepare(document);
-    $test_utils:assert_eq(length(prepared['diagnostics]), 1, "One reference exceeds the budget");
-    const children = prepared['encoded]["blocks"][1]["children"];
-    $test_utils:assert_eq(children[512]["kind"], "reference", "Last active reference");
-    $test_utils:assert_eq(children[513], ["kind" -> "text", "text" -> "x"], "Excess label is inert metadata");
-    const html = $document:render(prepared['document], 'text_html);
-    $test_utils:assert_eq(length(html['annotations]), 512, "HTML follows the finalized budget");
-    $test_utils:assert_eq(html['annotations]["a512"]["ref"], "oid:987654321", "Stable final anchor");
-    $test_utils:assert_eq(length($document:render(prepared['document], 'text_plain)['body]), 513,
+    const document = $document:mk({this:_paragraph({reference, reference})});
+    const state = ['nodes -> 0, 'references -> 511, 'bytes -> 0, 'diagnostics -> {}];
+    $test_utils:assert_raises(E_QUOTA, $document_schema, "_walk",
+      {document, 'document, "document", 0, false, state, false, false},
+      "Strict validation rejects the 513th reference");
+    const {encoded, finished, splice} = $document_schema:_walk(document, 'document,
+      "document", 0, false, state, false, true);
+    $test_utils:assert_eq(finished['references], 512, "Reference count stops at the budget");
+    $test_utils:assert_eq(finished['diagnostics],
+      {"document.blocks[0].children[1]: reference budget exceeded"}, "Only the excess reference is inert");
+    const children = encoded["blocks"][1]["children"];
+    $test_utils:assert_eq(children[1]["kind"], "reference", "Last active reference");
+    $test_utils:assert_eq(children[2], ["kind" -> "text", "text" -> "x"], "Excess label is inert metadata");
+    const finalized = $document:decode(encoded);
+    const html = $document:render(finalized, 'text_html);
+    $test_utils:assert_eq(length(html['annotations]), 1, "Only the retained reference is interactive");
+    $test_utils:assert_eq(html['annotations]["a1"]["ref"], "oid:987654321", "Stable reference identity");
+    $test_utils:assert_eq($document:render(finalized, 'text_plain)['body], "xx",
       "Every label remains readable");
     return true;
   endmethod
@@ -405,16 +412,25 @@ object DOCUMENT_SCENARIOS
     return true;
   endmethod
   method test_record_budget_across_branches owner: ARCH_WIZARD
-    "The node budget counts table records across separate arrays, including empty cells.";
-    const columns = {['align -> 'start] for column_index in [1..4095]};
-    const cells = {['blocks -> {}] for cell_index in [1..4095]};
+    "Start four records below the limit to check counting across table branches and empty cells.";
+    const columns = {['align -> 'start]};
+    const cells = {['blocks -> {}]};
     const table = $document_node:mk('table, {['cells -> cells]}, ['columns -> columns, 'caption -> {}]);
-    const encoded = $document:encode($document:mk({table}));
-    $test_utils:assert_eq(length(encoded["blocks"][1]["rows"][1]["cells"]), 4095,
-      "Exactly 8192 records validate");
-    this:_invalid($document:mk({table, $document_node:mk('thematic_break)}),
-      "document.blocks[1]: document exceeds 8192 records", E_QUOTA);
-    return true;
+    const state = ['nodes -> 8188, 'references -> 0, 'bytes -> 0, 'diagnostics -> {}];
+    const {encoded, finished, splice} = $document_schema:_walk($document:mk({table}),
+      'document, "document", 0, false, state, false, false);
+    $test_utils:assert_eq(finished['nodes], 8192, "Table, column, row, and empty cell all count");
+    $test_utils:assert_eq(encoded["blocks"][1]["rows"][1]["cells"],
+      {["blocks" -> {}]}, "The cell at the limit survives encoding");
+    const overflow = $document:mk({table, $document_node:mk('thematic_break)});
+    try
+      $document_schema:_walk(overflow, 'document, "document", 0, false, state, false, false);
+    except error (E_QUOTA)
+      $test_utils:assert_eq(error[2], "document.blocks[1]: document exceeds 8192 records",
+        "The next sibling exceeds the shared record budget");
+      return true;
+    endtry
+    raise(E_ASSERT, "The 8193rd record must exceed the budget");
   endmethod
 
   method test_terminal_code_controls owner: ARCH_WIZARD
