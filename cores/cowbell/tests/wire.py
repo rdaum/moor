@@ -83,6 +83,12 @@ def run(server, core_dir):
         )
         assert replacements == 1, "Expected exactly one ArchWizard password fixture"
         arch.write_text(source)
+        # Request checkpoints explicitly so startup snapshots cannot satisfy the assertion.
+        sysobj = core / "sysobj.moo"
+        source, replacements = re.subn(
+            r"(?m)^  property dump_interval\b[^\n]*;\n", "", sysobj.read_text())
+        assert replacements == 1, "Expected exactly one periodic checkpoint setting"
+        sysobj.write_text(source)
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
@@ -223,6 +229,10 @@ services:
                 '!schedule_valid($wire_saved_schedule) || raise(E_ASSERT); '
                 'notify(connection(), "STOP_COMMITTED"); return true;', "STOP_COMMITTED")
             print("PASS native cancellation committed", flush=True)
+            resumed.eval_marker(
+                'dump_database(1) || raise(E_ASSERT, "Checkpoint export failed"); '
+                'notify(connection(), "CHECKPOINT_COMPLETE"); return true;',
+                "CHECKPOINT_COMPLETE", timeout=30)
             stop()
             exported = [path for path in (root / "checkpoint").rglob("*.moo") if path.is_file()]
             assert exported, "Checkpoint export is empty"
