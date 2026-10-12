@@ -228,13 +228,6 @@ object LIST_PROTO [
     return groups;
   endmethod
 
-  method compose owner: HACKER
-    "Compose a list of fragments, joining text and preserving HTML structure.";
-    const {lst, render_for, content_type, ?event = false} = args;
-    const {parts, annotations} = $format:compose_parts(lst, render_for, content_type, event);
-    return $format:result(content_type == 'text_html ? parts | parts:join(""), annotations);
-  endmethod
-
   method test_core_list_helpers owner: HACKER
     "Cover append, assoc, assoc_prefix, check_type, join, and english_list.";
     $test_utils:assert_eq(this:append({"a", "b"}, {"c"}, {}, {"d", "e"}),
@@ -311,8 +304,8 @@ object LIST_PROTO [
     return true;
   endmethod
 
-  method test_set_group_and_compose_helpers owner: HACKER
-    "Cover unique, group_by, compress, and compose.";
+  method test_set_and_group_helpers owner: HACKER
+    "Cover unique, group_by, and compress.";
     $test_utils:assert_eq({1, 2, 2, 3, 1, 4}:unique(), {1, 2, 3, 4},
       "unique preserves first-seen order");
     $test_utils:assert_eq({}:unique(), {}, "unique preserves empty list");
@@ -330,9 +323,6 @@ object LIST_PROTO [
     $test_utils:assert_eq(result, [1 -> {"a", "c"}, 2 -> {"bb", "dd"}, 3 -> {"eee"}],
       "group_by preserves item order within groups");
     $test_utils:assert_eq({}:group_by({x} => x), [], "group_by empty list");
-    $test_utils:assert_eq({"a", "b"}:compose(player, 'text), "ab", "compose joins text results");
-    $test_utils:assert_eq({"a", "b"}:compose(player, 'text_html), {"a", "b"},
-      "compose preserves HTML result list");
     return true;
   endmethod
 

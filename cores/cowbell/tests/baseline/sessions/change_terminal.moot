@@ -25,9 +25,9 @@ true
 true
 ; $change_manager:command({"skip-group", "feature"}); $change_manager:command({"select-group", "feature"}); $change_manager:command({"remove-group", "feature"}); try $change_manager:command({"later", "1"}); except e (E_INVARG) return e[3]["code"]; endtry return false;
 "row_not_displayed"
-; $change_manager:command({"diff"}); const status = $change_manager:status(#0.terminal_probe); const row = $change_manager:review(status["review_id"], status["generation"])["rows"][1]; $change_manager:resolve(status["review_id"], status["generation"], row["id"], "edited", "return 42;"); set_verb_code(#9500, "test", {"return 3;"}); $change_manager:command({"status"}); $change_manager:command({"refresh"}); const text = $format.block:mk(@$change_manager:command({"recovery"})):compose(player, 'text_plain, false); return index(text, "#9500:test") != 0 && index(text, "contents or permissions changed") != 0;
+; $change_manager:command({"diff"}); const status = $change_manager:status(#0.terminal_probe); const row = $change_manager:review(status["review_id"], status["generation"])["rows"][1]; $change_manager:resolve(status["review_id"], status["generation"], row["id"], "edited", "return 42;"); set_verb_code(#9500, "test", {"return 3;"}); $change_manager:command({"status"}); $change_manager:command({"refresh"}); const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"recovery"}))):resolve(player), 'text_plain)['body]; return index(text, "#9500:test") != 0 && index(text, "contents or permissions changed") != 0;
 true
-; const text = $format.block:mk(@$change_manager:command({"recovery-source", "1"})):compose(player, 'text_plain, false); return index(text, "return 42;") != 0;
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"recovery-source", "1"}))):resolve(player), 'text_plain)['body]; return index(text, "return 42;") != 0;
 true
 
 ; $change_manager:command({"finish"}); return {$change_manager:status(#0.terminal_probe)["status"], #9500:test(), length($change_manager:command({"history", "terminal"})) > 0};

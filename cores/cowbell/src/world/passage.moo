@@ -320,8 +320,6 @@ object PASSAGE [
     "Get passage metadata";
     const from_label = this:label_for(from_room);
     const to_label = this:label_for(to_room);
-    "Create movement context for message rendering";
-    const move_context = this:mk_movement_context(traveler, from_room, to_room, from_label, to_label);
     "Notify room contents before departure (e.g., stand up from furniture)";
     `from_room:notify_pre_exit(traveler) ! E_VERBNF => 0';
     "Actually move the traveler before any expensive presentation work.";
@@ -344,21 +342,8 @@ object PASSAGE [
       const from_side = from_room == this:_side_lookup('a, 'room) ? 'a | 'b;
       const leave_msg = this:_side_lookup(from_side, 'leave_msg);
       if (typeof(leave_msg) == TYPE_LIST && length(leave_msg) > 0)
-        let departure_text = "";
-        for component in (leave_msg)
-          suspend_if_needed();
-          if (typeof(component) == TYPE_FLYWEIGHT)
-            try
-              const rendered = component:render_as(traveler, 'text_plain, move_context);
-              departure_text = departure_text + rendered;
-            except (ANY)
-              departure_text = departure_text + tostr(component);
-            endtry
-          else
-            departure_text = departure_text + tostr(component);
-          endif
-        endfor
-        departure = $event:mk(traveler, #-1, from_room, #-1, #-1, {departure_text}, {});
+        departure = this:movement_event(traveler, from_room, to_room,
+          from_label, to_label, leave_msg, false);
       else
         let from_description = this:description_for(from_room);
         const departure_phrase = this:departure_phrase_for(from_room);
@@ -378,21 +363,8 @@ object PASSAGE [
       const to_side = to_room == this:_side_lookup('a, 'room) ? 'a | 'b;
       const arrive_msg = this:_side_lookup(to_side, 'arrive_msg);
       if (typeof(arrive_msg) == TYPE_LIST && length(arrive_msg) > 0)
-        let arrival_text = "";
-        for component in (arrive_msg)
-          suspend_if_needed();
-          if (typeof(component) == TYPE_FLYWEIGHT)
-            try
-              const rendered = component:render_as(traveler, 'text_plain, move_context);
-              arrival_text = arrival_text + rendered;
-            except (ANY)
-              arrival_text = arrival_text + tostr(component);
-            endtry
-          else
-            arrival_text = arrival_text + tostr(component);
-          endif
-        endfor
-        arrival = $event:mk(traveler, #-1, to_room, #-1, #-1, {arrival_text}, {});
+        arrival = this:movement_event(traveler, from_room, to_room,
+          from_label, to_label, arrive_msg, true);
       else
         let to_description = this:description_for(to_room);
         const arrival_phrase = this:arrival_phrase_for(to_room);
@@ -562,40 +534,16 @@ object PASSAGE [
     return this:_mk_from_props(props);
   endmethod
 
-  method mk_movement_context owner: HACKER
-    "Create a movement context flyweight with get_binding() support for message rendering.";
-    {actor, from_room, to_room, from_direction, to_direction} = args;
-    typeof(actor) == TYPE_OBJ || raise(E_TYPE);
-    typeof(from_room) == TYPE_OBJ || raise(E_TYPE);
-    typeof(to_room) == TYPE_OBJ || raise(E_TYPE);
-    return <$passage, .actor = actor, .from_room = from_room, .to_room = to_room, .passage = this, .from_direction = from_direction, .to_direction = to_direction>;
-  endmethod
-
-  method get_binding owner: HACKER
-    "Implement the binding protocol for message substitution.";
-    {name} = args;
-    if (name == 'actor)
-      return this.actor;
-    endif
-    if (name == 'direction)
-      return this.from_direction;
-    endif
-    if (name == 'from_direction)
-      return this.from_direction;
-    endif
-    if (name == 'to_direction)
-      return this.to_direction;
-    endif
-    if (name == 'from_room)
-      return this.from_room;
-    endif
-    if (name == 'to_room)
-      return this.to_room;
-    endif
-    if (name == 'passage)
-      return this.passage;
-    endif
-    return false;
+  method movement_event owner: ARCH_WIZARD
+    "Capture a passage message template and its movement facts without resolving it for the traveler.";
+    set_task_perms(caller_perms());
+    const {actor, from_room, to_room, from_direction, to_direction, parts, ?arriving = false} = args;
+    const location = arriving ? to_room | from_room;
+    const direction = arriving ? to_direction | from_direction;
+    return $event:mk_move(actor, @parts):with_location(location):with_this(location)
+      :with_object_binding('from_room, from_room):with_object_binding('to_room, to_room)
+      :with_text_binding('direction, direction):with_text_binding('from_direction, from_direction)
+      :with_text_binding('to_direction, to_direction):with_text_binding('passage, this:name());
   endmethod
 
   method prose_style_for owner: HACKER

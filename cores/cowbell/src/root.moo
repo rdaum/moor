@@ -778,8 +778,8 @@ object ROOT [
     for topic in (topics)
       if (typeof(topic) == TYPE_FLYWEIGHT && topic.name == topic_name)
         const event = $event:mk_info(actor, $format.block:mk(@topic:render_prose()));
-        const rendered = event:transform_for(actor, 'text_djot);
-        return ["title" -> topic.name, "content" -> rendered["content"], "annotations" -> rendered["annotations"]];
+        const rendered = $document:render(event:resolve(actor), 'text_djot);
+        return ["title" -> topic.name, "content" -> rendered['body], "annotations" -> rendered['annotations]];
       endif
     endfor
     raise(E_INVARG, "Help topic is unavailable");

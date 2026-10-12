@@ -21,42 +21,116 @@ object FORMAT [
 
   override description (owner: HACKER, flags: "rc") = "Container for formatting objects like block, list, table, and title.";
 
-  method result owner: HACKER
-    "An unannotated fragment needs no envelope. Annotated fragments carry their own table.";
-    const {content, annotations} = args;
-    return length(annotations) ? ["content" -> content, "annotations" -> annotations] | content;
+  method literal_inline owner: HACKER
+    "Convert literal text to inline nodes. Newlines become hard breaks; punctuation stays literal.";
+    const {text} = args;
+    typeof(text) == TYPE_STR || raise(E_TYPE, "Literal text must be a string");
+    length(binary_from_str(text)) <= 262144 || raise(E_QUOTA, "Literal text exceeds 256 KiB");
+    const normalized = strsub(strsub(text, "\r\n", "\n", 1), "\r", "\n", 1);
+    const lines = $str_proto:split(normalized, "\n");
+    let nodes = {};
+    for i in [1..length(lines)]
+      i > 1 && (nodes = {@nodes, $document_node:mk('hard_break)});
+      length(lines[i]) && (nodes = {@nodes, $document_node:mk('text, {}, ['text -> lines[i]])});
+    endfor
+    return nodes;
   endmethod
 
-  method unpack owner: HACKER
-    "Return a fragment body and its occurrence table.";
-    const {fragment} = args;
-    return typeof(fragment) == TYPE_MAP ? {fragment["content"], fragment["annotations"]} | {fragment, []};
-  endmethod
-
-  method merge_annotations owner: HACKER
-    "Bound retained metadata. Unlisted anchors remain readable but inert.";
-    let {table, additions} = args;
-    for id in (mapkeys(additions))
-      const descriptor = additions[id];
-      if (length(table) >= 512)
-        break;
+  method literal_blocks owner: HACKER
+    "Convert literal prose to paragraphs separated by blank lines, retaining other line breaks.";
+    const {text} = args;
+    typeof(text) == TYPE_STR || raise(E_TYPE, "Literal prose must be a string");
+    length(binary_from_str(text)) <= 262144 || raise(E_QUOTA, "Literal prose exceeds 256 KiB");
+    const normalized = strsub(strsub(text, "\r\n", "\n", 1), "\r", "\n", 1);
+    let blocks = {};
+    let lines = {};
+    for line in ({@$str_proto:split(normalized, "\n"), ""})
+      if (length(line:trim()))
+        lines = {@lines, line};
+      elseif (length(lines))
+        blocks = {@blocks, $document_node:mk('paragraph,
+          $format:literal_inline($list_proto:join(lines, "\n")))};
+        lines = {};
       endif
-      table[id] = descriptor;
     endfor
-    return table;
+    return blocks;
   endmethod
 
-  method compose_parts owner: HACKER
-    "Compose children independently and collect their body/table pairs without shared state.";
-    const {parts, render_for, content_type, ?event = false} = args;
-    let bodies = {};
-    let annotations = [];
+  method inlines owner: HACKER
+    "Normalize authored inline parts. Strings are literal, and lists are explicit inline sequences.";
+    const {parts, ?depth = 0} = args;
+    typeof(parts) == TYPE_LIST || raise(E_TYPE, "Inline parts must be a list");
+    depth <= 32 || raise(E_QUOTA, "Inline authoring nesting exceeds 32 levels");
+    let nodes = {};
     for part in (parts)
-      const composed = `part:compose(render_for, content_type, event) ! E_VERBNF => tostr(part)';
-      const {body, table} = this:unpack(composed);
-      bodies = {@bodies, body};
-      annotations = this:merge_annotations(annotations, table);
+      if (typeof(part) == TYPE_STR)
+        nodes = {@nodes, @$format:literal_inline(part)};
+      elseif (typeof(part) == TYPE_LIST)
+        nodes = {@nodes, @$format:inlines(part, depth + 1)};
+      else
+        $format:role(part) == 'inline || raise(E_INVARG, "Expected inline content");
+        nodes = {@nodes, part};
+      endif
+      length(nodes) <= 8192 || raise(E_QUOTA, "Too many inline authoring nodes");
     endfor
-    return {bodies, annotations};
+    return nodes;
   endmethod
+
+  method blocks owner: HACKER
+    "Group adjacent inline parts into paragraphs and retain explicit block boundaries.";
+    const {parts} = args;
+    typeof(parts) == TYPE_LIST || raise(E_TYPE, "Block parts must be a list");
+    let blocks = {};
+    let inlines = {};
+    for part in (parts)
+      if (typeof(part) == TYPE_FLYWEIGHT && $format:role(part) == 'block)
+        if (length(inlines))
+          blocks = {@blocks, $document_template:mk('paragraph, inlines)};
+          inlines = {};
+        endif
+        blocks = {@blocks, part};
+      else
+        inlines = {@inlines, @$format:inlines({part})};
+      endif
+      length(blocks) + length(inlines) <= 8192 || raise(E_QUOTA, "Too many authoring nodes");
+    endfor
+    if (length(inlines))
+      blocks = {@blocks, $document_template:mk('paragraph, inlines)};
+    endif
+    return blocks;
+  endmethod
+
+  method role owner: HACKER
+    "Classify only known node and template delegates, without calling content methods.";
+    const {value} = args;
+    typeof(value) == TYPE_FLYWEIGHT || raise(E_TYPE, "Expected content flyweight");
+    value.delegate == $sub && return 'inline;
+    value.delegate in {$document_node, $document_template}
+      || raise(E_INVARG, "Custom content needs an explicit producer constructor");
+    const fields = flyslots(value);
+    maphaskey(fields, 'kind) || raise(E_INVARG, "Content kind is missing");
+    const kind = fields['kind];
+    if (value.delegate == $document_template)
+      kind in {'inline, 'capitalize, 'producer_inline} && return 'inline;
+      kind in {'blocks, 'producer_blocks} && return 'block;
+    endif
+    const role = $document_schema:_shape(kind, "template")['group];
+    role in {'inline, 'block} || raise(E_INVARG, "Expected an inline or block node");
+    return role;
+  endmethod
+
+  method producer_inline owner: HACKER
+    "Defer an explicit resolve_inline(context) hook until document resolution.";
+    const {producer} = args;
+    typeof(producer) in {TYPE_OBJ, TYPE_FLYWEIGHT} || raise(E_TYPE);
+    return $document_template:mk('producer_inline, {}, ['producer -> producer]);
+  endmethod
+
+  method producer_blocks owner: HACKER
+    "Defer an explicit resolve_blocks(context) hook until document resolution.";
+    const {producer} = args;
+    typeof(producer) in {TYPE_OBJ, TYPE_FLYWEIGHT} || raise(E_TYPE);
+    return $document_template:mk('producer_blocks, {}, ['producer -> producer]);
+  endmethod
+
 endobject

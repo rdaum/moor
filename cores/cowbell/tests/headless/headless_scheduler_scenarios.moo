@@ -255,7 +255,7 @@ object HEADLESS_SCHEDULER_SCENARIOS
     actor.recorded_events = {};
     const command = parse_command(name + (text ? " " + text | ""), {});
     dispatch_command_verb($prog_features, name, command);
-    return toliteral(actor.recorded_events[$]:transform_for(actor, 'text_plain)["content"]);
+    return toliteral($document:render(actor.recorded_events[$]:resolve(actor), 'text_plain)['body]);
   endmethod
 
   method _schedule_rows_as owner: ARCH_WIZARD

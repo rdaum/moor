@@ -7,125 +7,86 @@ object EVENT [
   owner: HACKER
   readable: true
 
-  override description (owner: HACKER, flags: "rc") = "Flyweight delegate for events that happen in the world and which become output to send to the player. Slots must include 'action, 'actor, 'timestamp, 'dobj, 'iobj, 'this_obj. Content to display to the player is produced by iterating the contents and calling :transform_for(this, content_type) on them, appending them together, which in the end returns a string which is meant to be sent as content_type.";
+  override description (owner: HACKER, flags: "rc") = "Captured event facts and a content template. Resolution produces one inert document for a viewer before any format is selected.";
 
-  method "mk_*" owner: HACKER
-    "mk_<verb>(actor, ... content ... )";
-    action = verb[4..length(verb)];
-    {actor, @content} = args;
-    normalized = this:normalize_content(@content);
-    return <this, .actor = actor, .actor_name = actor.name, .verb = action, .dobj = false, .iobj = false, .timestamp = time(), .this_obj = false, normalized>;
+  method "mk_*" owner: ARCH_WIZARD
+    "Capture an action and its participant/location identities, with literal or structured content.";
+    set_task_perms(caller_perms());
+    const {actor, @content} = args;
+    const present = typeof(actor) == TYPE_OBJ && valid(actor);
+    (present || (typeof(actor) == TYPE_BOOL && !actor)) || raise(E_INVARG, "Invalid event actor");
+    const actor_name = present ? actor:name() | "";
+    const location = present ? actor.location | false;
+    const action = verb[4..$];
+    const blocks = $format:blocks(content);
+    return <$event, .actor = actor, .actor_name = actor_name, .verb = action,
+      .dobj = false, .iobj = false, .this_obj = false, .location = location,
+      .timestamp = time(), .bindings = [], blocks>;
   endmethod
 
   method "with_dobj with_iobj with_this" owner: ARCH_WIZARD
-    {value} = args;
-    wut = tosym(verb[6..length(verb)]);
-    wut = wut == 'this ? 'this_obj | wut;
-    this.(wut) = value;
-    "When adding attributes that have an object target, automatically add a _name for them";
-    if (valid(value) && length(value.name))
-      wut_name = tosym(verb[6..length(verb)] + "_name");
-      this.(wut_name) = value.name;
-    endif
+    "Capture an object target on the immutable event value. No target is represented by false.";
+    set_task_perms(caller_perms());
+    const {value} = args;
+    (typeof(value) == TYPE_OBJ || (typeof(value) == TYPE_BOOL && !value)) || raise(E_TYPE);
+    let key = tosym(verb[6..$]);
+    key == 'this && (key = 'this_obj);
+    this.(key) = value;
     return this;
   endmethod
 
-  method transform_for owner: HACKER
-    "Call 'compose(content_type, this)' on all content, then render to final string format.";
-    {render_for, ?content_type = 'text_plain} = args;
-    this:validate() || raise(E_INVARG);
-    composed = {};
-    let annotations = [];
-    event_contents = flycontents(this);
-    for raw_entry in (event_contents)
-      entry = this:wrap_content_entry(raw_entry);
-      {entry_type, entry_value} = entry;
-      if (entry_type == 'string)
-        typeof(entry_value) == TYPE_STR || raise(E_TYPE("Event string content must be a string"));
-        composed = this:append_rendered(composed, entry_value);
-        continue;
-      endif
-      if (entry_type == 'flyweight)
-        typeof(entry_value) == TYPE_FLYWEIGHT || raise(E_TYPE("Event flyweight content must be a flyweight"));
-        const {body, table} = $format:unpack(entry_value:compose(render_for, content_type, this));
-        annotations = $format:merge_annotations(annotations, table);
-        rendered = body;
-        composed = this:append_rendered(composed, rendered);
-        continue;
-      endif
-      if (entry_type == 'list)
-        const {parts, table} = $format:compose_parts(entry_value, render_for, content_type, this);
-        annotations = $format:merge_annotations(annotations, table);
-        composed = this:append_rendered(composed, parts);
-        continue;
-      endif
-      raise(E_INVARG("Unknown event content entry type: " + toliteral(entry_type)));
+  method with_location owner: HACKER
+    "Set the captured action location explicitly when an event describes movement.";
+    const {location} = args;
+    typeof(location) == TYPE_OBJ || raise(E_TYPE);
+    this.location = location;
+    return this;
+  endmethod
+
+  method "with_text_binding with_object_binding with_content_binding" owner: HACKER
+    "Capture a named binding with an explicit kind. Text is never reinterpreted as markup.";
+    const {name, value} = args;
+    typeof(name) == TYPE_SYM || raise(E_TYPE);
+    !(name in {'actor, 'dobj, 'iobj, 'this_obj, 'location, 'n, 'nc, 'd, 'dc,
+      'i, 'ic, 'this, 't, 'tc, 'l, 'lc}) || raise(E_INVARG, "Reserved event binding");
+    const kinds = ["with_text_binding" -> 'text, "with_object_binding" -> 'object,
+      "with_content_binding" -> 'content];
+    const kind = kinds[verb];
+    if (kind == 'text)
+      typeof(value) == TYPE_STR || raise(E_TYPE, "Text bindings require strings");
+    elseif (kind == 'object)
+      typeof(value) == TYPE_OBJ || raise(E_TYPE, "Object bindings require objects");
+    else
+      $format:inlines({value});
+    endif
+    let bindings = this.bindings;
+    bindings[name] = ['kind -> kind, 'value -> value];
+    this.bindings = bindings;
+    return this;
+  endmethod
+
+  method resolve owner: ARCH_WIZARD
+    "Resolve this event for a viewer under the actual caller's permissions, without choosing a format.";
+    "Pass false for public content before authentication. Perspective substitutions require a viewer.";
+    set_task_perms(caller_perms());
+    const {viewer} = args;
+    this:validate() || raise(E_INVARG, "Malformed event");
+    const fields = flyslots(this);
+    let facts = [];
+    for key in ({'actor, 'actor_name, 'verb, 'dobj, 'iobj, 'this_obj, 'location, 'timestamp, 'bindings})
+      facts[key] = fields[key];
     endfor
-    return ["content" -> composed, "annotations" -> annotations];
+    return $document_resolver:resolve(flycontents(this), viewer, facts);
   endmethod
 
   method validate owner: HACKER
-    "Validate that the event has all the correct fields. Return false if not.";
-    typeof(this) == TYPE_FLYWEIGHT || return false;
-    s = flyslots(this);
-    required_keys = {'actor, 'actor_name, 'verb, 'dobj, 'iobj, 'timestamp, 'this_obj};
-    for k in (required_keys)
-      maphaskey(s, k) || return false;
+    "Check required captured fields without invoking content code.";
+    typeof(this) == TYPE_FLYWEIGHT && this.delegate == $event || return false;
+    const fields = flyslots(this);
+    for key in ({'actor, 'actor_name, 'verb, 'dobj, 'iobj, 'timestamp, 'this_obj, 'location, 'bindings})
+      maphaskey(fields, key) || return false;
     endfor
-    event_contents = flycontents(this);
-    for entry in (event_contents)
-      try
-        this:wrap_content_entry(entry);
-      except (ANY)
-        return false;
-      endtry
-    endfor
-    return true;
-  endmethod
-
-  method normalize_content owner: HACKER
-    return { this:wrap_content_entry(e) for e in (args) };
-  endmethod
-
-  method wrap_content_entry owner: HACKER
-    entry = args[1];
-    typeof(entry) == TYPE_ERR && raise(E_INVARG("Event content cannot contain error values: " + toliteral(entry)));
-    typeof(entry) == TYPE_STR && return {'string, entry};
-    typeof(entry) == TYPE_FLYWEIGHT && return {'flyweight, entry};
-    typeof(entry) == TYPE_LIST && length(entry) == 2 && entry[1] in {'string, 'flyweight, 'list} && return entry;
-    typeof(entry) == TYPE_LIST && return {'list, entry};
-    raise(E_TYPE("Unsupported event content entry type: " + toliteral(entry)));
-  endmethod
-
-  method append_rendered owner: HACKER
-    {acc, value} = args;
-    if (typeof(value) == TYPE_LIST && length(value) == 2 && value[1] in {'string, 'flyweight, 'list})
-      return this:append_rendered(acc, value[2]);
-    endif
-    if (typeof(value) == TYPE_LIST && length(value) == 3 && typeof(value[1]) == TYPE_STR)
-      return {@acc, value};
-    endif
-    if (typeof(value) == TYPE_LIST)
-      for element in (value)
-        suspend_if_needed();
-        acc = this:append_rendered(acc, element);
-      endfor
-      return acc;
-    endif
-    if (typeof(value) == TYPE_STR)
-      if (length(acc) > 0 && typeof(acc[$]) == TYPE_STR)
-        acc[$] = acc[$] + value;
-        return acc;
-      endif
-      return {@acc, value};
-    endif
-    if (typeof(value) == TYPE_FLYWEIGHT)
-      return {@acc, value};
-    endif
-    if (typeof(value) == TYPE_ERR)
-      raise(E_TYPE("Event content evaluated to error: " + toliteral(value)));
-    endif
-    raise(E_TYPE("Unsupported rendered event content: " + toliteral(value)));
+    return typeof(fields['bindings]) == TYPE_MAP;
   endmethod
 
   method with_metadata owner: ARCH_WIZARD
@@ -182,13 +143,6 @@ object EVENT [
     {text} = args;
     this.tts_text = text;
     return this;
-  endmethod
-
-  method get_binding owner: HACKER
-    "Resolve a binding name to a value from the event context.";
-    {name} = args;
-    bindings = ['dobj -> this.dobj, 'd -> this.dobj, 'dc -> this.dobj, 'iobj -> this.iobj, 'i -> this.iobj, 'ic -> this.iobj, 'actor -> this.actor, 'n -> this.actor, 'nc -> this.actor, 'location -> this.actor.location, 'l -> this.actor.location, 'lc -> this.actor.location, 'this -> this.this_obj, 't -> this.this_obj, 'tc -> this.this_obj];
-    return maphaskey(bindings, name) ? bindings[name] | false;
   endmethod
 
   method ensure_audience owner: ARCH_WIZARD

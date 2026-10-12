@@ -24,7 +24,7 @@ object SUB [
     "When you create an event, you build content using substitution flyweights:",
     "",
     "```moo",
-    "content = {$sub:nc(), \" picks up \", $sub:d(), \".\"};",
+    "content = {$sub:nc(), \" \", $sub:self_alt(\"pick\", \"picks\"), \" up \", $sub:d(), \".\"};",
     "```",
     "",
     "When this event is rendered:",
@@ -168,8 +168,8 @@ object SUB [
     "            \" hand away.\"",
     "        };",
     "",
-    "        event = $event:mk(player, #-1, this, dobj, #-1, content, {});",
-    "        event:send_to_location();",
+    "        event = $event:mk_pet(player, @content):with_dobj(dobj):with_this(this);",
+    "        player.location:announce(event);",
     "",
     "        \"Tell actor they failed\";",
     "        notify(player, \"The cat doesn't want to be petted right now.\");",
@@ -182,8 +182,8 @@ object SUB [
     "        \" gently, and \", $sub:d(), \" purrs contentedly.\"",
     "    };",
     "",
-    "    event = $event:mk(player, #-1, this, dobj, #-1, content, {});",
-    "    event:send_to_location();",
+    "    event = $event:mk_pet(player, @content):with_dobj(dobj):with_this(this);",
+    "    player.location:announce(event);",
     "endverb",
     "```",
     "",
@@ -200,10 +200,10 @@ object SUB [
     "## Implementation Notes",
     "",
     "- All substitution verbs return flyweight objects with a `.type` property",
-    "- The actual substitution happens when the event is rendered via `:render_as()` or `:compose()`",
-    "- Substitutions check if `event.actor == render_for` to determine perspective",
-    "- The `name_sub()` method handles the \"you\" vs object name logic",
-    "- Nested substitutions are evaluated recursively during rendering",
+    "- The actual substitution happens when the event is rendered via `event:resolve(viewer)`",
+    "- Substitutions check if `event.actor == viewer` to determine perspective",
+    "- The resolver captures object names and references for the selected viewer",
+    "- Nested substitutions are expanded during resolution",
     "- If a dobj/iobj is missing, placeholder text like `\"<no-dobj>\"` is returned",
     "",
     "## Phrase Utilities",
@@ -277,46 +277,23 @@ object SUB [
     "",
     "Used internally by the article system but can be called directly if needed.",
     "",
-    "## Generic Context Bindings",
+    "## Captured bindings",
     "",
-    "The `binding()` verb allows substitution of arbitrary values from context, supporting any context type that implements a `get_binding()` method.",
+    "Events capture the actor, direct object, indirect object, this object, and action location.",
+    "Use event:with_text_binding(name, text) for a literal text value.",
+    "Use event:with_object_binding(name, object) for a named object.",
+    "Use event:with_content_binding(name, content) for explicit inline content.",
     "",
-    "### Usage",
+    "$sub:binding(name) reads text or an object name. $sub:bindingc(name) capitalizes its result.",
+    "$sub:content_binding(name) inserts explicitly bound inline content.",
+    "Missing named bindings raise E_INVARG. Missing optional participants produce a readable placeholder.",
     "",
-    "```moo",
-    "msg = {$sub:nc(), \" heads \", $sub:binding('direction), \".\"}",
-    "```",
+    "## Resolution",
     "",
-    "### How It Works",
-    "",
-    "When rendered, `$sub:binding('direction)` calls `context:get_binding('direction)` to fetch the value.",
-    "The context can be any flyweight (event, movement context, etc.) that implements:",
-    "",
-    "```moo",
-    "verb get_binding (this none this)",
-    "  {name} = args;",
-    "  if (name == 'direction) return this.direction; endif",
-    "  \"... return other bindings ...\";",
-    "endverb",
-    "```",
-    "",
-    "### Capitalized Variant",
-    "",
-    "Use `$sub:bindingc()` to capitalize the result.",
-    "",
-    "### Missing Bindings",
-    "",
-    "If `get_binding()` returns false or the method doesn't exist, the substitution returns `<no-binding>`.",
-    "",
-    "## Technical Details",
-    "",
-    "- All substitution verbs use wildcard matching (e.g., `\"n* nc*\"`) to handle variations",
-    "- Capitalization is controlled by checking for `\"c\"` in the verb name",
-    "- The flyweight's `.capitalize` property is checked during rendering",
-    "- Events are composed of lists that may contain strings, flyweights, or other content",
-    "- The system recurses through content, evaluating each substitution flyweight it encounters",
-    "- Generic bindings allow substitution from any context implementing the `get_binding()` protocol",
-    ""
+    "event:resolve(viewer) expands substitutions into a canonical document.",
+    "The viewer selects perspective. The actual caller determines authority.",
+    "Only the selected self_alt branch runs. Rendering a resolved document does not call substitutions.",
+    "Use $document:render(document, format) for HTML, Djot, or plain text."
   };
 
   method is_proper_noun owner: ARCH_WIZARD
@@ -324,25 +301,102 @@ object SUB [
     return false;
   endmethod
 
-  method render_as owner: HACKER
-    {render_for, content_type, event} = args;
-    content = this:eval_sub(event, render_for);
-    return `this.capitalize ! E_PROPNF => false' ? content:capitalize() | content;
+  method resolve_inline owner: ARCH_WIZARD
+    "Resolve one perspective substitution to inline content under the caller's authority.";
+    "Text bindings stay literal. Content bindings and self alternatives expand only their selected value.";
+    set_task_perms(caller_perms());
+    const {context} = args;
+    context['principal] == caller_perms() || raise(E_PERM, "Resolution principal mismatch");
+    const viewer = context['viewer];
+    const facts = context['event];
+    const kind = this.type;
+    const capitalize = `this.capitalize ! E_PROPNF => false';
+    if (kind in {'binding, 'content_binding})
+      const binding = $document_resolver:binding(context, this.binding_name);
+      if (kind == 'content_binding)
+        binding['kind] == 'content || raise(E_INVARG, "Binding is not inline content");
+        return $format:inlines({binding['value]});
+      elseif (binding['kind] == 'text)
+        const text = binding['value];
+        typeof(text) == TYPE_STR || raise(E_TYPE, "Text binding must contain a string");
+        return $format:literal_inline(capitalize ? text:capitalize() | text);
+      endif
+      binding['kind] == 'object || raise(E_INVARG, "Use content_binding for structured content");
+    endif
+    typeof(viewer) == TYPE_OBJ && valid(viewer)
+      || raise(E_INVARG, "This substitution needs a viewer");
+    if (kind == 'self_alt)
+      const selected = facts['actor] == viewer ? this.for_self | this.for_others;
+      const parts = $format:inlines({selected});
+      return capitalize ? {$document_template:mk('capitalize, parts)} | parts;
+    endif
+    let binding_name = kind;
+    kind == 'this && (binding_name = 'this_obj);
+    if (kind in {'binding, 'article_a, 'article_the})
+      binding_name = this.binding_name;
+    endif
+    if (kind in {'actor, 'location, 'this, 'dobj, 'iobj, 'binding, 'article_a, 'article_the})
+      const binding = $document_resolver:binding(context, binding_name);
+      binding['kind] == 'object || raise(E_INVARG, "Name substitution requires an object binding");
+      const target = binding['value];
+      if (typeof(target) != TYPE_OBJ || !valid(target))
+        return $format:literal_inline("<no-" + tostr(binding_name) + ">");
+      endif
+      let label = target == viewer ? "you" | target:name();
+      let article = "";
+      if (kind in {'article_a, 'article_the} && target != viewer && !target:is_proper_noun())
+        if (kind == 'article_the)
+          article = "the";
+        elseif (!target:is_plural())
+          article = $sub:a_or_an(label);
+        endif
+      endif
+      if (`this.capitalize_binding ! E_PROPNF => false')
+        label = label:capitalize();
+      endif
+      length(article) && (label = article + " " + label);
+      capitalize && (label = label:capitalize());
+      return {$format.annotation:object(target, label)};
+    endif
+    let subject = 'actor;
+    let form = kind;
+    const name = tostr(kind);
+    if (index(name, "dobj_", 1) == 1)
+      subject = 'dobj;
+      form = tosym(name[6..$]);
+    elseif (index(name, "iobj_", 1) == 1)
+      subject = 'iobj;
+      form = tosym(name[6..$]);
+    endif
+    const target = facts[subject];
+    if (typeof(target) != TYPE_OBJ || !valid(target))
+      return $format:literal_inline("<no-" + tostr(subject) + ">");
+    endif
+    const self_forms = ['subject -> "you", 'object -> "you", 'pos_adj -> "your",
+      'pos_noun -> "yours", 'reflexive -> "yourself", 'verb_be -> "are",
+      'verb_have -> "have", 'verb_look -> "look"];
+    maphaskey(self_forms, form) || raise(E_INVARG, "Unknown substitution: " + name);
+    let text = "";
+    if (target == viewer)
+      text = self_forms[form];
+    else
+      const pronouns = target:pronouns();
+      const fields = ['subject -> 'ps, 'object -> 'po, 'pos_adj -> 'pp,
+        'pos_noun -> 'pq, 'reflexive -> 'pr, 'verb_be -> 'verb_be, 'verb_have -> 'verb_have];
+      if (form == 'verb_look)
+        text = pronouns.is_plural ? "look" | "looks";
+      else
+        text = pronouns.(fields[form]);
+      endif
+    endif
+    return $format:literal_inline(capitalize ? text:capitalize() | text);
   endmethod
 
-  method compose owner: HACKER
-    "Associate object-name substitutions with their explicit object reference.";
-    const {render_for, content_type, event} = args;
-    const content = this:render_as(@args);
-    let target = false;
-    if (this.type in {'actor, 'location, 'this, 'dobj, 'iobj})
-      target = event:get_binding(this.type);
-    elseif (this.type in {'binding, 'article_a, 'article_the})
-      target = `event:get_binding(this.binding_name) ! E_VERBNF, E_PROPNF => false';
-    endif
-    typeof(target) == TYPE_OBJ && valid(target) || return content;
-    const annotation = $format.annotation:object(target, content);
-    return annotation:compose(@args);
+  method content_binding owner: HACKER
+    "Insert explicitly bound inline content. Text bindings cannot use this operation.";
+    const {name} = args;
+    typeof(name) == TYPE_SYM || raise(E_TYPE);
+    return <$sub, .type = 'content_binding, .binding_name = name, .capitalize = false>;
   endmethod
 
   method phrase owner: HACKER
@@ -359,81 +413,6 @@ object SUB [
     capitalize = verb[length(verb)] == "c";
     {for_self, for_alt} = args;
     return <this, .type = 'self_alt, .capitalize = capitalize, .for_self = for_self, .for_others = for_alt>;
-  endmethod
-
-  method eval_sub owner: HACKER
-    {event, render_for} = args;
-    this.type == 'actor && return this:name_sub(event.actor, render_for);
-    this.type == 'location && return this:name_sub(event.actor.location, render_for);
-    this.type == 'this && return this:name_sub(event.this_obj, render_for);
-    this.type == 'dobj && return this:name_sub(event.dobj, render_for);
-    this.type == 'iobj && return this:name_sub(event.iobj, render_for);
-    this.type == 'subject && return event.actor == render_for ? "you" | event.actor:pronoun_subject();
-    this.type == 'object && return event.actor == render_for ? "you" | event.actor:pronoun_object();
-    this.type == 'pos_adj && return event.actor == render_for ? "your" | event.actor:pronoun_possessive('adj);
-    this.type == 'pos_noun && return event.actor == render_for ? "yours" | event.actor:pronoun_possessive('noun);
-    this.type == 'reflexive && return event.actor == render_for ? "yourself" | event.actor:pronoun_reflexive();
-    this.type == 'dobj_subject && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "you" | event.dobj:pronoun_subject() | "<no-dobj>";
-    this.type == 'dobj_object && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "you" | event.dobj:pronoun_object() | "<no-dobj>";
-    this.type == 'dobj_pos_adj && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "your" | event.dobj:pronoun_possessive('adj) | "<no-dobj>";
-    this.type == 'dobj_pos_noun && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "yours" | event.dobj:pronoun_possessive('noun) | "<no-dobj>";
-    this.type == 'dobj_reflexive && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "yourself" | event.dobj:pronoun_reflexive() | "<no-dobj>";
-    this.type == 'iobj_subject && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "you" | event.iobj:pronoun_subject() | "<no-iobj>";
-    this.type == 'iobj_object && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "you" | event.iobj:pronoun_object() | "<no-iobj>";
-    this.type == 'iobj_pos_adj && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "your" | event.iobj:pronoun_possessive('adj) | "<no-iobj>";
-    this.type == 'iobj_pos_noun && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "yours" | event.iobj:pronoun_possessive('noun) | "<no-iobj>";
-    this.type == 'iobj_reflexive && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "yourself" | event.iobj:pronoun_reflexive() | "<no-iobj>";
-    this.type == 'verb_be && return event.actor == render_for ? "are" | event.actor:pronouns().verb_be;
-    this.type == 'verb_have && return event.actor == render_for ? "have" | event.actor:pronouns().verb_have;
-    this.type == 'verb_look && return event.actor == render_for ? "look" | event.actor:pronouns().is_plural ? "look" | "looks";
-    this.type == 'dobj_verb_be && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "are" | event.dobj:pronouns().verb_be | "<no-dobj>";
-    this.type == 'dobj_verb_have && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "have" | event.dobj:pronouns().verb_have | "<no-dobj>";
-    this.type == 'dobj_verb_look && return typeof(event.dobj) == TYPE_OBJ && valid(event.dobj) ? event.dobj == render_for ? "look" | event.dobj:pronouns().is_plural ? "look" | "looks" | "<no-dobj>";
-    this.type == 'iobj_verb_be && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "are" | event.iobj:pronouns().verb_be | "<no-iobj>";
-    this.type == 'iobj_verb_have && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "have" | event.iobj:pronouns().verb_have | "<no-iobj>";
-    this.type == 'iobj_verb_look && return typeof(event.iobj) == TYPE_OBJ && valid(event.iobj) ? event.iobj == render_for ? "look" | event.iobj:pronouns().is_plural ? "look" | "looks" | "<no-iobj>";
-    if (this.type == 'self_alt)
-      value = event.actor == render_for ? this.for_self | this.for_others;
-      typeof(value) == TYPE_FLYWEIGHT && `value.type ! E_PROPNF => false' && return value:eval_sub(event, render_for);
-      return value;
-    endif
-    if (this.type == 'binding)
-      binding_value = `event:get_binding(this.binding_name) ! E_VERBNF, E_PROPNF => false';
-      binding_value == false && return "<no-binding>";
-      typeof(binding_value) == TYPE_OBJ && binding_value == render_for && return "you";
-      return `binding_value:name() ! E_VERBNF => tostr(binding_value)';
-    endif
-    if (this.type == 'article_a)
-      binding_value = `event:get_binding(this.binding_name) ! E_VERBNF, E_PROPNF => false';
-      binding_value == false || typeof(binding_value) != TYPE_OBJ && return "";
-      capitalize_name = `this.capitalize_binding ! E_PROPNF => false';
-      is_self = binding_value == render_for;
-      is_proper = `binding_value:is_proper_noun() ! E_VERBNF => false';
-      is_plural = `binding_value:is_plural() ! E_VERBNF => false';
-      name = is_self ? "you" | `binding_value:name() ! E_VERBNF => tostr(binding_value)';
-      article = is_proper || is_plural || is_self ? "" | this:a_or_an(name);
-      this.capitalize && length(article) && (article = article:capitalize());
-      capitalize_name && length(name) && (name = name:capitalize());
-      return length(article) ? article + " " + name | name;
-    endif
-    if (this.type == 'article_the)
-      binding_value = `event:get_binding(this.binding_name) ! E_VERBNF, E_PROPNF => false';
-      binding_value == false || typeof(binding_value) != TYPE_OBJ && return "";
-      capitalize_name = `this.capitalize_binding ! E_PROPNF => false';
-      is_self = binding_value == render_for;
-      is_proper = `binding_value:is_proper_noun() ! E_VERBNF => false';
-      article = is_proper || is_self ? "" | "the";
-      name = is_self ? "you" | `binding_value:name() ! E_VERBNF => tostr(binding_value)';
-      this.capitalize && length(article) && (article = article:capitalize());
-      capitalize_name && length(name) && (name = name:capitalize());
-      return length(article) ? article + " " + name | name;
-    endif
-    return "<invalid-sub>";
-  endmethod
-
-  method name_sub owner: HACKER
-    {who, render_for} = args;
-    return who == render_for ? "you" | `who:name() ! E_VERBNF => who.name';
   endmethod
 
   method "d*c" owner: HACKER
@@ -510,7 +489,7 @@ object SUB [
   endmethod
 
   method "binding*" owner: HACKER
-    "Generic context binding - fetches arbitrary values from context via get_binding().";
+    "Read a captured text or object binding from the event.";
     capitalize = index(verb, "c") != 0;
     {binding_name} = args;
     return <this, .type = 'binding, .binding_name = binding_name, .capitalize = capitalize>;
@@ -632,31 +611,26 @@ object SUB [
   endmethod
 
   method test_article_the_eval owner: HACKER
-    "Test article_the() renders with binding name.";
-    event = $event:mk_test(this):with_dobj(this);
-    fw = this:the('d);
-    result = fw:eval_sub(event, #0);
-    $test_utils:assert_eq(result, "the " + this.name, "the() rendered text");
+    "Resolve definite articles through the document pipeline.";
+    const event = $event:mk_test(this, this:the('d)):with_dobj(this);
+    const result = $document:render(event:resolve(#0), 'text_plain)['body];
+    $test_utils:assert_eq(result, "the " + this.name, "Definite article");
     return true;
   endmethod
 
   method test_article_a_eval owner: HACKER
-    "Test article_a() renders with binding name.";
-    event = $event:mk_test(this):with_dobj(this);
-    fw = this:a('d);
-    result = fw:eval_sub(event, #0);
-    expected_prefix = this:a_or_an(this.name);
-    $test_utils:assert_eq(result, expected_prefix + " " + this.name, "a() rendered text");
+    "Resolve indefinite articles through the document pipeline.";
+    const event = $event:mk_test(this, this:a('d)):with_dobj(this);
+    const result = $document:render(event:resolve(#0), 'text_plain)['body];
+    $test_utils:assert_eq(result, this:a_or_an(this.name) + " " + this.name, "Indefinite article");
     return true;
   endmethod
 
   method test_article_with_capitalized_binding owner: HACKER
-    "Test binding suffix c capitalizes the noun, not the article.";
-    event = $event:mk_test(this):with_dobj(this);
-    fw = this:the('dc);
-    result = fw:eval_sub(event, #0);
-    expected = "the " + this.name:capitalize();
-    $test_utils:assert_eq(result, expected, "capitalized binding rendered text");
+    "A capitalized binding changes the noun without capitalizing its article.";
+    const event = $event:mk_test(this, this:the('dc)):with_dobj(this);
+    const result = $document:render(event:resolve(#0), 'text_plain)['body];
+    $test_utils:assert_eq(result, "the " + this.name:capitalize(), "Capitalized binding");
     return true;
   endmethod
 
@@ -802,43 +776,51 @@ object SUB [
   endmethod
 
   method test_render_actor_perspective owner: HACKER
-    "Test rendering adapts actor names and self-alternation to perspective.";
-    event = $event:mk_social(player, this:nc(), " ", this:self_alt("wave", "waves"), " to ", this:the('d), "."):with_dobj(this);
-    actor_view = event:transform_for(player)["content"];
-    observer_view = event:transform_for(#0)["content"];
-    $test_utils:assert_eq(actor_view, {"You wave to the " + this.name + "."}, "actor should see second-person rendering");
-    $test_utils:assert_eq(observer_view, {player:name() + " waves to the " + this.name + "."}, "observer should see third-person rendering");
+    "Resolve actor and observer wording before either document is serialized.";
+    const event = $event:mk_social(player, this:nc(), " ", this:self_alt("wave", "waves"),
+      " to ", this:the('d), "."):with_dobj(this);
+    const own = $document:render(event:resolve(player), 'text_plain)['body];
+    const observer = $document:render(event:resolve(#0), 'text_plain)['body];
+    $test_utils:assert_eq(own, "You wave to the " + this.name + ".", "Actor perspective");
+    $test_utils:assert_eq(observer, player:name() + " waves to the " + this.name + ".", "Observer perspective");
     return true;
   endmethod
 
   method test_eval_missing_object_bindings owner: HACKER
-    "Test missing direct and indirect object substitutions render placeholders.";
-    event = $event:mk_test(player);
-    $test_utils:assert_eq(this:s_dobj():eval_sub(event, player), "<no-dobj>", "missing dobj subject");
-    $test_utils:assert_eq(this:o_iobj():eval_sub(event, player), "<no-iobj>", "missing iobj object");
-    $test_utils:assert_eq(this:verb_have_dobj():eval_sub(event, player), "<no-dobj>", "missing dobj verb");
-    $test_utils:assert_eq(this:verb_look_iobj():eval_sub(event, player), "<no-iobj>", "missing iobj verb");
+    "Missing optional participants produce readable placeholders without interaction descriptors.";
+    for example in ({{this:s_dobj(), "<no-dobj>"}, {this:o_iobj(), "<no-iobj>"},
+      {this:verb_have_dobj(), "<no-dobj>"}, {this:verb_look_iobj(), "<no-iobj>"}})
+      const event = $event:mk_test(player, example[1]);
+      $test_utils:assert_eq($document:render(event:resolve(player), 'text_plain)['body],
+        example[2], "Absent participant");
+    endfor
     return true;
   endmethod
 
   method test_binding_eval_and_missing_binding owner: HACKER
-    "Test generic binding evaluation for self, object, scalar, and missing values.";
-    event = $event:mk_test(player):with_dobj(this);
-    $test_utils:assert_eq(this:binding('actor):eval_sub(event, player), "you", "actor binding should render as you to actor");
-    $test_utils:assert_eq(this:binding('d):eval_sub(event, player), this:name(), "object binding should render object name");
-    $test_utils:assert_eq(this:binding('missing):eval_sub(event, player), "<no-binding>", "missing binding should render placeholder");
+    "Object bindings preserve perspective, while an unknown binding is an explicit authoring error.";
+    const event = $event:mk_test(player, this:binding('actor), " / ", this:binding('d)):with_dobj(this);
+    $test_utils:assert_eq($document:render(event:resolve(player), 'text_plain)['body],
+      "you / " + this:name(), "Object binding labels");
+    const invalid = $event:mk_test(player, this:binding('missing));
+    $test_utils:assert_raises(E_INVARG, invalid, "resolve", {player}, "Unknown binding");
     return true;
   endmethod
 
   method test_article_eval_self_and_proper_noun owner: HACKER
-    "Test articles suppress article text for self and proper nouns.";
-    target = $test_utils:anonymous($thing);
+    "Articles disappear for the viewer and for proper nouns; anonymous objects retain readable labels.";
+    const target = $test_utils:anonymous($thing);
     target.name = "test relic";
-    event = $event:mk_test(player):with_dobj(target);
-    $test_utils:assert_eq(this:a('d):eval_sub(event, target), "you", "self article should render as you");
+    const self_event = $event:mk_test(player, this:a('d)):with_dobj(target);
+    $test_utils:assert_eq($document:render(self_event:resolve(target), 'text_plain)['body],
+      "you", "Self has no article");
     target.is_proper_noun_name = true;
-    $test_utils:assert_eq(this:the('d):eval_sub(event, player), "test relic", "proper noun should suppress definite article");
-    $test_utils:assert_eq(this:a('d):eval_sub(event, player), "test relic", "proper noun should suppress indefinite article");
+    for substitution in ({this:the('d), this:a('d)})
+      const event = $event:mk_test(player, substitution):with_dobj(target);
+      const result = $document:render(event:resolve(player), 'text_html);
+      $test_utils:assert_eq(result['body], "<p>test relic</p>", "Proper noun has no article");
+      $test_utils:assert_eq(result['annotations], [], "Anonymous identity has no client address");
+    endfor
     return true;
   endmethod
 

@@ -7,10 +7,8 @@ true
 @programmer
 % @verbs $couch
 ~~verbs(
-=
 % @properties $couch
 ~~properties(
-=
 ; add_property(player, "reference_probe", 1, {player, "rc"}); return true;
 true
 % @rmproperty me.reference_probe
@@ -30,7 +28,5 @@ true
 @wizard
 % @verbs $couch
 ~~verbs(
-=
 % @properties $couch
 ~~properties(
-=

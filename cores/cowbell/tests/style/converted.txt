@@ -178,7 +178,6 @@ player.moo:command_environment
 actor.moo:give
 actor.moo:do_give
 
-format/format.moo:unpack
 format/format_table.moo
 format/format_annotation.moo:object
 format/format_annotation.moo:command
@@ -186,21 +185,8 @@ format/format_annotation.moo:exit
 format/format_annotation.moo:help
 format/format_annotation.moo:verb
 format/format_annotation.moo:property
-format/format_annotation.moo:compose
-format/format_link.moo:_compose_inline
-format/format_link.moo:to_html
-format/format_link.moo:to_djot
-format/format_list.moo:compose
-format/format_paragraph.moo:compose
-format/format_block.moo:compose
-format/format_title.moo:compose
-events/sub.moo:compose
 types/list_proto.moo
-format/format.moo:result
-format/format.moo:merge_annotations
-format/format.moo:compose_parts
 format/format_annotation.moo:mk
-format/format_text.moo:escape_djot
 world/room.moo:exit_annotation
 
 root.moo:help_topic
@@ -236,3 +222,17 @@ change_manager.moo
 
 agentic/agentic_event_queue.moo
 events/msg_bag.moo
+format/format.moo
+format/format_text.moo
+format/format_block.moo
+format/format_code.moo
+format/format_deflist.moo
+format/format_list.moo
+format/format_paragraph.moo
+format/format_title.moo
+events/sub.moo:resolve_inline
+events/sub.moo:content_binding
+events/event_receiver.moo:tell
+events/event_receiver.moo:_resolve_event
+events/event_receiver.moo:_event_render
+world/passage.moo:movement_event

@@ -12,55 +12,43 @@ object EVENT_RECEIVER [
   override description (owner: ARCH_WIZARD, flags: "rc") = "Generic event receiver prototype providing event broadcasting and connection notification capabilities.";
 
   method tell owner: HACKER
-    "Broadcast an event to all connections for this player, with per-connection content negotiation.";
-    "Persists djot version to event log for replay.";
-    {event, @rest} = args;
-    "Gag filter: suppress events from gagged actors before logging or notifying.";
-    if (this:_is_gagged_event(event))
-      return;
-    endif
-    event_slots = flyslots(event);
-    "Attach a shared delivery id so live/history copies can be correlated client-side.";
+    "Resolve one viewer document, then send its Djot history and negotiated live representations.";
+    const {event, @rest} = args;
+    this:_is_gagged_event(event) && return;
+    const document = this:_resolve_event(event);
+    let event_slots = flyslots(event);
     event_slots["delivery_id"] = uuid();
-    "First, log the djot version to the event log for persistence/replay";
-    transformed_djot = event:transform_for(this, 'text_djot);
-    output_djot = {};
-    entry_num = 0;
-    for entry in (transformed_djot["content"])
-      entry_num = entry_num + 1;
-      if (entry_num % 50 == 0)
-        suspend_if_needed();
-      endif
-      output_djot = this:_extend_output(output_djot, entry, 'text_djot);
-    endfor
+    const history = $document:render(document, 'text_djot);
     let log_slots = event_slots;
-    log_slots["annotations"] = transformed_djot["annotations"];
-    this:_event_log(this, output_djot, 'text_djot, log_slots);
-    "Now render per-connection and notify each with appropriate content type";
-    conns = this:_connections();
-    if (!conns)
-      return;
-    endif
-    "Wrap rendering in error handling - don't let one bad connection break all";
-    contents = {};
-    try
-      contents = this:_event_render(conns, event);
-    except e (ANY)
-      "Rendering failed - log but continue with empty contents";
-    endtry
-    entry_num = 0;
+    log_slots["annotations"] = history['annotations];
+    this:_event_log(this, history['body], 'text_djot, log_slots);
+    const connections = this:_connections();
+    const contents = this:_event_render(connections, event, document);
     for content in (contents)
-      entry_num = entry_num + 1;
-      const {conn, content_type, output, annotations} = content;
-      "Wrap each notify in error handling so one failure doesn't break the rest";
+      const {connection, content_type, body, annotations} = content;
+      let metadata = event_slots;
+      metadata["annotations"] = annotations;
       try
-        let rendered_slots = event_slots;
-        rendered_slots["annotations"] = annotations;
-        this:_notify(conn, output, false, false, content_type, rendered_slots);
-      except e (ANY)
-        "Notification failed for this connection - continue with others";
+        this:_notify(connection, body, false, false, content_type, metadata);
+      except error (ANY)
+        this:_delivery_error("Event notification failed: " + toliteral(error));
       endtry
     endfor
+  endmethod
+
+  method _delivery_error owner: ARCH_WIZARD
+    "Log a receiver's delivery failure without granting its content hooks wizard permissions.";
+    caller == this || raise(E_PERM);
+    const {message} = args;
+    server_log(tostr(this) + ": " + message);
+  endmethod
+
+  method _resolve_event owner: ARCH_WIZARD
+    "Resolve content with this receiver's permissions. Context never inherits delivery's wizard owner.";
+    caller == this || raise(E_PERM);
+    set_task_perms(this);
+    const {event} = args;
+    return event:resolve(this);
   endmethod
 
   method inform_connection owner: HACKER
@@ -123,75 +111,54 @@ object EVENT_RECEIVER [
   endmethod
 
   method _event_render owner: ARCH_WIZARD
-    "Render an event per connection using the negotiated content types.";
+    "Serialize one resolved document for attached connections, reusing each negotiated representation.";
     caller == this || raise(E_PERM);
     set_task_perms(this);
-    {connections, event} = args;
-    audience = event:audience();
-    if (audience == 'narrative)
-      event = event:ensure_audience('narrative);
-    endif
-    results = {};
+    const {connections, event, ?resolved = false} = args;
+    const document = typeof(resolved) == TYPE_FLYWEIGHT ? resolved | event:resolve(this);
+    let results = {};
+    let rendered = [];
+    const types = ["text/html" -> 'text_html, "text/djot" -> 'text_djot,
+      "text/plain" -> 'text_plain, "text_html" -> 'text_html,
+      "text_djot" -> 'text_djot, "text_plain" -> 'text_plain];
     for connection in (connections)
-      "Wrap each connection's rendering in error handling";
-      try
-        {connection_obj, peer_addr, idle_seconds, content_types, @rest} = connection;
-        preferred_types = event:preferred_content_types();
-        if (typeof(preferred_types) != TYPE_LIST)
-          preferred_types = {};
+      const {connection_obj, peer_addr, idle_seconds, content_types, @rest} = connection;
+      const supported = length(content_types) ? content_types | {'text_plain};
+      let preferred = event:preferred_content_types();
+      if (typeof(preferred) != TYPE_LIST || !length(preferred))
+        preferred = {'text_html, 'text_djot, 'text_plain};
+      endif
+      let selected = false;
+      for desired in ({@preferred, 'text_html, 'text_djot, 'text_plain})
+        const wanted = tostr(desired);
+        if (!maphaskey(types, wanted))
+          continue;
         endif
-        if (!preferred_types)
-          preferred_types = {"text/html", "text/djot", "text/plain", 'text_html, 'text_djot, 'text_plain};
-        endif
-        content_type = 0;
-        for desired in (preferred_types)
-          if (desired in content_types)
-            content_type = desired;
+        for offered in (supported)
+          const available = tostr(offered);
+          if (maphaskey(types, available) && types[available] == types[wanted])
+            selected = types[wanted];
             break;
           endif
         endfor
-        if (!content_type)
-          content_type = length(content_types) >= 1 ? content_types[1] | 'text_plain;
+        if (typeof(selected) == TYPE_SYM)
+          break;
         endif
-        transformed = event:transform_for(this, content_type);
-        "Iterate the transformed values and have it turn into its output form.";
-        output = {};
-        for entry in (transformed["content"])
-          output = this:_extend_output(output, entry, content_type);
-        endfor
-        "HTML nodes form one document fragment; splitting inline nodes would introduce newlines in clients.";
-        if (content_type in {'text_html, "text/html"} && length(output))
-          output = {output:join("")};
-        endif
-        if (length(output) > 0)
-          results = {@results, {connection_obj, content_type, output, transformed["annotations"]}};
-        endif
-      except e (ANY)
-        "Rendering failed for this connection - skip it and continue with others";
-      endtry
+      endfor
+      if (typeof(selected) != TYPE_SYM)
+        this:_delivery_error("Connection has no supported narrative content type: " + tostr(connection_obj));
+        continue;
+      endif
+      if (!maphaskey(rendered, selected))
+        rendered[selected] = $document:render(document, selected);
+      endif
+      const result = rendered[selected];
+      if (length(result['body]))
+        const mime = tosym(strsub(tostr(selected), "_", "/", 1));
+        results = {@results, {connection_obj, mime, result['body], result['annotations]}};
+      endif
     endfor
     return results;
-  endmethod
-
-  method _extend_output owner: HACKER
-    "Flatten rendered entries into strings, recursively handling flyweights.";
-    {acc, entry, content_type} = args;
-    if (typeof(entry) == TYPE_STR)
-      return {@acc, entry};
-    elseif (typeof(entry) == TYPE_LIST)
-      for element in (entry)
-        suspend_if_needed();
-        acc = this:_extend_output(acc, element, content_type);
-      endfor
-      return acc;
-    elseif (typeof(entry) == TYPE_FLYWEIGHT)
-      rendered = entry:render(content_type);
-      return this:_extend_output(acc, rendered, content_type);
-    elseif (typeof(entry) == TYPE_ERR)
-      return {@acc, toliteral(entry)};
-    else
-      return {@acc, tostr(entry)};
-    endif
   endmethod
 
   method _connection_entry owner: ARCH_WIZARD

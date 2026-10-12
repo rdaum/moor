@@ -1,0 +1,227 @@
+object DOCUMENT_RESOLUTION_SCENARIOS
+  name: "Document Resolution Scenarios"
+  parent: ROOT
+  owner: ARCH_WIZARD
+  readable: true
+
+  property calls (owner: ARCH_WIZARD, flags: "r") = 0;
+  property secret (owner: ARCH_WIZARD, flags: "") = "private fixture content";
+
+  method resolve_inline owner: ARCH_WIZARD
+    "Fixture hooks expose call count, authority, invalid results, and recursive expansion.";
+    const {context} = args;
+    const principal = caller_perms();
+    if (this.mode == 'private)
+      set_task_perms(principal);
+      return $format:literal_inline(this.secret);
+    elseif (this.mode == 'authority)
+      return $format:literal_inline(tostr(context['principal]) + ":" + tostr(principal));
+    elseif (this.mode == 'recursive)
+      return {$format:producer_inline(this)};
+    elseif (this.mode == 'invalid)
+      return {"unstructured callback result"};
+    elseif (this.mode == 'fail)
+      raise(E_INVARG, "Unselected branch must not run");
+    endif
+    #90122.calls = #90122.calls + 1;
+    return {$format.annotation:command("look", "Look"), $format.text:mk(" *literal*")};
+  endmethod
+
+  method resolve_blocks owner: ARCH_WIZARD
+    "A block producer returns block templates that contain nested inline producers.";
+    const {context} = args;
+    return {$format.title:mk("Report", 2),
+      $format.paragraph:mk($format:producer_inline(<#90122, .mode = 'count>))};
+  endmethod
+
+  method _resolve_as owner: ARCH_WIZARD
+    "Invoke resolution with a real reduced principal, without accepting a context map.";
+    const {event, principal, viewer} = args;
+    set_task_perms(principal);
+    return event:resolve(viewer);
+  endmethod
+
+  method _plain owner: ARCH_WIZARD
+    "Read the plain serialization of a resolved document.";
+    return $document:render(args[1], 'text_plain)['body];
+  endmethod
+
+  method test_literal_constructors owner: ARCH_WIZARD
+    "Authoring splits literal paragraphs and hard breaks, while interpolation never becomes markup.";
+    const blocks = $format:literal_blocks("First *literal*.\ncontinued\n\nSecond.");
+    const event = $event:mk_info(#90102, $document_template:mk('blocks, blocks));
+    const document = event:resolve(#90102);
+    const encoded = $document:encode(document);
+    $test_utils:assert_eq(length(encoded["blocks"]), 2, "Blank lines separate paragraphs");
+    $test_utils:assert_eq(encoded["blocks"][1]["children"][2]["kind"], "hard_break",
+      "Other newlines are explicit hard breaks");
+    const bound = $event:mk_info(#90102, $sub:binding('message))
+      :with_text_binding('message, "*not emphasis* <tag>");
+    const html = $document:render(bound:resolve(#90102), 'text_html)['body];
+    $test_utils:assert_eq(html, "<p>*not emphasis* &lt;tag&gt;</p>", "Literal text binding");
+    return true;
+  endmethod
+
+  method test_perspective_and_captured_location owner: ARCH_WIZARD
+    "Movement after creation cannot change the action location; resolved labels no longer read objects.";
+    const room = create($room);
+    const elsewhere = create($room);
+    const actor = create($thing);
+    const item = create($thing);
+    try
+      room.name = "old room";
+      elsewhere.name = "new room";
+      actor.name = "alice";
+      item.name = "brass *key*";
+      move(actor, room);
+      const event = $event:mk_take(actor, $sub:nc(), " ", $sub:self_alt("take", "takes"),
+        " ", $sub:the('d), " in ", $sub:l(), "."):with_dobj(item);
+      move(actor, elsewhere);
+      const own = event:resolve(actor);
+      const observed = event:resolve(#90102);
+      $test_utils:assert_eq(this:_plain(own), "You take the brass *key* in old room.", "Actor view");
+      $test_utils:assert_eq(this:_plain(observed), "Alice takes the brass *key* in old room.", "Observer view");
+      const passage = $passage:mk(room, "east", {}, "", false,
+        elsewhere, "west", {}, "", false);
+      const template = $sub_utils:compile("{nc} {step|steps} {direction} from {from_room} to {to_room}.");
+      const departure = passage:movement_event(actor, room, elsewhere, "east", "west", template);
+      const arrival = passage:movement_event(actor, room, elsewhere, "east", "west", template, true);
+      $test_utils:assert_eq(this:_plain(departure:resolve(actor)),
+        "You step east from old room to new room.", "Custom departure preserves actor perspective");
+      $test_utils:assert_eq(this:_plain(departure:resolve(#90102)),
+        "Alice steps east from old room to new room.", "Custom departure preserves observer perspective");
+      $test_utils:assert_eq(this:_plain(arrival:resolve(#90102)),
+        "Alice steps west from old room to new room.", "Arrival uses the destination direction");
+      $test_utils:assert_eq({departure.location, arrival.location}, {room, elsewhere},
+        "Both action locations are explicit even after the traveler moves");
+      actor.name = "renamed actor";
+      room.name = "renamed room";
+      item.name = "renamed item";
+      for format in ({'text_html, 'text_djot, 'text_plain})
+        const result = $document:render(observed, format);
+        $test_utils:assert_true(!index(result['body], "renamed"), "Renderers use resolved labels");
+      endfor
+      $test_utils:assert_eq(length($document:render(observed, 'text_html)['annotations]), 3,
+        "Actor, object, and location retain semantic references");
+    finally
+      recycle(actor);
+      recycle(item);
+      recycle(room);
+      recycle(elsewhere);
+    endtry
+    return true;
+  endmethod
+
+  method test_selected_branch_and_typed_bindings owner: ARCH_WIZARD
+    "Only the selected alternative runs. Text and structured bindings have separate operations.";
+    const bomb = $format:producer_inline(<#90122, .mode = 'fail>);
+    const event = $event:mk_info(#90102,
+      $sub:self_altc($format.paragraph:inline("safe ", $format.code:inline("branch")), bomb));
+    $test_utils:assert_eq(this:_plain(event:resolve(#90102)), "Safe branch", "Selected branch only");
+    const content = $document_template:mk('strong, $format:literal_inline("structured"));
+    const bound = $event:mk_info(#90102, $sub:content_binding('value))
+      :with_content_binding('value, content);
+    $test_utils:assert_eq($document:render(bound:resolve(#90102), 'text_html)['body],
+      "<p><strong>structured</strong></p>", "Explicit content binding");
+    const wrong = $event:mk_info(#90102, $sub:binding('value))
+      :with_content_binding('value, content);
+    $test_utils:assert_raises(E_INVARG, wrong, "resolve", {#90102}, "No implicit content coercion");
+    return true;
+  endmethod
+
+  method test_hooks_run_before_rendering owner: ARCH_WIZARD
+    "A resolved document contains only canonical values and never calls its producer during rendering.";
+    this.calls = 0;
+    const event = $event:mk_info(#90102, $format:producer_blocks(this));
+    const document = event:resolve(#90102);
+    $test_utils:assert_eq(this.calls, 1, "One nested inline expansion");
+    const encoded = $document:encode(document);
+    for format in ({'text_html, 'text_djot, 'text_plain})
+      const result = $document:render(document, format);
+      $test_utils:assert_true(index(result['body], "Look"), "Resolved hook output");
+    endfor
+    $test_utils:assert_eq(this.calls, 1, "Serializers do not repeat hooks");
+    $test_utils:assert_eq($document:encode($document:decode(encoded)), encoded, "No unresolved producer metadata");
+    return true;
+  endmethod
+
+  method test_resolution_authority owner: ARCH_WIZARD
+    "Hooks see the actual principal. A different viewer does not grant access to private content.";
+    const probe = $event:mk_info(#90102,
+      $format:producer_inline(<#90122, .mode = 'authority>));
+    const document = this:_resolve_as(probe, #90102, #90100);
+    $test_utils:assert_eq(this:_plain(document), tostr(#90102) + ":" + tostr(#90102),
+      "Viewer and authority remain separate");
+    const private = $event:mk_info(#90102,
+      $format:producer_inline(<#90122, .mode = 'private>));
+    $test_utils:assert_raises(E_PERM, this, "_resolve_as", {private, #90102, #90100},
+      "Resolver does not lend its owner privileges");
+    $test_utils:assert_raises(E_ARGS, probe, "resolve", {#90102, ['principal -> #90100]},
+      "An ordinary map cannot set the principal");
+    return true;
+  endmethod
+
+  method test_public_content_without_viewer owner: ARCH_WIZARD
+    "Public pre-authentication content needs no synthetic actor or viewer.";
+    const public = $event:mk_welcome(false, $format.title:mk("Welcome"), "Public text.");
+    $test_utils:assert_eq(this:_plain(public:resolve(false)), "Welcome\n\nPublic text.", "Public document");
+    const perspective = $event:mk_info(#90102, $sub:n());
+    $test_utils:assert_raises(E_INVARG, perspective, "resolve", {false}, "Perspective requires a viewer");
+    return true;
+  endmethod
+
+  method test_invalid_and_recursive_hooks owner: ARCH_WIZARD
+    "Invalid hook results and recursive producers fail during resolution with an explicit path.";
+    for mode in ({'invalid, 'recursive})
+      const event = $event:mk_info(#90102,
+        $format:producer_inline(<#90122, .mode = mode>));
+      try
+        event:resolve(#90102);
+      except error (E_INVARG, E_QUOTA)
+        $test_utils:assert_true(index(error[2], "document.blocks[0]", 1), "Expansion diagnostic path");
+        continue;
+      endtry
+      raise(E_ASSERT, "Invalid hook unexpectedly resolved");
+    endfor
+    return true;
+  endmethod
+
+  method test_structured_factories owner: ARCH_WIZARD
+    "Factory output preserves multi-block list items, definitions, table cells, and opaque source.";
+    const cell = $format.block:mk($format.paragraph:mk("First."), $format.paragraph:mk("Second."));
+    const event = $event:mk_info(#90102,
+      $format.list:mk({cell}, true, 4), $format.deflist:mk({{"Term", cell}}),
+      $format.table:mk({"Header"}, {{cell}}), $format.code:mk("line\n```", "moo", 21));
+    const document = event:resolve(#90102);
+    const blocks = $document:encode(document)["blocks"];
+    $test_utils:assert_eq(length(blocks[1]["items"][1]["blocks"]), 2, "List item paragraphs");
+    $test_utils:assert_eq(length(blocks[2]["items"][1]["definition"]), 2, "Definition paragraphs");
+    $test_utils:assert_eq(length(blocks[3]["rows"][1]["cells"][1]["blocks"]), 2, "Table cell paragraphs");
+    $test_utils:assert_eq(blocks[4]["first_line"], 21, "Separate source line origin");
+    $test_utils:assert_raises(E_INVARG, $format.table, "mk", {{"A", "B"}, {}, {'start}},
+      "Column alignments must cover every column");
+    $test_utils:assert_raises(E_INVARG, $format.table, "mk", {{"A"}, {}, {'unknown}},
+      "Only document alignments are accepted");
+    let headerless = $format.table:mk({}, {{"Cell"}});
+    headerless.header = false;
+    const encoded = $document:encode($event:mk_info(#90102, headerless):resolve(#90102));
+    $test_utils:assert_false(maphaskey(encoded["blocks"][1], "header"), "Absent headers remain absent");
+    for format in ({'text_html, 'text_djot, 'text_plain})
+      const result = $document:render(document, format);
+      $test_utils:assert_true(index(result['body], "First"), "Complete content in every format");
+    endfor
+    return true;
+  endmethod
+
+  method test_random_choice_is_resolved owner: ARCH_WIZARD
+    "A message bag chooses its template once before several serializers consume the document.";
+    const bag = $msg_bag:mk({"One"}, {"Two"});
+    const document = $event:mk_info(#90102, $format:producer_inline(bag)):resolve(#90102);
+    const choice = this:_plain(document);
+    $test_utils:assert_true(choice in {"One", "Two"}, "One selected message");
+    for format in ({'text_html, 'text_djot})
+      $test_utils:assert_true(index($document:render(document, format)['body], choice), "Same choice in all formats");
+    endfor
+    return true;
+  endmethod
+endobject

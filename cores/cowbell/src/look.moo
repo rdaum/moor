@@ -142,10 +142,10 @@ object LOOK [
           parts = {@parts, frag};
         endfor
         parts = {@parts, "."};
-        desc_content = {@desc_content, $format.paragraph:mk(parts)};
+        desc_content = {@desc_content, $format.paragraph:inline(parts)};
       endif
     endif
-    "Wrap desc_content in paragraph so it composes as block-level HTML";
+    "Keep the description as a paragraph before adding the remaining blocks";
     block_elements = {title, $format.paragraph:mk(desc_content)};
     "Add exits if present (with command links)";
     exits = `this.exits ! E_PROPNF => {}';
@@ -298,27 +298,16 @@ object LOOK [
   endmethod
 
   method into_presentation owner: ARCH_WIZARD
-    "Return panel-ready look payload with title separated from content.";
-    "Args: ?content_type (default 'text_html).";
-    {?content_type = 'text_html} = args;
-    title = this.what:name();
-    event = this:into_event();
-    transformed = event:transform_for(player, content_type);
-    output = {};
-    for entry in (transformed["content"])
-      output = player:_extend_output(output, entry, content_type);
-    endfor
-    content = output:join("");
-    if (content_type == 'text_html)
-      open_h3 = index(content, "<h3>");
-      close_h3 = index(content, "</h3>");
-      if (open_h3 && close_h3 && close_h3 >= open_h3)
-        prefix = open_h3 > 1 ? content[1..open_h3 - 1] | "";
-        suffix_start = close_h3 + 5;
-        suffix = suffix_start <= length(content) ? content[suffix_start..$] | "";
-        content = prefix + suffix;
-      endif
+    "Return a panel payload with its heading separated before serialization.";
+    const {?content_type = 'text_html} = args;
+    const title = this.what:name();
+    const document = this:into_event():resolve(player);
+    let blocks = flycontents(document);
+    if (length(blocks) && blocks[1].kind == 'heading)
+      blocks = blocks[2..$];
     endif
-    return ["title" -> title, "content" -> content, "content_type" -> tostr(content_type), "annotations" -> transformed["annotations"]];
+    const result = $document:render($document:mk(blocks), content_type);
+    return ["title" -> title, "content" -> result['body],
+      "content_type" -> tostr(content_type), "annotations" -> result['annotations]];
   endmethod
 endobject

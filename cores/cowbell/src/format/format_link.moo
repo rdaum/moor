@@ -10,54 +10,16 @@ object FORMAT_LINK [
   override description (owner: HACKER, flags: "rc") = "External URLs and inline formatted content.";
 
   method external owner: HACKER
-    "Create an external link that opens a URL in a new tab.";
-    "Args: (url) or (url, label)";
-    {url, ?label = false} = args;
-    typeof(url) == TYPE_STR || raise(E_TYPE, "URL must be a string");
-    label = label ? label | url;
-    return <this, .link_type = 'external, .url = url, .label = label>;
-  endmethod
-
-  method compose owner: HACKER
-    "Render link for the given content type.";
-    {render_for, content_type, event} = args;
-    if (this.link_type == 'inline)
-      return this:_compose_inline(@args);
-    endif
-    if (content_type == 'text_html)
-      return this:to_html();
-    endif
-    if (content_type == 'text_djot)
-      return this:to_djot();
-    endif
-    return this.label;
-  endmethod
-
-  method to_djot owner: HACKER
-    "Render an external URL with an escaped Djot label.";
-    return "[" + $format.text:escape_djot(this.label) + "](" + this.url + "){.external}";
-  endmethod
-
-  method to_html owner: HACKER
-    "Render an external URL as an escaped HTML anchor.";
-    return <$html, {"a", {"href", this.url, "class", "external", "target", "_blank"}, {this.label}}>;
+    "Construct an external link. Its default label is the literal URL.";
+    const {url, ?label = url} = args;
+    typeof(url) == TYPE_STR || raise(E_TYPE);
+    return $document_template:mk('link, $format:inlines({label}), ['url -> url]);
   endmethod
 
   method inline owner: HACKER
-    "Create inline content mixing text and links.";
-    "Args: list of strings and link flyweights to be composed inline.";
-    "Example: $format.link:inline({'Exits: ', $format.annotation:command('north'), ', ', $format.annotation:command('south')})";
-    {parts} = args;
-    typeof(parts) == TYPE_LIST || raise(E_TYPE, "Parts must be a list");
-    return <this, .link_type = 'inline, {@parts}>;
-  endmethod
-
-  method _compose_inline owner: HACKER
-    "Compose inline fragments while preserving their occurrence tables.";
-    const {render_for, content_type, event} = args;
-    const {parts, annotations} = $format:compose_parts(flycontents(this), @args);
-    const body = content_type == 'text_html ? <$html, {"span", {}, parts}> | parts:join("");
-    return $format:result(body, annotations);
+    "Construct one inline sequence from literal text and document content.";
+    const {parts} = args;
+    return $document_template:mk('inline, $format:inlines(parts));
   endmethod
 
   method ambient_passage owner: HACKER
@@ -79,7 +41,7 @@ object FORMAT_LINK [
       after = description[idx + length(direction)..length(description)];
       parts = {before, $format.annotation:exit(room, direction, matched), after};
     endif
-    return <this, .link_type = 'inline, {@parts}>;
+    return this:inline(parts);
   endmethod
 
   verb linkify_direction (none none none) owner: ARCH_WIZARD flags: "rxd"

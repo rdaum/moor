@@ -211,7 +211,7 @@ object ACTOR [
     endif
     parts = {@parts, "."};
     event = $event:mk_move(this, @parts):as_djot();
-    valid(from_room) && (event = event:with_this(from_room));
+    valid(from_room) && (event = event:with_this(from_room):with_location(from_room));
     valid(to_room) && (event = event:with_iobj(to_room));
     return event;
   endmethod
@@ -245,7 +245,7 @@ object ACTOR [
     endif
     parts = {@parts, "."};
     event = $event:mk_move(this, @parts):as_djot();
-    valid(to_room) && (event = event:with_this(to_room));
+    valid(to_room) && (event = event:with_this(to_room):with_location(to_room));
     valid(from_room) && (event = event:with_iobj(from_room));
     return event;
   endmethod

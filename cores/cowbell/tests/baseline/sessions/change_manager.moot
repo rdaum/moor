@@ -119,7 +119,7 @@ E_PERM
 ; const id = #0.changes_probe["review_id"]; try $change_manager:review(id, $change_manager:status(id)["generation"], {id, 1, 1}); except failure (ANY) return failure[3]["code"]; endtry return "not rejected";
 "stale_cursor"
 
-; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); const text = $format.block:mk(@output):compose(player, 'text_plain, false); return {index(text, "1: return 4;") != 0, #9500:test(), length($change_manager.pending)};
+; const id = #0.changes_probe["review_id"]; const status = $change_manager:status(id); const output = $change_manager:command({"source", tostr(id), tostr(status["generation"]), #0.changes_probe["row"], "live"}); $change_manager:discard(id, status["generation"]); const text = $document:render($event:mk_info(player, $format.block:mk(@output)):resolve(player), 'text_plain)['body]; return {index(text, "1: return 4;") != 0, #9500:test(), length($change_manager.pending)};
 {true, 4, 0}
 
 // Each programmatic request checks current delegation without borrowing another task's elevation.
@@ -175,7 +175,7 @@ E_PERM
 ; player.authoring_features = $wiz_features; return 1;
 1
 
-; const text = $format.block:mk(@$change_manager:command({"packages"})):compose(player, 'text_plain, false); return index(text, "Change packages") != 0 && index(text, "probe") != 0;
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"packages"}))):resolve(player), 'text_plain)['body]; return index(text, "Change packages") != 0 && index(text, "probe") != 0;
 true
 
 @wizard
@@ -225,7 +225,7 @@ E_PERM
 ; const source = {"object #9504", tostr("owner: ", player), tostr("verb test (this none this) owner: ", player, " flags: \"rxd\""), "return this:helper();", "endverb", tostr("verb helper (this none this) owner: ", player, " flags: \"rxd\""), "return 42;", "endverb", "endobject"}; #0.changes_probe = $change_manager:stage("addition_probe", {["label" -> "caller.moo", "text" -> source]}); const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 1)["rows"]; return {length(rows), {row["eligible"] for row in (rows)}, length(verbs(#9504)), #9504:test()};
 {2, {false, false}, 1, 10}
 
-; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"diff", tostr(id)})):compose(player, 'text_plain, false); return index(text, "new member") != 0;
+; const id = #0.changes_probe["review_id"]; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", tostr(id)}))):resolve(player), 'text_plain)['body]; return index(text, "new member") != 0;
 true
 
 ; const id = #0.changes_probe["review_id"]; $change_manager:command({"group", tostr(id), "1", "helper-update", "1", "2"}); return $change_manager:status(id)["generation"];
@@ -242,7 +242,7 @@ E_PERM
 ; const id = #0.changes_probe["review_id"]; return {`$change_manager:set_group(id, 1, "helper-update", {"member"}) ! ANY => "stale"', `$change_manager:resolve_group(id, 1, "helper-update", "incoming") ! ANY => "stale"', $change_manager:status(id)["generation"]};
 {"stale", "stale", 2}
 
-; const id = #0.changes_probe["review_id"]; const text = $format.block:mk(@$change_manager:command({"source", tostr(id), "2", "2", "incoming"})):compose(player, 'text_plain, false); return index(text, "Flags: rxd") != 0;
+; const id = #0.changes_probe["review_id"]; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", tostr(id), "2", "2", "incoming"}))):resolve(player), 'text_plain)['body]; return index(text, "Flags: rxd") != 0;
 true
 
 ; const id = #0.changes_probe["review_id"]; const rows = $change_manager:review(id, 2)["rows"]; #0.changes_probe["caller"] = rows[1]["id"]; $change_manager:resolve(id, 2, rows[1]["id"], "incoming"); const page = $change_manager:review(id, 3); return {page["decision_counts"]["unresolved"], length(page["group_validation"]), #9504:test()};

@@ -8,27 +8,19 @@ object FORMAT_ANNOTATION [
   readable: true
 
   method mk owner: HACKER
-    "Attach an interaction to text or a formatting fragment; anchors are allocated when rendered.";
+    "Construct a reference from an interaction-protocol descriptor and literal inline content.";
     const {label, descriptor} = args;
-    typeof(label) in {TYPE_STR, TYPE_FLYWEIGHT} && typeof(descriptor) == TYPE_MAP || raise(E_TYPE);
-    length(toliteral(descriptor)) <= 2048 || raise(E_INVARG, "Annotation descriptor is too large");
-    const content = typeof(label) == TYPE_STR ? $format.text:mk(label) | label;
-    return <this, .label = content, .descriptor = descriptor>;
+    typeof(descriptor) == TYPE_MAP || raise(E_TYPE);
+    return $document_template:mk('reference, $format:inlines({label}),
+      ['descriptor -> $document_schema:_descriptor_from_wire(descriptor)]);
   endmethod
 
-  method object owner: HACKER
+  method object owner: ARCH_WIZARD
     "Capture an object reference with its authored label.";
+    set_task_perms(caller_perms());
     const {target, ?label = target:name()} = args;
+    is_anonymous(target) && return $format.paragraph:inline(label);
     return this:mk(label, ["kind" -> "object", "ref" -> $url_utils:to_curie_str(target), "objectKind" -> target:reference_kind()]);
-  endmethod
-
-  method with_action owner: HACKER
-    "Attach authored action labels without changing the parser command.";
-    const {action} = args;
-    let descriptor = this.descriptor;
-    descriptor["action"] = action;
-    this.descriptor = descriptor;
-    return this;
   endmethod
 
   method command owner: HACKER
@@ -48,8 +40,9 @@ object FORMAT_ANNOTATION [
     return this:mk(label, ["kind" -> "command", "template" -> template, "arguments" -> fields]);
   endmethod
 
-  method exit owner: HACKER
+  method exit owner: ARCH_WIZARD
     "Use the registered exit descriptor and command supplied by its room.";
+    set_task_perms(caller_perms());
     const {room, direction, ?label = direction} = args;
     const descriptor = room:exit_annotation(direction);
     return length(descriptor) ? this:mk(label, descriptor) | label;
@@ -64,6 +57,7 @@ object FORMAT_ANNOTATION [
   method verb owner: HACKER
     "Identify a verb on its receiver, optionally qualified by the definer.";
     const {receiver, name, ?label = tostr(receiver) + ":" + name, ?definer = false} = args;
+    is_anonymous(receiver) && return $format.paragraph:inline(label);
     let descriptor = ["kind" -> "verb", "receiver" -> $url_utils:to_curie_str(receiver), "name" -> name];
     typeof(definer) == TYPE_OBJ && valid(definer) && (descriptor["definer"] = $url_utils:to_curie_str(definer));
     return this:mk(label, descriptor);
@@ -72,20 +66,8 @@ object FORMAT_ANNOTATION [
   method property owner: HACKER
     "Identify a property location, independently of its current value.";
     const {object, name, ?label = tostr(object) + "." + name} = args;
+    is_anonymous(object) && return $format.paragraph:inline(label);
     return this:mk(label, ["kind" -> "property", "object" -> $url_utils:to_curie_str(object), "name" -> name]);
   endmethod
 
-  method compose owner: HACKER
-    "Produce an occurrence anchor and descriptor for rich output, or just the label for telnet.";
-    const {render_for, content_type, event} = args;
-    const {label, annotations} = $format:unpack(this.label:compose(@args));
-    length(annotations) == 0 || raise(E_INVARG, "An annotation cannot contain another annotation.");
-    content_type in {'text_html, 'text_djot} || return label;
-    "Each occurrence gets an independent anchor, even when the same fragment appears twice.";
-    const id = "a" + uuid();
-    if (content_type == 'text_html)
-      return $format:result(<$html, {"span", {"data-moor-annotation", id}, {label}}>, [id -> this.descriptor]);
-    endif
-    return $format:result("[" + label + "]{annotation=" + id + "}", [id -> this.descriptor]);
-  endmethod
 endobject
