@@ -12,6 +12,16 @@ Cowbell entries.
   for core code.
 - Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 
+### Changed
+
+- Events now resolve viewer-specific document content before rendering. Delivery reuses that
+  document across connection formats. Movement messages retain the action location and resolve
+  actor and observer wording separately.
+- Replace the content `compose`, `render_as`, and event `transform_for` APIs with constructors,
+  `event:resolve(viewer)`, and `$document:render(document, format)`. Strings now represent literal
+  text. Authored Djot parsing is pending, so markup in descriptions and help prose remains literal.
+- Source listings store line numbers separately from source text. Renderers add the number gutter.
+
 ### Fixed
 
 - `string:to_list("")` returns the whole input as one field instead of looping indefinitely.

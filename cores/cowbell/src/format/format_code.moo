@@ -7,134 +7,25 @@ object FORMAT_CODE [
   owner: HACKER
   readable: true
 
-  override description (owner: HACKER, flags: "rc") = "Flyweight delegate for code block content. Renders code in fenced blocks with optional language specification for syntax highlighting.";
+  override description (owner: HACKER, flags: "rc") = "Constructors for opaque inline and block source code.";
 
   method mk owner: HACKER
-    "Create a code block, optionally with a language for syntax highlighting.";
-    const {content, ?language = ""} = args;
-    typeof(content) in {TYPE_STR, TYPE_LIST} || raise(E_TYPE, "Code content must be a string or list");
-    typeof(language) in {TYPE_STR, TYPE_SYM} || raise(E_TYPE, "Language must be a string or symbol");
-    return <this, .inline = false, .language = language, {content}>;
+    "Construct opaque source, with optional language and first source line number.";
+    const {content, ?language = "", ?first_line = false} = args;
+    typeof(content) in {TYPE_STR, TYPE_LIST} || raise(E_TYPE);
+    typeof(language) in {TYPE_STR, TYPE_SYM} || raise(E_TYPE);
+    const text = typeof(content) == TYPE_LIST ? $list_proto:join(content, "\n") | content;
+    let fields = ['text -> text, 'language -> tostr(language)];
+    if (!(typeof(first_line) == TYPE_BOOL && !first_line))
+      fields['first_line] = first_line;
+    endif
+    return $document_node:mk('code_block, {}, fields);
   endmethod
 
   method inline owner: HACKER
-    "Render a short command or reference as inline code.";
+    "Construct opaque inline source without parsing markup or evaluating substitutions.";
     const {text} = args;
     typeof(text) == TYPE_STR || raise(E_TYPE);
-    return <this, .inline = true, .language = "", {text}>;
-  endmethod
-
-  method compose owner: HACKER
-    {render_for, content_type, event} = args;
-    contents = flycontents(this);
-    code_content = contents[1];
-    if (typeof(code_content) == TYPE_LIST)
-      code_content = code_content:join("\n");
-    endif
-    if (this.inline)
-      if (content_type == 'text_html)
-        return <$html, {"code", {}, {code_content}}>;
-      elseif (content_type == 'text_djot)
-        let fence = "`";
-        while (index(code_content, fence))
-          fence = fence + "`";
-        endwhile
-        return length(code_content) ? fence + (code_content[1] == "`" ? " " | "") + code_content + (code_content[$] == "`" ? " " | "") + fence | "";
-      endif
-      return code_content;
-    endif
-    language = tostr(this.language);
-    if (content_type == 'text_djot)
-      if (language)
-        return "\n```" + language + "\n" + code_content + "\n```\n\n";
-      else
-        return "\n```\n" + code_content + "\n```\n\n";
-      endif
-    elseif (content_type == 'text_html)
-      if (language)
-        code_elem = <$html, {"code", ["class" -> "language-" + language], {code_content}}>;
-        return <$html, {"pre", {}, {code_elem}}>;
-      else
-        return <$html, {"pre", {}, {<$html, {"code", {}, {code_content}}>}}>;
-      endif
-    else
-      return code_content + "\n";
-    endif
-  endmethod
-
-  method test_code_block_no_language owner: HACKER
-    code_fw = this:mk("hello world");
-    typeof(code_fw) == TYPE_FLYWEIGHT || raise(E_ASSERT("mk should return flyweight"));
-    contents = flycontents(code_fw);
-    contents[1] == "hello world" || raise(E_ASSERT("Code content should be stored"));
-    result = code_fw:compose($player, 'text_djot, {});
-    result == "\n```\nhello world\n```\n\n" || raise(E_ASSERT("Djot output wrong: " + toliteral(result)));
-    return true;
-  endmethod
-
-  method test_code_block_with_language owner: HACKER
-    code_fw = this:mk("def foo():\n    pass", "python");
-    typeof(code_fw) == TYPE_FLYWEIGHT || raise(E_ASSERT("mk should return flyweight"));
-    code_fw.language == "python" || raise(E_ASSERT("Language should be stored"));
-    result = code_fw:compose($player, 'text_djot, {});
-    result == "\n```python\ndef foo():\n    pass\n```\n\n" || raise(E_ASSERT("Djot output wrong: " + toliteral(result)));
-    return true;
-  endmethod
-
-  method test_code_block_symbol_language owner: HACKER
-    code_fw = this:mk("fn main() {}", 'rust);
-    typeof(code_fw) == TYPE_FLYWEIGHT || raise(E_ASSERT("mk should return flyweight"));
-    code_fw.language == 'rust || raise(E_ASSERT("Language should be stored as symbol, got: " + toliteral(code_fw.language)));
-    result = code_fw:compose($player, 'text_djot, {});
-    result == "\n```rust\nfn main() {}\n```\n\n" || raise(E_ASSERT("Djot output wrong: " + toliteral(result)));
-    return true;
-  endmethod
-
-  method test_code_block_djot_spacing owner: HACKER
-    "Test exact multiline djot output and its fence spacing.";
-    code_fw = this:mk("line1\nline2\nline3");
-    result = code_fw:compose($player, 'text_djot, {});
-    result == "\n```\nline1\nline2\nline3\n```\n\n" || raise(E_ASSERT("Multiline Djot output wrong: " + toliteral(result)));
-    return true;
-  endmethod
-
-  method test_code_after_title_djot owner: HACKER
-    "Test that title + code produces valid djot with proper separation";
-    title = $format.title:mk("Test Title");
-    code = this:mk("test content");
-    title_output = title:compose($player, 'text_djot, {});
-    code_output = code:compose($player, 'text_djot, {});
-    "Concatenate like event system does";
-    combined = title_output + code_output;
-    "Title should end with double newline";
-    "## Test Title\n\n" in title_output || raise(E_ASSERT("Title should end with blank line, got: " + toliteral(title_output)));
-    "Code should start with newline";
-    code_output[1] == "\n" || raise(E_ASSERT("Code should start with newline"));
-    "Combined should have blank line between heading and fence";
-    "Pattern should be: ## Title\n\n\n```";
-    "## Test Title\n\n\n```" in combined || raise(E_ASSERT("Should have blank line between title and code fence, got: " + toliteral(combined)));
-    return true;
-  endmethod
-
-  method test_paste_event_flow owner: HACKER
-    "Test the complete @paste event flow to see what djot is generated";
-    content = "line1\nline2\nline3";
-    title = $format.title:mk("Test pastes");
-    code = this:mk(content);
-    event = $event:mk_paste($player, title, code);
-    "Transform for djot like tell() does";
-    output = event:transform_for($player, 'text_djot)["content"];
-    "Output should be a list of strings";
-    typeof(output) == TYPE_LIST || raise(E_ASSERT("Output should be list, got: " + typeof(output)));
-    "Join the output to see the full djot";
-    djot_str = "";
-    for entry in (output)
-      typeof(entry) == TYPE_STR && (djot_str = djot_str + entry);
-    endfor
-    "Check the djot has proper structure";
-    "## Test pastes" in djot_str || raise(E_ASSERT("Missing title, got: " + toliteral(djot_str)));
-    "```" in djot_str || raise(E_ASSERT("Missing code fence, got: " + toliteral(djot_str)));
-    "line1\nline2\nline3" in djot_str || raise(E_ASSERT("Missing content, got: " + toliteral(djot_str)));
-    return true;
+    return $document_node:mk('inline_code, {}, ['text -> text]);
   endmethod
 endobject

@@ -8,28 +8,8 @@ object FORMAT_TEXT [
   readable: true
 
   method mk owner: HACKER
-    "Render literal text without interpreting it as markup.";
+    "Construct literal inline content, including explicit hard breaks for newlines.";
     const {text} = args;
-    typeof(text) == TYPE_STR || raise(E_TYPE);
-    return <this, {text}>;
-  endmethod
-
-  method compose owner: HACKER
-    "Escape literal text for Djot; return raw text for plain output or the HTML renderer.";
-    const {render_for, content_type, event} = args;
-    const {text} = flycontents(this);
-    return content_type == 'text_djot ? this:escape_djot(text) | text;
-  endmethod
-
-  method escape_djot owner: HACKER
-    "Escape literal text for Djot, including table delimiters and attribute syntax.";
-    const {text} = args;
-    let escaped = "";
-    for i in [1..length(text)]
-      const ch = text[i];
-      const punctuation = index("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", ch);
-      escaped = escaped + (punctuation ? "\\" | "") + ch;
-    endfor
-    return escaped;
+    return $document_template:mk('inline, $format:literal_inline(text));
   endmethod
 endobject

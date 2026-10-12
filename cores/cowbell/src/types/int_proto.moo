@@ -10,11 +10,6 @@ object INT_PROTO [
 
   override description (owner: HACKER, flags: "rc") = "Prototype object for integer utility methods.";
 
-  method compose owner: HACKER
-    "Return string representation for event composition";
-    return tostr(args[1]);
-  endmethod
-
   method format_time_seconds owner: HACKER
     "Convert integer seconds to human-readable time format";
     "Usage: seconds_value:format_time_seconds()";

@@ -1673,7 +1673,7 @@ object BUILDER_FEATURES [
         else
           value_summary = toliteral(prop_value);
         endif
-        rows = {@rows, {prop_name, value_summary}};
+        rows = {@rows, {tostr(prop_name), value_summary}};
       endfor
       "Output results";
       header = "Message properties for " + obj_name + " (" + tostr(target_obj) + "):";
@@ -1722,7 +1722,7 @@ object BUILDER_FEATURES [
       else
         rule_expr = $rule_engine:decompile_rule(prop_value);
       endif
-      rows = {@rows, {prop_name, rule_expr}};
+      rows = {@rows, {tostr(prop_name), rule_expr}};
     endfor
     "Output results";
     header = "Rule properties for " + obj_name + " (" + tostr(target_obj) + "):";

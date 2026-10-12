@@ -296,11 +296,6 @@ object STR_PROTO [
     endif
   endmethod
 
-  method render_as owner: HACKER
-    "Return the string unchanged for the requested content type.";
-    return args[1];
-  endmethod
-
   method space owner: HACKER
     "Return abs(width) characters of repeated fill, up to 100,000 characters.";
     "Negative widths anchor fill on the right. A string width uses its length.";
@@ -827,11 +822,6 @@ object STR_PROTO [
     endif
   endmethod
 
-  method compose owner: HACKER
-    "Return the given string unchanged for compatibility with composable content APIs.";
-    return args[1];
-  endmethod
-
   method indefinite_article owner: HACKER
     "Return 'an' for an initial vowel, or 'a' otherwise.";
     const {s} = args;
@@ -957,9 +947,6 @@ object STR_PROTO [
       "literal_object str_proto sysobj property");
     $test_utils:assert_true(equal("missing":literal_object(), $failed_match),
       "literal_object rejects bare strings");
-    $test_utils:assert_true(equal("raw":render_as('text), "raw"),
-      "render_as returns strings unchanged");
-    $test_utils:assert_true(equal("raw":compose(), "raw"), "compose returns strings unchanged");
     return true;
   endmethod
 

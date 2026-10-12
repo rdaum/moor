@@ -65,6 +65,24 @@ top of the event and behaviour systems without requiring framework changes.
 - Rich look descriptions with structured content (`look.moo`, `examination.moo`)
 - Support for multiple content types (text/plain, text/html, text/djot)
 
+Events hold captured action facts and content templates. Call `event:resolve(viewer)` to produce a
+canonical document under the caller's permissions. The viewer controls perspective and does not
+grant authority. Render the result with `$document:render(document, format)` using `'text_plain`,
+`'text_html`, or `'text_djot`. The result has symbol keys `body`, `content_type`, and `annotations`.
+Renderers use the resolved document without reading world state or calling content producers.
+
+The `$format` factories construct document templates. Strings are literal text. Use
+`$format.code:inline(text)` for inline source, `$format.code:mk(lines, language, first_line)` for
+source listings, and the paragraph, list, table, and reference constructors for structure.
+Custom producers use `$format:producer_inline(object)` or `$format:producer_blocks(object)`.
+Their `resolve_inline(context)` or `resolve_blocks(context)` methods return node sequences.
+The context contains `viewer`, `principal`, and captured `event` facts as symbol keys.
+
+Named event bindings use `with_text_binding`, `with_object_binding`, or `with_content_binding`.
+`$sub:binding(name)` reads text or an object name. `$sub:content_binding(name)` inserts structured
+inline content. The old `compose`, `render_as`, and `transform_for` interfaces are removed.
+Authored Djot parsing is pending; markup in descriptions and help prose currently remains literal.
+
 **Core Objects:**
 
 - `$player` with multi-connection support, inventory, pronouns (`player.moo`)

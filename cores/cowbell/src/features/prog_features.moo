@@ -319,12 +319,8 @@ object PROG_FEATURES [
       headers = {"Verb", "Args", "Owner", "Flags"};
       row = {$format.annotation:verb(target_obj, tostr(verb_name), verb_signature, verb_location), args_spec, $format.annotation:object(verb_owner, tostr(verb_owner)), verb_flags};
       metadata_table = $format.table:mk(headers, {row});
-      "Add line numbers if requested";
-      if (!hide_numbers)
-        code_lines = $prog_utils:format_line_numbers(code_lines);
-      endif
-      "Format as code block";
-      formatted_code = $format.code:mk(code_lines, 'moo);
+      "Keep source exact. Renderers add a separate gutter when requested.";
+      formatted_code = $format.code:mk(code_lines, 'moo, hide_numbers ? false | 1);
       "Combine table and code";
       content = $format.block:mk(metadata_table, formatted_code);
       "Create and send listing event";
@@ -3123,20 +3119,20 @@ object PROG_FEATURES [
       for event in (events)
         $test_utils:assert_true(event:validate(), "display helper should emit a valid event");
       endfor
-      const local_property = flycontents(events[3])[1][2].rows[1][1];
-      const inherited_property = flycontents(events[4])[1][2].rows[1][1];
-      const local_verb = flycontents(events[6])[1][2].rows[1][1];
-      const inherited_verb = flycontents(events[7])[1][2].rows[1][1];
-      $test_utils:assert_eq(local_property:compose(player, 'text_plain, events[3]), ".private_display_prop", "local property should be displayed");
-      $test_utils:assert_eq(inherited_property:compose(player, 'text_plain, events[4]), ".private_display_parent_prop", "inherited property should be displayed");
-      $test_utils:assert_eq(local_verb:compose(player, 'text_plain, events[6]), tostr(fixture) + ":private_display_verb", "local verb should be displayed");
-      $test_utils:assert_eq(inherited_verb:compose(player, 'text_plain, events[7]), tostr(parent_fixture) + ":private_display_parent_verb", "inherited verb should be displayed");
+      const local_property = $document:encode(events[3]:resolve(player))["blocks"][1]["rows"][1]["cells"][1]["blocks"][1]["children"][1];
+      const inherited_property = $document:encode(events[4]:resolve(player))["blocks"][1]["rows"][1]["cells"][1]["blocks"][1]["children"][1];
+      const local_verb = $document:encode(events[6]:resolve(player))["blocks"][1]["rows"][1]["cells"][1]["blocks"][1]["children"][1];
+      const inherited_verb = $document:encode(events[7]:resolve(player))["blocks"][1]["rows"][1]["cells"][1]["blocks"][1]["children"][1];
+      $test_utils:assert_eq(local_property["children"][1]["text"], ".private_display_prop", "local property should be displayed");
+      $test_utils:assert_eq(inherited_property["children"][1]["text"], ".private_display_parent_prop", "inherited property should be displayed");
+      $test_utils:assert_eq(local_verb["children"][1]["text"], tostr(fixture) + ":private_display_verb", "local verb should be displayed");
+      $test_utils:assert_eq(inherited_verb["children"][1]["text"], tostr(parent_fixture) + ":private_display_parent_verb", "inherited verb should be displayed");
       const receiver_ref = $url_utils:to_curie_str(fixture);
       const parent_ref = $url_utils:to_curie_str(parent_fixture);
-      $test_utils:assert_eq(local_property.descriptor, ["kind" -> "property", "object" -> receiver_ref, "name" -> "private_display_prop"], "local property reference should target the inspected object");
-      $test_utils:assert_eq(inherited_property.descriptor, ["kind" -> "property", "object" -> receiver_ref, "name" -> "private_display_parent_prop"], "inherited property reference should retain the inspected object's value");
-      $test_utils:assert_eq(local_verb.descriptor, ["kind" -> "verb", "receiver" -> receiver_ref, "name" -> "private_display_verb", "definer" -> receiver_ref], "local verb reference should identify its receiver and definer");
-      $test_utils:assert_eq(inherited_verb.descriptor, ["kind" -> "verb", "receiver" -> receiver_ref, "name" -> "private_display_parent_verb", "definer" -> parent_ref], "inherited verb reference should distinguish receiver from definer");
+      $test_utils:assert_eq(local_property["descriptor"], ["kind" -> "property", "object" -> receiver_ref, "name" -> "private_display_prop"], "local property reference should target the inspected object");
+      $test_utils:assert_eq(inherited_property["descriptor"], ["kind" -> "property", "object" -> receiver_ref, "name" -> "private_display_parent_prop"], "inherited property reference should retain the inspected object's value");
+      $test_utils:assert_eq(local_verb["descriptor"], ["kind" -> "verb", "receiver" -> receiver_ref, "name" -> "private_display_verb", "definer" -> receiver_ref], "local verb reference should identify its receiver and definer");
+      $test_utils:assert_eq(inherited_verb["descriptor"], ["kind" -> "verb", "receiver" -> receiver_ref, "name" -> "private_display_parent_verb", "definer" -> parent_ref], "inherited verb reference should distinguish receiver from definer");
     finally
       stubbed_inform && `delete_verb(player, "inform_current") ! E_VERBNF => 0';
       added_inform_log && `delete_property(player, "prog_show_last_inform") ! E_PROPNF => 0';

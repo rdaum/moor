@@ -55,7 +55,7 @@ object HELP [
         endfor
         references = {@references, reference};
       endfor
-      lines = {@lines, "", "See also:", $format.list:mk(references, false, true)};
+      lines = {@lines, "", "See also:", $format.list:mk(references, false)};
     endif
     return lines;
   endmethod

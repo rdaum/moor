@@ -68,6 +68,10 @@ These scenarios use inert content and need no connection, worker, or live world.
 of the default method suite. Their sample output can be checked with the installed Djot client
 parser without adding a parser dependency to the core test runner.
 
+Fixture `#90122` checks event resolution: captured locations, actor and observer wording, literal
+bindings, selected alternatives, caller permissions, producer hooks, and bounded expansion.
+Headless event scenarios also check MIME negotiation and reuse across connections.
+
 ## Commands and committed events
 
 `runtime-session` uses the shared runner in `cores/tools/session-runner` with `--cowbell`. This option enables

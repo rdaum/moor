@@ -52,6 +52,15 @@ object MSG_BAG [
     return entries[random(length(entries))];
   endmethod
 
+  method resolve_inline owner: ARCH_WIZARD
+    "Choose one compiled message during resolution. All renderers then share that choice.";
+    set_task_perms(caller_perms());
+    const {context} = args;
+    const selected = this:pick();
+    typeof(selected) != TYPE_ERR || raise(selected, "Message bag is empty");
+    return $format:inlines({selected});
+  endmethod
+
   method set_entry owner: ARCH_WIZARD
     "Replace entry at index. Returns new flyweight or the text for objects.";
     set_task_perms(caller_perms());

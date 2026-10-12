@@ -1048,10 +1048,8 @@ object ROOM [
     else
       msg = prefix + ", you hear something.";
     endif
-    "Build event manually to avoid $nothing.name error";
-    content = $ansi:wrap(msg, 'dim, 'italic);
-    normalized = $event:normalize_content(content);
-    return <$event, .actor = $nothing, .actor_name = "", .verb = "distant", .dobj = false, .iobj = false, .timestamp = time(), .this_obj = false, normalized>;
+    const narrative = $document_template:mk('emphasis, $format:literal_inline(msg));
+    return $event:mk_distant(false, narrative):with_location(this);
   endmethod
 
   method announce_distant owner: ARCH_WIZARD

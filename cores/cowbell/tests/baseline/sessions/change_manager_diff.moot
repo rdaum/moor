@@ -9,7 +9,7 @@ true
 ; return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> #0.diff_source]}, "adopt")["review_id"];
 1
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "1"})):compose(player, 'text_plain, false); return {index(text, "110 programs without a baseline") != 0, index(text, "$diff_target:same1") != 0, index(text, "Record baseline") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", "1"}))):resolve(player), 'text_plain)['body]; return {index(text, "110 programs without a baseline") != 0, index(text, "$diff_target:same1") != 0, index(text, "Record baseline") != 0};
 {true, true, true}
 
 ; $change_manager:apply(1, 1); return true;
@@ -21,13 +21,13 @@ true
 ; set_verb_info(#9500, "blocked", {#90101, "rxd", "blocked"}); add_property(#9500, "runtime_setting", 42, {player, ""}); add_verb(#9500, {player, "rxd", "local_added"}, {"this", "none", "this"}); set_verb_code(#9500, "local_added", {"return 9;"}); load_object({"object #9501", tostr("owner: ", player), "name: \"Local package helper\"", "endobject"}); $change_manager:configure("diff_probe", {#9500, #9501}, [], "", 1); return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> #0.diff_source]})["review_id"];
 2
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "2"})):compose(player, 'text_plain, false); return {index(text, "110 members match the accepted baseline and upstream.") != 0, index(text, "No selected changes to apply.") != 0, index(text, "Only in this MOO") != 0, index(text, "$diff_target:local_added") != 0, index(text, "#9501 (Local package helper)") != 0, index(text, "Ownership or permissions") == 0, index(text, "Owner/flags") == 0, index(text, "property declarations") == 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", "2"}))):resolve(player), 'text_plain)['body]; return {index(text, "110 members match the accepted baseline and upstream.") != 0, index(text, "No selected changes to apply.") != 0, index(text, "Only in this MOO") != 0, index(text, "$diff_target:local_added") != 0, index(text, "#9501 (Local package helper)") != 0, index(text, "Ownership or permissions") == 0, index(text, "Owner/flags") == 0, index(text, "property declarations") == 0};
 {true, true, true, true, true, true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"details", "2"})):compose(player, 'text_plain, false); return {index(text, "$diff_target:blocked") != 0, index(text, "Ownership or permissions") != 0, index(text, "member unchanged") != 0, index(text, "Owner/flags") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"details", "2"}))):resolve(player), 'text_plain)['body]; return {index(text, "$diff_target:blocked") != 0, index(text, "Ownership or permissions") != 0, index(text, "member unchanged") != 0, index(text, "Owner/flags") != 0};
 {true, true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"details", "2", "999"})):compose(player, 'text_plain, false); return {index(text, "Existing property values and object attributes stay unchanged.") != 0, index(text, "Checks\n") == 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"details", "2", "999"}))):resolve(player), 'text_plain)['body]; return {index(text, "Existing property values and object attributes stay unchanged.") != 0, index(text, "Checks\n") == 0};
 {true, true}
 
 // Service pagination includes formatted reference labels.
@@ -37,33 +37,33 @@ true
 ; $change_manager:discard(2, 1); set_verb_code(#9500, "local", {"return 3;"}); set_verb_code(#9500, "conflict", {"return 3;"}); set_verb_info(#9500, "blocked", {#90101, "rxd", "blocked"}); let lines = #0.diff_source; let update = false; for i in [1..length(lines)] if (index(lines[i], "verb ") == 1) update = index(lines[i], "verb update") == 1 || index(lines[i], "verb conflict ") == 1 || index(lines[i], "verb blocked ") == 1; elseif (lines[i] == "return 1;" && update) lines[i] = "return 2;"; endif endfor return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> lines]})["review_id"];
 3
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "3"})):compose(player, 'text_plain, false); return {index(text, "52 upstream updates; 1 local edit; 1 conflict. 56 members match the accepted baseline and upstream.") != 0, index(text, "$diff_target:update1") != 0, index(text, "$diff_target:update20") != 0, index(text, "$diff_target:update21") == 0, index(text, "$diff_target:same1") == 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", "3"}))):resolve(player), 'text_plain)['body]; return {index(text, "52 upstream updates; 1 local edit; 1 conflict. 56 members match the accepted baseline and upstream.") != 0, index(text, "$diff_target:update1") != 0, index(text, "$diff_target:update20") != 0, index(text, "$diff_target:update21") == 0, index(text, "$diff_target:same1") == 0};
 {true, true, true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "$diff_target:update51") != 0, index(text, "$diff_target:local") != 0, index(text, "Keep my code") != 0, index(text, "$diff_target:conflict") != 0, index(text, "Ownership or permissions") != 0, index(text, "1 member or group needs a choice") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", "3", "106"}))):resolve(player), 'text_plain)['body]; return {index(text, "$diff_target:update51") != 0, index(text, "$diff_target:local") != 0, index(text, "Keep my code") != 0, index(text, "$diff_target:conflict") != 0, index(text, "Ownership or permissions") != 0, index(text, "1 member or group needs a choice") != 0};
 {true, true, true, true, true, true}
 
 ; const review = $change_manager:review(3, 1); return {review["decision_counts"], review["operation"]};
 {["blocked" -> 1, "selected" -> 51, "unresolved" -> 1], "update"}
 
-; const text = $format.block:mk(@$change_manager:command({"source", "3", "1", "56", "incoming"})):compose(player, 'text_plain, false); return {index(text, "Upstream contents") != 0, index(text, "$diff_target:update1") != 0, index(text, "1: return 2;") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "1", "56", "incoming"}))):resolve(player), 'text_plain)['body]; return {index(text, "Upstream contents") != 0, index(text, "$diff_target:update1") != 0, index(text, "1: return 2;") != 0};
 {true, true, true}
 
-; const text = $format.block:mk(@$change_manager:command({"resolve", "3", "1", "108", "local"})):compose(player, 'text_plain, false); return {index(text, "Generation 2") != 0, index(text, "Keep my code saved") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"resolve", "3", "1", "108", "local"}))):resolve(player), 'text_plain)['body]; return {index(text, "Generation 2") != 0, index(text, "Keep my code saved") != 0};
 {true, true}
 
 // Numeric selectors retain stale-generation protection.
 ; return `$change_manager:command({"source", "3", "1", "56", "incoming"}) ! E_INVARG => "stale"';
 "stale"
 
-; const text = $format.block:mk(@$change_manager:command({"diff", "3", "106"})):compose(player, 'text_plain, false); return {index(text, "Keep my code") != 0, index(text, "needs a choice") == 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"diff", "3", "106"}))):resolve(player), 'text_plain)['body]; return {index(text, "Keep my code") != 0, index(text, "needs a choice") == 0};
 {true, true}
 
 ; const page = $change_manager:review(3, 2); return {page["decision_counts"], page["rows"][1]["label"]};
 {["blocked" -> 1, "selected" -> 52, "unresolved" -> 0], "$diff_target:same1"}
 
 // Existing service row IDs still work.
-; const row = $change_manager:review(3, 2, {3, 2, 56})["rows"][1]["id"]; const text = $format.block:mk(@$change_manager:command({"source", "3", "2", row, "incoming"})):compose(player, 'text_plain, false); return index(text, "1: return 2;") != 0;
+; const row = $change_manager:review(3, 2, {3, 2, 56})["rows"][1]["id"]; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "2", row, "incoming"}))):resolve(player), 'text_plain)['body]; return index(text, "1: return 2;") != 0;
 true
 
 ; return `$change_manager:command({"source", "3", "2", "999", "incoming"}) ! E_INVARG => "missing"';

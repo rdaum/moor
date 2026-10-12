@@ -7,6 +7,7 @@ true
 ~~Changes
 =
 ~~No pending review with that ID.
+=
 ~~Find active reviews
 ~~@changes packages
 
@@ -28,30 +29,39 @@ true
 ~~cowbell · Review 1
 =
 ~~Fetch failed: No worker available for curl
+=
 ~~The server needs a curl worker. Start one, then use @changes status and @changes retry.
-~~* Read the current failure
+=
+~~- Read the current failure
 ~~@changes status
-~~* Retry after fixing the source or worker
+=
+~~- Retry after fixing the source or worker
 ~~@changes retry
-~~* Discard failed review
+=
+~~- Discard failed review
 ~~@changes discard 1 1
 
 % @changes status 1
 ~~cowbell · Review 1
 =
 ~~Fetch failed: No worker available for curl
+=
 ~~The server needs a curl worker. Start one, then use @changes status and @changes retry.
-~~* Read the current failure
+=
+~~- Read the current failure
 ~~@changes status
-~~* Retry after fixing the source or worker
+=
+~~- Retry after fixing the source or worker
 ~~@changes retry
-~~* Discard failed review
+=
+~~- Discard failed review
 ~~@changes discard 1 1
 
 % @changes fetch
 ~~Changes
 =
 ~~Review 1 already exists for cowbell. Use @changes status 1 to check its progress or recover it.
+=
 ~~Check existing review
 ~~@changes status 1
 
@@ -66,6 +76,7 @@ true
 ~~Changes
 =
 ~~Review 2 already exists for probe. Use @changes diff 2 to open it.
+=
 ~~Open existing review
 ~~@changes diff 2
 

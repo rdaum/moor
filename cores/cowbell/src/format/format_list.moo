@@ -10,67 +10,18 @@ object FORMAT_LIST [
   override description (owner: HACKER, flags: "rc") = "Flyweight delegate for list content in events.";
 
   method mk owner: HACKER
-    "Create list flyweight with optional ordered attribute";
-    const {content, ?ordered = false, ?columns = false} = args;
-    typeof(content) != TYPE_LIST && raise(E_TYPE, "List content must be a list");
-    return <this, .ordered = ordered, .layout = columns ? "reference-columns" | "", {@content}>;
+    "Construct a list. Each item can contain inline content or an explicit block group.";
+    const {items, ?ordered = false, ?start = 1} = args;
+    typeof(items) == TYPE_LIST && typeof(ordered) == TYPE_BOOL || raise(E_TYPE);
+    const records = {['blocks -> $format:blocks({item})] for item in (items)};
+    let fields = ['style -> ordered ? 'numbered | 'bullet];
+    ordered && (fields['start] = start);
+    return $document_template:mk('list, records, fields);
   endmethod
 
   method actions owner: HACKER
-    "Group labelled interactions as actions; plain output remains a list.";
-    const {content} = args;
-    typeof(content) == TYPE_LIST || raise(E_TYPE);
-    return <this, .ordered = false, .layout = "action-list", {@content}>;
-  endmethod
-
-  method compose owner: HACKER
-    "Compose each list item while preserving its annotations.";
-    const {render_for, content_type, event} = args;
-    const {parts, annotations} = $format:compose_parts(flycontents(this), @args);
-    if (content_type == 'text_html)
-      const items = { <$html, {"li", {}, {part}}> for part in (parts) };
-      return $format:result(<$html, {this.ordered ? "ol" | "ul", this.layout ? {"class", this.layout} | {}, items}>, annotations);
-    endif
-    const prefix = this.ordered ? "1. " | "* ";
-    const lines = { prefix + part:replace_all("\n", "\n" + (this.ordered ? "   " | "  ")) for part in (parts) };
-    const layout = content_type == 'text_djot && this.layout ? "{." + this.layout + "}\n" | "";
-    const body = layout + lines:join("\n");
-    return $format:result(content_type == 'text_djot ? "\n" + body + "\n" | body, annotations);
-  endmethod
-
-  method test_unordered_list owner: HACKER
-    "Test creating unordered HTML list";
-    items = {"Coffee", "Tea", "Milk"};
-    list_obj = this:mk(items);
-    html_result = list_obj:compose($nothing, 'text_html, $nothing);
-    xml_result = html_result:render('text_html);
-    parsed = xml_parse(xml_result, TYPE_LIST);
-    expected = {"ul", {"li", "Coffee"}, {"li", "Tea"}, {"li", "Milk"}};
-    parsed != expected && raise(E_ASSERT, "Expected: " + toliteral(expected) + " Got: " + toliteral(parsed));
-    return true;
-  endmethod
-
-  method test_ordered_list owner: HACKER
-    "Test creating ordered HTML list";
-    items = {"First", "Second", "Third"};
-    list_obj = this:mk(items, true);
-    html_result = list_obj:compose($nothing, 'text_html, $nothing);
-    xml_result = html_result:render('text_html);
-    parsed = xml_parse(xml_result, TYPE_LIST);
-    expected = {"ol", {"li", "First"}, {"li", "Second"}, {"li", "Third"}};
-    parsed != expected && return E_ASSERT;
-    return true;
-  endmethod
-
-  method test_plain_text_output owner: HACKER
-    "Test plain text list output";
-    items = {"Apple", "Banana", "Cherry"};
-    unordered = this:mk(items);
-    ordered = this:mk(items, true);
-    plain_unordered = unordered:compose($nothing, 'text_plain, $nothing);
-    plain_ordered = ordered:compose($nothing, 'text_plain, $nothing);
-    plain_unordered != "* Apple\n* Banana\n* Cherry" && return E_ASSERT;
-    plain_ordered != "1. Apple\n1. Banana\n1. Cherry" && return E_ASSERT;
-    return true;
+    "Construct a list of action references. Layout belongs to the renderer.";
+    const {items} = args;
+    return $format.list:mk(items);
   endmethod
 endobject

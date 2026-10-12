@@ -782,7 +782,7 @@ object PLAYER [
       const actions = exam.object_ref:inspection_commands(this);
       verb_sigs = { $obj_utils:command_entry(exam.object_ref, spec, this, "", actions) for spec in (exam.verbs) };
       "Create formatted verb list";
-      verb_list = $format.list:mk(verb_sigs, false, true);
+      verb_list = $format.list:mk(verb_sigs, false);
       verb_title = $format.title:mk("Obvious verbs");
       lines = {@lines, verb_title, verb_list};
     endif
@@ -826,7 +826,7 @@ object PLAYER [
           endif
         endfor
         lines = {@lines, "", $format.title:mk("Help Topics", 4)};
-        lines = {@lines, $format.list:mk({ $format.annotation:help(topic_entry.provider, topic_entry.name) for topic_entry in (topics) }, false, true)};
+        lines = {@lines, $format.list:mk({ $format.annotation:help(topic_entry.provider, topic_entry.name) for topic_entry in (topics) }, false)};
         lines = {@lines, "Type `help <topic>` for details."};
       endif
       "Then commands";
@@ -922,7 +922,7 @@ object PLAYER [
         lines = {@lines, "(No topics)"};
       else
         const topic_links = { $format.paragraph:mk($format.annotation:help(src, topic_entry.name), " \u2014 ", topic_entry.summary) for topic_entry in (topics) };
-        lines = {@lines, $format.list:mk(topic_links, false, true)};
+        lines = {@lines, $format.list:mk(topic_links, false)};
       endif
       lines = {@lines, "", "Tip: `help <topic> from " + src.name + "`"};
       content = $format.block:mk($format.title:mk("Help Source"), @lines);
@@ -1205,7 +1205,7 @@ object PLAYER [
         for verb_info in (ambient_verbs)
           verbs = {@verbs, verb_info["annotation"]};
         endfor
-        lines = {@lines, $format.list:mk(verbs, false, true)};
+        lines = {@lines, $format.list:mk(verbs, false)};
       else
         lines = {@lines, "(No commands available)"};
       endif
@@ -1231,7 +1231,7 @@ object PLAYER [
       lines = {@lines, ""};
       for obj_info in (targetable_verbs)
         lines = {@lines, $format.title:mk("Things you can do with " + obj_info["object_name"], 4)};
-        lines = {@lines, $format.list:mk(obj_info["verbs"], false, true)};
+        lines = {@lines, $format.list:mk(obj_info["verbs"], false)};
       endfor
     else
       lines = {@lines, "(No commands available for this object)"};
@@ -1248,7 +1248,7 @@ object PLAYER [
     lines = {@lines, ""};
     for obj_info in (targetable_verbs)
       lines = {@lines, $format.title:mk("Things you can do with " + obj_info["object_name"], 4)};
-      lines = {@lines, $format.list:mk(obj_info["verbs"], false, true)};
+      lines = {@lines, $format.list:mk(obj_info["verbs"], false)};
     endfor
     return lines;
   endmethod
@@ -1274,13 +1274,13 @@ object PLAYER [
     if (player_verbs && length(player_verbs) > 0)
       lines = {@lines, ""};
       lines = {@lines, $format.title:mk("Things you can do", 4)};
-      lines = {@lines, $format.list:mk(player_verbs, false, true)};
+      lines = {@lines, $format.list:mk(player_verbs, false)};
     endif
     "Display room commands";
     if (room_verbs && length(room_verbs) > 0)
       lines = {@lines, ""};
       lines = {@lines, $format.title:mk("Things you can do in this room", 4)};
-      lines = {@lines, $format.list:mk(room_verbs, false, true)};
+      lines = {@lines, $format.list:mk(room_verbs, false)};
     endif
     return lines;
   endmethod

@@ -2417,7 +2417,7 @@ object CHANGE_MANAGER [
         const review = package["active"] ? this:_command_action(tostr("@changes diff ", package["active"]), tostr("Review ", package["active"])) | "None";
         const complete = `package["policy"]["complete"] ! E_RANGE => {}';
         const scope = length(complete) == length(package["objects"]) && length(complete) > 0 ? "Complete" | complete ? "Mixed" | "Partial";
-        rows = {@rows, {name, package["generation"], length(package["objects"]), scope, source, review}};
+        rows = {@rows, {name, tostr(package["generation"]), tostr(length(package["objects"])), scope, source, review}};
       endfor
       return {$format.title:mk("Change packages", 3), $format.table:mk({"Package", "Generation", "Objects", "Scope", "Upstream", "Review"}, rows)};
     endif

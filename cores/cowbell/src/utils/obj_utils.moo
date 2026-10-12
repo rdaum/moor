@@ -63,22 +63,22 @@ object OBJ_UTILS [
       invocation = length(fields) ? $format.annotation:command_template(template, fields, caption) | $format.annotation:command(template, caption);
     endif
     let descriptor = invocation.descriptor;
-    const templated = maphaskey(descriptor, "template");
-    caption = templated ? descriptor["template"] | descriptor["command"];
+    const templated = maphaskey(descriptor, 'template);
+    caption = templated ? descriptor['template] | descriptor['command];
     if (templated)
-      let fields = descriptor["arguments"];
+      let fields = descriptor['arguments];
       const labels = maphaskey(hint, "arguments") ? hint["arguments"] | [];
       for slot in (mapkeys(fields))
         let field = fields[slot];
-        const field_label = maphaskey(labels, slot) && typeof(labels[slot]) == TYPE_STR && labels[slot] ? labels[slot] | field["label"];
-        field["label"] = field_label;
+        const field_label = maphaskey(labels, tostr(slot)) && typeof(labels[tostr(slot)]) == TYPE_STR && labels[tostr(slot)] ? labels[tostr(slot)] | field['label];
+        field['label] = field_label;
         fields[slot] = field;
-        caption = strsub(caption, "{" + slot + "}", "<" + field_label:lowercase() + ">");
+        caption = strsub(caption, "{" + tostr(slot) + "}", "<" + field_label:lowercase() + ">");
       endfor
-      descriptor["arguments"] = fields;
+      descriptor['arguments] = fields;
     endif
     caption = label || strsub(caption, tostr(receiver), receiver:name());
-    invocation = $format.annotation:mk(caption, descriptor);
+    invocation = $document_template:mk('reference, $format:inlines({caption}), ['descriptor -> descriptor]);
     return this:command_with_source(invocation:with_action(hint), receiver, names, definer, viewer);
   endmethod
 
@@ -86,7 +86,7 @@ object OBJ_UTILS [
     "Keep invocation primary and offer programmer navigation as a separate adjacent link.";
     set_task_perms(caller_perms());
     const {invocation, receiver, name, definer, viewer} = args;
-    const linked = maphaskey(invocation.descriptor, "action") ? invocation | invocation:with_action(definer:command_action(name));
+    const linked = maphaskey(invocation.descriptor, 'action) ? invocation | invocation:with_action(definer:command_action(name));
     !viewer.programmer && return linked;
     return $format.paragraph:inline(linked, " ", $format.annotation:verb(receiver, name, "\u2197", definer));
   endmethod

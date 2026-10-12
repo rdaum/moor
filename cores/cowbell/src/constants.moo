@@ -61,6 +61,8 @@ define DOCUMENT = #3000;
 define DOCUMENT_NODE = #3001;
 define DOCUMENT_SCHEMA = #3002;
 define DOCUMENT_RENDERER = #3003;
+define DOCUMENT_RESOLVER = #3004;
+define DOCUMENT_TEMPLATE = #3005;
 
 // git
 define GIT = #135;
