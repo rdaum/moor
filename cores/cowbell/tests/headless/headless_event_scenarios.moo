@@ -158,7 +158,7 @@ object HEADLESS_EVENT_SCENARIOS
   endverb
   verb test_help_verb_annotations (this none this) owner: ARCH_WIZARD flags: "rxd"
     "Help resolves real verbs, preserves code examples, and has plain text fallback.";
-    const prose = $help_utils:annotate_prose("Use `look` or `say <message>`. Keep `no_such_verb_123` and `` `look` `` intact.", $test_player);
+    const prose = $help_utils:annotate_prose($format.djot:blocks("Use `look` or `say <message>`. Keep `no_such_verb_123` and `` `look` `` intact."), $test_player);
     const event = $event:mk_info(player, prose);
     const rich = $document:render(event:resolve(player), 'text_djot);
     $test_utils:assert_eq(length(rich['annotations]), 4, "known mentions have actions and separate programmer source references");

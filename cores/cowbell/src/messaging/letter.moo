@@ -84,12 +84,11 @@ object LETTER [
     if (length(text) == 0)
       parts = {@parts, "(blank)"};
     else
-      parts = {@parts, text:join("\n")};
+      parts = {@parts, $format:authored(this.content_kind, text:join("\n"))};
     endif
     "Display";
     content = $format.block:mk(@parts);
     event = $event:mk_info(who, content):with_presentation_hint('inset);
-    event = event:with_metadata('preferred_content_types, {this.content_type});
     who:inform_current(event);
     "Announce to room";
     if (!silent && valid(who.location))
@@ -206,11 +205,11 @@ object LETTER [
     if (valid(this.addressee))
       parts = {@parts, "To: " + this.addressee.name};
     endif
-    let description = this.description;
+    let description = this:description();
     if (this:can_read(actor)['allowed] && length(this.text) > 0)
-      description = description + " There appears to be some writing on it.";
+      description = $format.block:mk(description, "There appears to be some writing on it.");
     endif
-    description = description + "\n" + parts:join(" ");
+    description = $format.block:mk(description, parts:join(" "));
     return <$look, .what = this, .title = this:name(), .description = description>;
   endmethod
 
@@ -272,6 +271,7 @@ object LETTER [
     "Policy evaluation may suspend; recheck the session and connection before mutation.";
     player:get_edit_session(session_id) == session || raise(E_PERM);
     request_conn == #-1 || conn in { current_entry[1] for current_entry in (connections(player)) } || raise(E_PERM);
+    $format:authored(this.content_kind, content);
     this.text = content:split("\n");
     if (!valid(this.author))
       this.author = player;

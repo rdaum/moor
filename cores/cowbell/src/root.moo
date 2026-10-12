@@ -10,6 +10,7 @@ object ROOT [
 
   property aliases (owner: HACKER, flags: "rc") = {};
   property description (owner: HACKER, flags: "rc") = "Root prototype object from which all other objects inherit.";
+  property description_kind (owner: HACKER, flags: "rc") = 'literal;
   property object_documentation (owner: HACKER, flags: "rc") = 0;
   property revoked_capability_jtis (owner: ARCH_WIZARD, flags: "rc") = [];
   property thumbnail (owner: HACKER, flags: "rc") = false;
@@ -162,7 +163,10 @@ object ROOT [
   endmethod
 
   method description owner: ARCH_WIZARD
-    "Returns the external description of the object.";
+    "Return literal or structured content, parsing only explicitly selected authored Djot.";
+    if (typeof(this.description) == TYPE_STR && this.description_kind != 'literal)
+      return $format:authored(this.description_kind, this.description);
+    endif
     return this.description;
   endmethod
 
@@ -189,20 +193,15 @@ object ROOT [
     const actor = caller_perms();
     const {target, perms, grants} = $root:_check_permissions_with_grants_as(this, actor, 'set_description);
     set_task_perms(perms, grants);
-    const {description} = args;
-    "If description is a string with substitution tokens, compile it into $sub content so substitutions can render in looks.";
-    let compiled;
-    if (typeof(description) == TYPE_STR && ("{" in description || "}" in description))
-      try
-        compiled = $sub_utils:compile(description);
-      except e (ANY)
-        const message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-        raise(E_INVARG, "Description template compilation failed: " + message);
-      endtry
-      target.description = compiled;
-    else
-      target.description = description;
+    const {description, ?kind = target.description_kind} = args;
+    kind in {'literal, 'djot_blocks} || raise(E_INVARG, "Descriptions require literal or block Djot");
+    if (typeof(description) == TYPE_STR)
+      $format:authored(kind, description);
+    elseif (kind != 'literal)
+      raise(E_TYPE, "Authored Djot requires a source string");
     endif
+    target.description = description;
+    target.description_kind = kind;
   endmethod
 
   method name owner: ARCH_WIZARD
@@ -594,7 +593,8 @@ object ROOT [
       elseif (cap == 'recycle)
         grants = {@grants, {"object_recycle", target}};
       elseif (cap == 'set_description)
-        grants = {@grants, {"property_write", target, "description"}};
+        grants = {@grants, {"property_write", target, "description"},
+          {"property_write", target, "description_kind"}};
       elseif (cap == 'set_name_aliases)
         grants = {@grants, {"object_rename", target}, {"property_write", target, "aliases"}};
       elseif (cap == 'set_owner)
@@ -1241,14 +1241,15 @@ object ROOT [
       scratch:set_description("Plain root test description.");
       $test_utils:assert_eq(scratch.description, "Plain root test description.", "set_description() should store plain strings");
       scratch:set_description("This is {n}.");
-      $test_utils:assert_type(scratch.description, TYPE_LIST, "set_description() should compile substitution strings");
+      $test_utils:assert_eq(scratch.description, "This is {n}.", "literal descriptions never infer substitutions");
       rejected = false;
       try
-        scratch:set_description("Broken {template");
+        scratch:set_description("Unsupported {+insert+}", 'djot_blocks);
       except (E_INVARG)
         rejected = true;
       endtry
-      $test_utils:assert_true(rejected, "set_description() should reject malformed substitution strings");
+      $test_utils:assert_true(rejected, "authored descriptions validate before saving");
+      $test_utils:assert_eq(scratch.description, "This is {n}.", "a rejected edit preserves the source");
       new_owner = create($root);
       add_property(scratch, "root_test_owned_prop", "owned", {this.owner, "rc"});
       scratch:set_owner(new_owner);

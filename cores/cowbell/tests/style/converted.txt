@@ -223,6 +223,9 @@ change_manager.moo
 agentic/agentic_event_queue.moo
 events/msg_bag.moo
 format/format.moo
+format/format_djot.moo
+help/help_utils.moo:_annotate_node
+help/help_utils.moo:_annotate_command
 format/format_text.moo
 format/format_block.moo
 format/format_code.moo

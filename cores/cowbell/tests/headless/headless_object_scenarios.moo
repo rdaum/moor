@@ -17,14 +17,14 @@ object HEADLESS_OBJECT_SCENARIOS
       item = $thing:create();
       room:set_name_aliases("headless test room", {"headless-room"});
       item:set_name_aliases("headless test token", {"headless-token"});
-      item:set_description("A {n} marker for headless runtime tests.");
+      item:set_description($sub_utils:compile("A {n} marker for headless runtime tests."));
       $test_utils:assert_true(valid(room), "created room should be valid");
       $test_utils:assert_true(valid(item), "created item should be valid");
       $test_utils:assert_eq(parent(room), $room, "created room should inherit from $room");
       $test_utils:assert_eq(parent(item), $thing, "created item should inherit from $thing");
       $test_utils:assert_eq(item:name(), "headless test token", "set_name_aliases should update name");
       $test_utils:assert_eq(item:aliases(), {"headless-token"}, "set_name_aliases should update aliases");
-      $test_utils:assert_type(item.description, TYPE_LIST, "tokenized description should compile to sub content");
+      $test_utils:assert_type(item.description, TYPE_LIST, "explicit substitutions remain structured content");
       item:moveto(room);
       $test_utils:assert_eq(item.location, room, "moveto should update item location");
       $test_utils:assert_true(item in room:contents(), "moveto should update destination contents");

@@ -142,11 +142,12 @@ object ACTOR [
 
   method mk_emote_event owner: HACKER
     "Emotes always show the actor's name, never 'You'";
-    return $event:mk_emote(this, this:name(), " ", args[1]):with_this(this.location);
+    return $event:mk_emote(this, this:name(), " ", @$format.djot:inline(args[1])):with_this(this.location);
   endmethod
 
   method mk_say_event owner: HACKER
-    event = $event:mk_say(this, $sub:nc(), " ", $sub:self_alt("say", "says"), ", \"", args[1], "\""):with_this(this.location);
+    "Parse authored speech before combining it with literal attribution.";
+    let event = $event:mk_say(this, $sub:nc(), " ", $sub:self_alt("say", "says"), ", \"", @$format.djot:inline(args[1]), "\""):with_this(this.location);
     event = event:with_metadata('content, args[1]);
     event = event:with_presentation_hint('speech_bubble);
     return event;
@@ -155,12 +156,12 @@ object ACTOR [
   method mk_directed_say_event owner: HACKER
     "Directed say: 'Name [to Target]: message'";
     {target, message} = args;
-    return $event:mk_directed_say(this, this:name(), " [to ", $sub:i(), "]: ", message):with_iobj(target):with_this(this.location);
+    return $event:mk_directed_say(this, this:name(), " [to ", $sub:i(), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
   endmethod
 
   method mk_think_event owner: HACKER
     "Thoughts always show the actor's name, never 'You'";
-    event = $event:mk_think(this, this:name(), " . o O ( ", args[1], " )"):with_this(this.location);
+    event = $event:mk_think(this, this:name(), " . o O ( ", @$format.djot:inline(args[1]), " )"):with_this(this.location);
     event = event:with_metadata('content, args[1]);
     event = event:with_presentation_hint('thought_bubble);
     return event;
@@ -308,7 +309,7 @@ object ACTOR [
   method mk_stagetalk owner: ARCH_WIZARD
     "Stagetalk: directed speech 'Name [to Target]: message'";
     {target, message} = args;
-    return $event:mk_stagetalk(this, this:name(), " [to ", $sub:i(), "]: ", message):with_iobj(target):with_this(this.location);
+    return $event:mk_stagetalk(this, this:name(), " [to ", $sub:i(), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
   endmethod
 
   method pronouns_display owner: ARCH_WIZARD
@@ -319,7 +320,7 @@ object ACTOR [
   method mk_shout_event owner: ARCH_WIZARD
     "Create a shout event with loudness for acoustic propagation.";
     {text} = args;
-    event = $event:mk_shout(this, $sub:nc(), " ", $sub:self_alt("shout", "shouts"), ", \"", text, "\""):with_this(this.location);
+    event = $event:mk_shout(this, $sub:nc(), " ", $sub:self_alt("shout", "shouts"), ", \"", @$format.djot:inline(text), "\""):with_this(this.location);
     event = event:with_metadata('content, text);
     event = event:with_metadata('loudness, 5);
     event = event:with_presentation_hint('speech_bubble);

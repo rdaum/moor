@@ -68,6 +68,11 @@ These scenarios use inert content and need no connection, worker, or live world.
 of the default method suite. Their sample output can be checked with the installed Djot client
 parser without adding a parser dependency to the core test runner.
 
+Fixture `#90123` checks the MOO Djot parser, source diagnostics, input limits, literal attribution,
+and validation before description and note edits. It also parses and resolves all 69 shipped help
+articles. Each article has its own execution slice; the sweep does not combine their costs into one
+command quota. The parser and renderer cases check all three output formats.
+
 Fixture `#90122` checks event resolution: captured locations, actor and observer wording, literal
 bindings, selected alternatives, caller permissions, producer hooks, and bounded expansion.
 It also exercises private-message paragraphs, agent reports, malformed table rows, source-range

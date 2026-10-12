@@ -7,13 +7,17 @@ object HELP [
   owner: ARCH_WIZARD
   readable: true
 
+  property content_kind (owner: ARCH_WIZARD, flags: "r") = 'literal;
+
   override description (owner: ARCH_WIZARD, flags: "rc") = "Flyweight delegate for help topics. Creates structured help entries that can be rendered for humans or machines.";
 
   method mk owner: ARCH_WIZARD
     "Create a help topic flyweight.";
-    "Args: (name, summary, content, ?aliases, ?category, ?see_also)";
-    {name, summary, content, ?aliases = {}, ?category = 'general, ?see_also = {}} = args;
-    return <this, .name = name, .summary = summary, .content = content, .aliases = aliases, .category = category, .see_also = see_also>;
+    "Args: name, summary, content, optional aliases, category, related topics, and content kind.";
+    const {name, summary, content, ?aliases = {}, ?category = 'general,
+      ?see_also = {}, ?content_kind = 'literal} = args;
+    return <this, .name = name, .summary = summary, .content = content,
+      .content_kind = content_kind, .aliases = aliases, .category = category, .see_also = see_also>;
   endmethod
 
   method from_provider owner: ARCH_WIZARD
@@ -41,8 +45,11 @@ object HELP [
   method render_prose owner: ARCH_WIZARD
     "Return authored prose or programmatic blocks, followed by related-topic references.";
     const viewer = player;
-    const body = typeof(this.content) == TYPE_STR
-      ? $help_utils:annotate_prose(this.content, viewer) | this.content;
+    let body = this.content;
+    if (typeof(body) == TYPE_STR)
+      const authored = $format:authored(this.content_kind, body);
+      body = $help_utils:annotate_prose(flycontents(authored), viewer);
+    endif
     let lines = {this.summary, "", body};
     if (length(this.see_also))
       const topics = viewer:_collect_help_topics();
