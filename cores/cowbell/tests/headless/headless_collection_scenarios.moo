@@ -78,4 +78,30 @@ object HEADLESS_COLLECTION_SCENARIOS
     endtry
     return true;
   endmethod
+
+  method _callback_write owner: HACKER
+    "Attempt a protected write from a non-wizard callback.";
+    const {operation} = args;
+    if (operation == "reduce")
+      return {1}:reduce({acc, item} => (#90100.runtime_probe = 99), 0);
+    endif
+    return {1}:(operation)({item} => (#90100.runtime_probe = 99));
+  endmethod
+
+  method test_callback_write_permissions owner: ARCH_WIZARD
+    "Collection callbacks cannot use the utility owner's wizard authority.";
+    const saved = #90100.runtime_probe;
+    try
+      #90100.runtime_probe = 42;
+      for operation in ({"map", "filter", "reduce", "find", "find_index", "any", "all",
+          "group_by"})
+        $test_utils:assert_raises(E_PERM, this, "_callback_write", {operation},
+          "Callback must not write a foreign property");
+        $test_utils:assert_eq(#90100.runtime_probe, 42, "Denied callback preserves state");
+      endfor
+    finally
+      #90100.runtime_probe = saved;
+    endtry
+    return true;
+  endmethod
 endobject

@@ -195,7 +195,7 @@ format/format_paragraph.moo:compose
 format/format_block.moo:compose
 format/format_title.moo:compose
 events/sub.moo:compose
-types/list_proto.moo:compose
+types/list_proto.moo
 format/format.moo:result
 format/format.moo:merge_annotations
 format/format.moo:compose_parts
