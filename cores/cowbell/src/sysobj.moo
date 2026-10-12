@@ -41,6 +41,10 @@ object SYSOBJ [
   property couch (owner: HACKER, flags: "r") = COUCH;
   property data_visor (owner: HACKER, flags: "r") = DATA_VISOR;
   property dm (owner: HACKER, flags: "r") = DM;
+  property document (owner: HACKER, flags: "r") = DOCUMENT;
+  property document_node (owner: HACKER, flags: "r") = DOCUMENT_NODE;
+  property document_renderer (owner: HACKER, flags: "r") = DOCUMENT_RENDERER;
+  property document_schema (owner: HACKER, flags: "r") = DOCUMENT_SCHEMA;
   property drink (owner: ARCH_WIZARD, flags: "r") = DRINK;
   property dump_interval (owner: ARCH_WIZARD, flags: "r") = 3600;
   property event (owner: HACKER, flags: "r") = EVENT;

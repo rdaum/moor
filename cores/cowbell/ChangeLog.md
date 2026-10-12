@@ -8,6 +8,8 @@ Cowbell entries.
 
 ### Added
 
+- Add document values with validation, metadata encoding, and HTML, Djot, and plain text renderers
+  for core code.
 - Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 
 ### Fixed

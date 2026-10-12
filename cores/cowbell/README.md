@@ -247,6 +247,33 @@ revoked without changing object ownership, making it possible to grant temporary
 You can audit which code has which capabilities, and follow the principle of least privilege by granting
 only the specific operations needed rather than broad permissions.
 
+### Document values
+
+`$document` provides validated content values and HTML, Djot, and plain text renderers. These APIs
+are available to core code. The event pipeline still uses its existing composition protocol.
+
+```moo
+const paragraph = $document_node:mk('paragraph, {
+  $document_node:mk('text, {}, ['text -> "Hello, world."])
+});
+const document = $document:mk({paragraph});
+const prepared = $document:prepare(document);
+const output = $document:render(prepared['document], 'text_html);
+```
+
+`output` has symbol keys `content_type`, `body`, and `annotations`. Its body is always one string.
+Rendering uses captured text and references. It does not invoke methods on content nodes or resolve
+object names.
+
+`prepare` returns a canonical `document`, an inert `encoded` map, and a list of `diagnostics`.
+It removes invalid or excess references while retaining their labels. Structural errors raise an
+exception with a node path. `encode` and `render` require valid references and enforce resource
+limits. `decode` validates metadata before reconstructing document values.
+
+Node kinds and internal record keys use symbols. Metadata uses string keys and string enum values.
+The [schema](src/document/document_schema.moo) defines the complete node vocabulary and field
+layout. Rendering options are `width` (1–1024, default 80) and `code_line_numbers` (default `true`).
+
 ### The Substitution System
 
 The substitution system (`$sub`, `$sub_utils`) provides template-based text that automatically adapts
