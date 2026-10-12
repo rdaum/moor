@@ -7,6 +7,52 @@ object HEADLESS_LLM_SCENARIOS
   override import_export_hierarchy = {"tests", "headless"};
   override import_export_id = "headless_llm_scenarios";
 
+  method test_headless_wearable_token_usage owner: ARCH_WIZARD
+    "Token displays accept integer limits and float thresholds for fresh and used contexts.";
+    const wearer = create($player, $hacker, 2);
+    const wearable = create($llm_wearable, $hacker, 2);
+    const agent = create($llm_agent, $hacker, 2);
+    try
+      add_property(wearer, "captured_events", {}, {$arch_wizard, ""});
+      add_verb(wearer, {$arch_wizard, "rxd", "inform_current"}, {"this", "none", "this"});
+      set_verb_code(wearer, "inform_current", {
+        "this.captured_events = {@this.captured_events, args[1]};"});
+      wearer.llm_token_budget = 10000;
+      wearer.llm_tokens_used = 2500;
+      wearable.agent = agent;
+      agent.token_limit = 2000;
+      agent.compaction_threshold = 0.75;
+      for sample in ({{0, "FRESH"}, {1199, "OK"}, {1200, "NEAR LIMIT"}, {1500, "COMPACTING"}})
+        const {prompt_tokens, status} = sample;
+        agent.last_token_usage = prompt_tokens
+          ? ["prompt_tokens" -> prompt_tokens, "total_tokens" -> prompt_tokens + 10] | [];
+        wearer.captured_events = {};
+        wearable:_show_token_usage(wearer);
+        $test_utils:assert_eq(length(wearer.captured_events), 2,
+          "usage display emits both budget and context events");
+        const budget = $document:render(wearer.captured_events[1]:resolve(wearer), 'text_plain)['body];
+        $test_utils:assert_true(index(budget, "2500/10000 (25% used)"),
+          "budget display preserves integer percentages");
+        const context = $document:render(wearer.captured_events[2]:resolve(wearer), 'text_plain)['body];
+        $test_utils:assert_true(index(context, "Compaction at 1500"),
+          "float threshold produces an integer token count");
+        $test_utils:assert_true(index(context, status), "context displays the expected status");
+        if (prompt_tokens)
+          const diagnostic = wearable:debug_status();
+          $test_utils:assert_eq(diagnostic["threshold_tokens"], 1500,
+            "diagnostic agrees with the displayed compaction threshold");
+          $test_utils:assert_eq(diagnostic["status"], status,
+            "diagnostic agrees with the displayed status");
+        endif
+      endfor
+    finally
+      for temporary in ({wearable, agent, wearer})
+        valid(temporary) && temporary:destroy();
+      endfor
+    endtry
+    return true;
+  endmethod
+
   method test_headless_building_tool_rejects_actor_spoof owner: ARCH_WIZARD
     "A direct non-wizard tool caller cannot claim a wizard actor.";
     const target = create($thing, $hacker, 2);
