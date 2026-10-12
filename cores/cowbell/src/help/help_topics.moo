@@ -26,7 +26,7 @@ object HELP_TOPICS [
   property topic_close (owner: ARCH_WIZARD, flags: "rc") = {
     "close",
     "Close a door",
-    "Close a door-like passage from this room.\n\nUsage:\n- `close <direction>`\n- `close door`",
+    "Close a door-like passage from this room.\n\nUsage:\n\n- `close <direction>`\n- `close door`",
     {"close door"},
     "basics",
     {"open", "lock", "unlock", "doors"}
@@ -50,7 +50,7 @@ object HELP_TOPICS [
   property topic_doors (owner: ARCH_WIZARD, flags: "rc") = {
     "doors",
     "Door commands",
-    "Door commands operate only on door-like passages.\n\nA passage is treated as a door when either:\n- `is_door` is true, or\n- it has an `unlock_rule`\n\nBuilders can toggle door behavior with:\n- `@set-passage <dir> is_door true|false`",
+    "Door commands operate only on door-like passages.\n\nA passage is treated as a door when either:\n\n- `is_door` is true, or\n- it has an `unlock_rule`\n\nBuilders can toggle door behavior with:\n\n- `@set-passage <dir> is_door true|false`",
     {"door", "doors"},
     "basics",
     {"movement", "exits", "@set-passage"}
@@ -58,7 +58,7 @@ object HELP_TOPICS [
   property topic_drink (owner: ARCH_WIZARD, flags: "rc") = {
     "drink",
     "Drink a beverage",
-    "Use `drink <beverage>` to drink from a vessel you're holding.\n\nRelated commands:\n- `sip <beverage>` - take a small sip\n- `gulp <beverage>` or `quaff <beverage>` - drink quickly\n- `refill <vessel> from <source>` - refill from a tap or fountain",
+    "Use `drink <beverage>` to drink from a vessel you're holding.\n\nRelated commands:\n\n- `sip <beverage>` - take a small sip\n- `gulp <beverage>` or `quaff <beverage>` - drink quickly\n- `refill <vessel> from <source>` - refill from a tap or fountain",
     {},
     "basics",
     {"eat", "sip"}
@@ -74,7 +74,7 @@ object HELP_TOPICS [
   property topic_eat (owner: ARCH_WIZARD, flags: "rc") = {
     "eat",
     "Eat food",
-    "Use `eat <food>` to consume food you're holding or that's nearby. Eating consumes the whole portion.\n\nRelated commands:\n- `bite <food>` - take a smaller bite\n- `nibble <food>` - nibble delicately",
+    "Use `eat <food>` to consume food you're holding or that's nearby. Eating consumes the whole portion.\n\nRelated commands:\n\n- `bite <food>` - take a smaller bite\n- `nibble <food>` - nibble delicately",
     {"consume"},
     "basics",
     {"drink", "bite"}
@@ -146,7 +146,7 @@ object HELP_TOPICS [
   property topic_join (owner: ARCH_WIZARD, flags: "rc") = {
     "join",
     "Walk to join another player",
-    "Use `join <player>` to automatically walk to where another player is.\n\nExamples:\n- `join ryan` - walk to Ryan's location\n- `join mr welcome` - walk to Mr. Welcome\n\nThe player name uses standard matching.\n\nTo stop: `walk stop` or `walk cancel`\n\nNote: Only works if the player is in the same area and reachable by walking (passages only, not elevators).",
+    "Use `join <player>` to automatically walk to where another player is.\n\nExamples:\n\n- `join ryan` - walk to Ryan's location\n- `join mr welcome` - walk to Mr. Welcome\n\nThe player name uses standard matching.\n\nTo stop: `walk stop` or `walk cancel`\n\nNote: Only works if the player is in the same area and reachable by walking (passages only, not elevators).",
     {"@join"},
     "social",
     {"movement", "walk", "who"}
@@ -162,7 +162,7 @@ object HELP_TOPICS [
   property topic_lock (owner: ARCH_WIZARD, flags: "rc") = {
     "lock",
     "Lock a door",
-    "Lock a lockable door-like passage.\n\nUsage:\n- `lock <direction>`\n- `lock <direction> with <key>`\n- `lock door`\n\nRequires a matching key and an `unlock_rule` on the passage.",
+    "Lock a lockable door-like passage.\n\nUsage:\n\n- `lock <direction>`\n- `lock <direction> with <key>`\n- `lock door`\n\nRequires a matching key and an `unlock_rule` on the passage.",
     {"lock door"},
     "basics",
     {"unlock", "open", "doors"}
@@ -186,7 +186,7 @@ object HELP_TOPICS [
   property topic_open (owner: ARCH_WIZARD, flags: "rc") = {
     "open",
     "Open a door",
-    "Open a door-like passage from this room.\n\nUsage:\n- `open <direction>`\n- `open door`\n\nIf the door is locked, open may auto-unlock when you have a matching key.",
+    "Open a door-like passage from this room.\n\nUsage:\n\n- `open <direction>`\n- `open door`\n\nIf the door is locked, open may auto-unlock when you have a matching key.",
     {"open door"},
     "basics",
     {"close", "lock", "unlock", "doors"}
@@ -228,7 +228,7 @@ object HELP_TOPICS [
   property topic_privacy (owner: ARCH_WIZARD, flags: "rc") = {
     "privacy",
     "Privacy policy and data practices",
-    "## Timbran Hotel Privacy Policy\n\n*Your privacy is respected at the Timbran Hotel.*\n\n### What We Collect\n\nWhen you register as a guest, we store:\n- Your chosen name\n- Your password (securely encrypted)\n- Your personal event history (encrypted with your encryption passphrase)\n\n### What We Don't Do\n\n- We do **not** algorithmically profile or target you\n- We do **not** sell or share your data with advertisers or data brokers\n- We do **not** read your encrypted event history\u2014only you can decrypt it\n\n### Public Spaces\n\nThe Timbran Hotel has many public rooms\u2014the lobby, corridors, common areas. Conversations and actions in public spaces are naturally visible to other guests present. This is the nature of a shared world, not data collection.\n\nIf you wish for privacy, seek out private rooms or communicate through the mail system.\n\n### Mail & Direct Messages\n\nMail and direct messages between guests are currently stored unencrypted. We plan to add encryption in the future.\n\nWhile administrators technically have access, we maintain a strict policy against reading private correspondence. Treat these as you would a postcard\u2014private in practice, but not cryptographically secured.\n\n### User Creations\n\nObjects you create, customizations you make, and programs you write are stored in the world database. Even if you mark them as private, administrators can view them for maintenance and moderation purposes.\n\n### AI & LLM Agents\n\nCertain areas of the hotel feature AI-powered characters\u2014such as Mr. Welcome in the lobby or staff at the front desk. These agents use large language models to interact with guests.\n\nWhen you interact in rooms with these agents:\n\n- Your actions and speech in that room may be processed by external AI services\n- We prioritize open-weight models and may run self-hosted models in the future\n- We transmit only what's necessary for the interaction\n\nAI-powered items (like the Architect's Compass or Data Visor) work similarly\u2014using them sends your input to AI services.\n\nWe plan to offer an opt-out so your direct actions aren't shared with room-based agents. However, if other guests mention you or have conversations about you, that content may still be processed.\n\n### Data Retention\n\nYour account and encrypted history remain as long as you're a guest. You may request deletion of your account and all associated data at any time by contacting the management.\n\n### Contact\n\nFor privacy concerns, speak with the hotel management or contact the server administrator.",
+    "## Timbran Hotel Privacy Policy\n\n*Your privacy is respected at the Timbran Hotel.*\n\n### What We Collect\n\nWhen you register as a guest, we store:\n\n- Your chosen name\n- Your password (securely encrypted)\n- Your personal event history (encrypted with your encryption passphrase)\n\n### What We Don't Do\n\n- We do *not* algorithmically profile or target you\n- We do *not* sell or share your data with advertisers or data brokers\n- We do *not* read your encrypted event history—only you can decrypt it\n\n### Public Spaces\n\nThe Timbran Hotel has many public rooms—the lobby, corridors, common areas. Conversations and actions in public spaces are naturally visible to other guests present. This is the nature of a shared world, not data collection.\n\nIf you wish for privacy, seek out private rooms or communicate through the mail system.\n\n### Mail & Direct Messages\n\nMail and direct messages between guests are currently stored unencrypted. We plan to add encryption in the future.\n\nWhile administrators technically have access, we maintain a strict policy against reading private correspondence. Treat these as you would a postcard—private in practice, but not cryptographically secured.\n\n### User Creations\n\nObjects you create, customizations you make, and programs you write are stored in the world database. Even if you mark them as private, administrators can view them for maintenance and moderation purposes.\n\n### AI & LLM Agents\n\nCertain areas of the hotel feature AI-powered characters—such as Mr. Welcome in the lobby or staff at the front desk. These agents use large language models to interact with guests.\n\nWhen you interact in rooms with these agents:\n\n- Your actions and speech in that room may be processed by external AI services\n- We prioritize open-weight models and may run self-hosted models in the future\n- We transmit only what's necessary for the interaction\n\nAI-powered items (like the Architect's Compass or Data Visor) work similarly—using them sends your input to AI services.\n\nWe plan to offer an opt-out so your direct actions aren't shared with room-based agents. However, if other guests mention you or have conversations about you, that content may still be processed.\n\n### Data Retention\n\nYour account and encrypted history remain as long as you're a guest. You may request deletion of your account and all associated data at any time by contacting the management.\n\n### Contact\n\nFor privacy concerns, speak with the hotel management or contact the server administrator.",
     {"privacy policy", "data", "gdpr"},
     "basics",
     {}
@@ -276,7 +276,7 @@ object HELP_TOPICS [
   property topic_unlock (owner: ARCH_WIZARD, flags: "rc") = {
     "unlock",
     "Unlock a door",
-    "Unlock a lockable door-like passage.\n\nUsage:\n- `unlock <direction>`\n- `unlock <direction> with <key>`\n- `unlock door`\n\nRequires a matching key and an `unlock_rule` on the passage.",
+    "Unlock a lockable door-like passage.\n\nUsage:\n\n- `unlock <direction>`\n- `unlock <direction> with <key>`\n- `unlock door`\n\nRequires a matching key and an `unlock_rule` on the passage.",
     {"unlock door"},
     "basics",
     {"lock", "open", "doors"}
@@ -284,7 +284,7 @@ object HELP_TOPICS [
   property topic_walk (owner: ARCH_WIZARD, flags: "rc") = {
     "walk",
     "Walk automatically to a destination",
-    "Use `walk to <destination>` or `walk <destination>` to automatically walk to a room.\n\nExamples:\n- `walk to lobby` - walk to the lobby\n- `walk dormitory` - walk to the dormitory\n- `walk second floor` - walk to a floor\n\nThe destination uses fuzzy matching, so partial names work.\n\nTo stop walking: `walk stop` or `walk cancel`\n\nNote: Auto-walk only works via passages (stairs, doors). If a destination requires an elevator or other transport, you'll be told what transport to use.",
+    "Use `walk to <destination>` or `walk <destination>` to automatically walk to a room.\n\nExamples:\n\n- `walk to lobby` - walk to the lobby\n- `walk dormitory` - walk to the dormitory\n- `walk second floor` - walk to a floor\n\nThe destination uses fuzzy matching, so partial names work.\n\nTo stop walking: `walk stop` or `walk cancel`\n\nNote: Auto-walk only works via passages (stairs, doors). If a destination requires an elevator or other transport, you'll be told what transport to use.",
     {"goto", "go_to", "autowalk"},
     "basics",
     {"movement", "join", "exits"}
@@ -346,7 +346,7 @@ object HELP_TOPICS [
       endif
       typeof(aliases) == TYPE_LIST || (aliases = {});
       typeof(see_also) == TYPE_LIST || (see_also = {});
-      t = $help:mk(name, summary, content, aliases, tosym(category), see_also);
+      t = $help:mk(name, summary, content, aliases, tosym(category), see_also, 'djot_blocks);
       if (topic == "")
         my_topics = {@my_topics, t};
       elseif (t:matches(topic))

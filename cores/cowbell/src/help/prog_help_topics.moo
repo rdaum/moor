@@ -8,6 +8,8 @@ object PROG_HELP_TOPICS [
   owner: ARCH_WIZARD
   readable: true
 
+  override content_kind = 'djot_blocks;
+
   property topic_programming_chmod (owner: ARCH_WIZARD, flags: "rc") = {
     "@chmod",
     "@chmod - Show/change permissions",
@@ -43,7 +45,7 @@ object PROG_HELP_TOPICS [
   property topic_programming_program (owner: ARCH_WIZARD, flags: "rc") = {
     "@program",
     "@program - Program a verb",
-    "@program <object>:<verb> -- Program a verb via input.\n\n**Forms:**\n  `@program OBJ:VERB`                   Interactive mode\n  `@program OBJ:VERB DOBJ PREP IOBJ`    Match by argspec\n  `@program# OBJ:NUMBER`                Program verb by index\n  `@program OBJ:VERB = CODE_LINE`       Inline one-line mode\n\nInteractive special lines: `.` finish, `@abort` cancel, `.<text>` literal leading dot.",
+    "@program <object>:<verb> -- Program a verb via input.\n\n*Forms:*\n\n- `@program OBJ:VERB`                   Interactive mode\n- `@program OBJ:VERB DOBJ PREP IOBJ`    Match by argspec\n- `@program# OBJ:NUMBER`                Program verb by index\n- `@program OBJ:VERB = CODE_LINE`       Inline one-line mode\n\nInteractive special lines: `.` finish, `@abort` cancel, `.<text>` literal leading dot.",
     {"@program#", "program"},
     "programming",
     {}
@@ -51,7 +53,7 @@ object PROG_HELP_TOPICS [
   property topic_programming_show (owner: ARCH_WIZARD, flags: "rc") = {
     "@show",
     "@show - Display object info",
-    "@show <object>[selectors] -- Display object information.\n\n**Selectors:**\n  `.`   Local properties only\n  `..`  All properties (including inherited)\n  `:`   Local verbs only\n  `::`  All verbs (including inherited)\n\n**Examples:**\n  `@show #1`       Show summary with counts and hints\n  `@show #1.`      Show local properties\n  `@show #1..`     Show all properties (+ inherited)\n  `@show #1:`      Show local verbs\n  `@show #1::`     Show all verbs (+ inherited)\n  `@show #1.name`  Show specific property\n  `@show #1:tell`  Show specific verb\n  `@show #1.:`     Show local props + local verbs\n  `@show #1..:`    Show all props + local verbs\n  `@show #1.::`    Show local props + all verbs\n  `@show #1..::`   Show all props + all verbs\n\nAlias: `@display`",
+    "@show <object>[selectors] -- Display object information.\n\n*Selectors:*\n\n- `.`   Local properties only\n- `..`  All properties (including inherited)\n- `:`   Local verbs only\n- `::`  All verbs (including inherited)\n\n*Examples:*\n\n- `@show #1`       Show summary with counts and hints\n- `@show #1.`      Show local properties\n- `@show #1..`     Show all properties (+ inherited)\n- `@show #1:`      Show local verbs\n- `@show #1::`     Show all verbs (+ inherited)\n- `@show #1.name`  Show specific property\n- `@show #1:tell`  Show specific verb\n- `@show #1.:`     Show local props + local verbs\n- `@show #1..:`    Show all props + local verbs\n- `@show #1.::`    Show local props + all verbs\n- `@show #1..::`   Show all props + all verbs\n\nAlias: `@display`",
     {"@display", "show", "display"},
     "programming",
     {}

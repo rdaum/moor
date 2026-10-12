@@ -80,7 +80,7 @@ The context contains `viewer`, `principal`, and captured `event` facts as symbol
 Named event bindings use `with_text_binding`, `with_object_binding`, or `with_content_binding`.
 `$sub:binding(name)` reads text or an object name. `$sub:content_binding(name)` inserts structured
 inline content. The old `compose`, `render_as`, and `transform_for` interfaces are removed.
-Authored Djot parsing is pending; markup in descriptions and help prose currently remains literal.
+Authored Djot is parsed in MOO into document nodes. Literal content stays literal in every output format.
 
 Programmatic output uses document structure: agent reports contain code and table nodes, private
 messages keep attribution separate from body paragraphs, and source listings carry a line origin.
@@ -275,7 +275,7 @@ only the specific operations needed rather than broad permissions.
 ### Document values
 
 `$document` provides validated content values and HTML, Djot, and plain text renderers. These APIs
-are available to core code. The event pipeline still uses its existing composition protocol.
+are available to core code. Events resolve their content for each viewer before rendering.
 
 ```moo
 const paragraph = $document_node:mk('paragraph, {
@@ -298,6 +298,55 @@ limits. `decode` validates metadata before reconstructing document values.
 Node kinds and internal record keys use symbols. Metadata uses string keys and string enum values.
 The [schema](src/document/document_schema.moo) defines the complete node vocabulary and field
 layout. Rendering options are `width` (1–1024, default 80) and `code_line_numbers` (default `true`).
+
+### Authored content
+
+Strings passed to document constructors are literal. To parse markup, select an input kind:
+
+```moo
+const prose = $format:authored('djot_blocks, "A *brass* bell.\n\nThe floor is dusty.");
+const message = $format:authored('djot_inline, "Hello, _world_!");
+const literal = $format:authored('literal, "Keep *these* marks.");
+```
+
+`$format.djot:blocks(source)` and `$format.djot:inline(source)` return canonical node lists.
+The parser runs in MOO. Renderers consume its nodes and do not parse the source again.
+Inline input rejects block constructs and paragraph boundaries.
+
+The authoring profile follows [Djot syntax](https://github.com/jgm/djot/blob/main/doc/syntax.md)
+for these constructs:
+
+- Paragraphs, backslash escapes, soft breaks, and backslash hard breaks.
+- `_emphasis_`, `*strong*`, `{-deletion-}`, inline code, and fenced code with an optional language.
+- Headings at levels 1–6, block quotes, and thematic breaks.
+- Bullet, decimal ordered, task, and definition lists, including nested blocks.
+- Pipe tables with alignment, inline cells, and captions. Further headers start another table.
+- Inline links, reference links, autolinks, images, and smart punctuation.
+
+Link definitions resolve during parsing. Reference labels are case-sensitive.
+Destinations must use HTTP or HTTPS; links also accept `mailto:`. Document-local fragments are unsupported.
+Help resolves eligible inline code into command references after parsing, using the viewer's command environment.
+Code blocks and existing interactive labels remain opaque to that step.
+
+Footnotes, math, insertion, highlighting, subscript, superscript, generic spans and divs,
+raw output, attributes, and nondecimal ordered lists are unsupported.
+A recognized unsupported construct raises an error with its line and column.
+Unmatched emphasis delimiters remain literal; an unclosed code span or fence extends to its container's end.
+
+Each parse accepts at most 64 KiB of UTF-8 source. Document validation also limits nesting to 32 levels,
+records to 8,192, and encoded content to 256 KiB. Parsing never suspends or calls a content producer.
+
+Speech, emotes, and thoughts use inline Djot. Attribution, names, and identifiers enter separately as literal content.
+Direct messages and agent prose remain literal. Source listings and command examples use code nodes.
+
+Descriptions default to literal text. Use `@describe --djot OBJECT as TEXT` or
+`@describe --literal OBJECT as TEXT` to select a kind. Later edits retain that selection.
+Programmatic callers use `object:set_description(source, 'djot_blocks)` or `'literal`.
+Descriptions no longer infer substitution templates from braces; construct substitutions explicitly when needed.
+
+Notes and letters use `note:set_text(lines, 'djot_blocks)` or `'literal`.
+Their `content_kind` property selects the input syntax; it does not select an output format.
+Description and note edits validate the complete source before saving it.
 
 ### The Substitution System
 

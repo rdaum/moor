@@ -118,14 +118,18 @@ object HEADLESS_MESSAGING_SCENARIOS
       note.text = {"public body"};
       $test_utils:assert_eq(this:call_as_programmer(note, "text"), {"public body"}, "public getter succeeds");
       const public_look = this:call_as_programmer(note, "look_self");
-      $test_utils:assert_true(index(public_look.description, "writing") > 0, "public look preserves writing hint");
+      const public_document = $event:mk_info(#90101, public_look.description):resolve(#90101);
+      $test_utils:assert_true(index($document:render(public_document, 'text_plain)['body], "writing") > 0,
+        "public look preserves writing hint");
       const raw = `this:property_as_programmer(note, "text") ! E_PERM => E_PERM';
       $test_utils:assert_eq(raw, E_PERM, "raw storage requires owner");
       note.read_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'private_note);
       const denied = `this:call_as_programmer(note, "text") ! E_PERM => E_PERM';
       $test_utils:assert_eq(denied, E_PERM, "restricted getter denied");
       const restricted_look = this:call_as_programmer(note, "look_self");
-      $test_utils:assert_eq(index(restricted_look.description, "writing"), 0, "restricted look omits writing hint");
+      const restricted_document = $event:mk_info(#90101, restricted_look.description):resolve(#90101);
+      $test_utils:assert_eq(index($document:render(restricted_document, 'text_plain)['body], "writing"), 0,
+        "restricted look omits writing hint");
       $test_utils:assert_eq(note:text(), {"public body"}, "wizard getter remains available");
     finally
       recycle(note);

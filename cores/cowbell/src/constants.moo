@@ -55,6 +55,7 @@ define FORMAT_LINK = #82;
 define FORMAT_PARAGRAPH = #114;
 define FORMAT_ANNOTATION = #134;
 define FORMAT_TEXT = #139;
+define FORMAT_DJOT = #3006;
 
 // documents
 define DOCUMENT = #3000;

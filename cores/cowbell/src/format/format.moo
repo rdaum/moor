@@ -12,6 +12,7 @@ object FORMAT [
   property block (owner: HACKER, flags: "r") = FORMAT_BLOCK;
   property code (owner: HACKER, flags: "r") = FORMAT_CODE;
   property deflist (owner: HACKER, flags: "r") = FORMAT_DEFLIST;
+  property djot (owner: HACKER, flags: "r") = FORMAT_DJOT;
   property link (owner: HACKER, flags: "r") = FORMAT_LINK;
   property list (owner: HACKER, flags: "r") = FORMAT_LIST;
   property paragraph (owner: ARCH_WIZARD, flags: "r") = FORMAT_PARAGRAPH;
@@ -20,6 +21,19 @@ object FORMAT [
   property title (owner: HACKER, flags: "r") = FORMAT_TITLE;
 
   override description (owner: HACKER, flags: "rc") = "Container for formatting objects like block, list, table, and title.";
+
+  method authored owner: HACKER
+    "Convert an explicitly selected source kind to inline or block content. Never infer markup.";
+    const {kind, source} = args;
+    if (kind == 'literal)
+      return $document_template:mk('blocks, $format:literal_blocks(source));
+    elseif (kind == 'djot_blocks)
+      return $document_template:mk('blocks, $format.djot:blocks(source));
+    elseif (kind == 'djot_inline)
+      return $document_template:mk('inline, $format.djot:inline(source));
+    endif
+    raise(E_INVARG, "Content kind must be literal, djot_blocks, or djot_inline");
+  endmethod
 
   method literal_inline owner: HACKER
     "Convert literal text to inline nodes. Newlines become hard breaks; punctuation stays literal.";

@@ -9,6 +9,7 @@ object HELP_SOURCE [
   readable: true
 
   property topic_order (owner: ARCH_WIZARD, flags: "rc") = {};
+  property content_kind (owner: ARCH_WIZARD, flags: "rc") = 'literal;
 
   method help_topics owner: ARCH_WIZARD
     "Generic property-backed help topic provider.";
@@ -55,7 +56,7 @@ object HELP_SOURCE [
         else
           cat = category;
         endif
-        t = $help:mk(name, summary, content, aliases, cat, see_also);
+        t = $help:mk(name, summary, content, aliases, cat, see_also, this.content_kind);
       else
         continue;
       endif

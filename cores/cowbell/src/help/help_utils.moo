@@ -11,66 +11,109 @@ object HELP_UTILS [
   override description (owner: ARCH_WIZARD, flags: "rc") = "Help utilities for documentation extraction and lookup. Provides verbs for extracting verb docstrings, object documentation, and parsing help references.";
 
   method annotate_prose owner: ARCH_WIZARD
-    "Resolve authored inline-code verb mentions in the reader's command environment, without running them.";
-    const {content, viewer} = args;
+    "Resolve code mentions in parsed help blocks; never scan markup or enter interactive labels.";
+    const {blocks, viewer} = args;
     set_task_perms(caller_perms());
-    valid(viewer) || return content;
-    const environment = {@viewer:command_environment(), @viewer.contents, @`viewer.location.contents ! E_INVIND => {}'};
-    let parts = {};
-    let cursor = 1;
+    $document:validate($document:mk(blocks));
+    valid(viewer) || return $format.block:mk(@blocks);
+    const environment = {@viewer:command_environment(), @viewer.contents,
+      @`viewer.location.contents ! E_INVIND => {}'};
+    let annotated = {};
     let resolved = [];
-    while (cursor <= length(content))
-      const start = index(content[cursor..$], "`");
-      if (!start)
-        break;
+    for block in (blocks)
+      const {value, updated} = this:_annotate_node(block, 'block, viewer, environment, resolved);
+      annotated = {@annotated, value};
+      resolved = updated;
+    endfor
+    return $format.block:mk(@annotated);
+  endmethod
+
+  method _annotate_node owner: ARCH_WIZARD
+    "Walk known content fields, leaving code blocks and existing interactive labels opaque.";
+    let {value, expected, viewer, environment, resolved} = args;
+    set_task_perms(caller_perms());
+    const node = expected in {'inline, 'block};
+    const kind = node ? value.kind | expected;
+    kind in {'link, 'reference, 'code_block} && return {value, resolved};
+    if (kind == 'inline_code)
+      return this:_annotate_command(value, viewer, environment, resolved);
+    endif
+    const shape = $document_schema:_shape(kind, "help");
+    let fields = node ? flyslots(value) | value;
+    node && (fields = mapdelete(fields, 'kind));
+    const contents_key = shape['contents];
+    if (typeof(contents_key) == TYPE_SYM)
+      fields[contents_key] = flycontents(value);
+    endif
+    for child in (shape['children])
+      const {key, child_kind, cardinality} = child;
+      if (!maphaskey(fields, key))
+        continue;
       endif
-      const opening = cursor + start - 1;
-      let width = 1;
-      while (opening + width <= length(content) && content[opening + width] == "`")
-        width = width + 1;
-      endwhile
-      const delimiter = content[opening..opening + width - 1];
-      const after = opening + width;
-      const offset = index(content[after..$], delimiter);
-      if (!offset)
-        break;
-      endif
-      const closing = after + offset - 1;
-      const label = content[after..closing - 1];
-      let fragment = content[opening..closing + width - 1];
-      if (width == 1 && !index(label, "\n"))
-        const words = label:split(" ");
-        const name = length(words) ? words[1] | "";
-        if (!maphaskey(resolved, name))
-          resolved[name] = {};
-          for receiver in (environment)
-            const definer = `receiver:find_verb_definer(name) ! E_VERBNF, E_PERM => $nothing';
-            if (!valid(definer))
-              continue;
-            endif
-            const info = verb_info(definer, name);
-            if (index(info[2], "r") && verb_args(definer, name) != {"this", "none", "this"})
-              resolved[name] = {receiver, definer, verb_args(definer, name), receiver:inspection_commands(viewer)};
-              break;
-            endif
+      let values = {};
+      for entry in (fields[key])
+        if (cardinality == 'matrix_optional)
+          let row = {};
+          for cell in (entry)
+            const {annotated, updated} = this:_annotate_node(cell, child_kind, viewer, environment, resolved);
+            row = {@row, annotated};
+            resolved = updated;
           endfor
+          values = {@values, row};
+        else
+          const {annotated, updated} = this:_annotate_node(entry, child_kind, viewer, environment, resolved);
+          values = {@values, annotated};
+          resolved = updated;
         endif
-        const reference = resolved[name];
-        if (length(reference))
-          if (index(label, "<"))
-            const invocation = this:command_usage(label, viewer, reference[3]);
-            fragment = $obj_utils:command_with_source(invocation, reference[1], name, reference[2], viewer);
-          elseif (label != name && !index(label, "["))
-            fragment = $obj_utils:command_with_source($format.annotation:command(label, $format.code:inline(label)), reference[1], name, reference[2], viewer);
-          else
-            fragment = $obj_utils:command_entry(reference[1], {name, reference[2], @reference[3]}, viewer, label, reference[4]);
-          endif
+      endfor
+      fields[key] = values;
+    endfor
+    !node && return {fields, resolved};
+    let contents = {};
+    if (typeof(contents_key) == TYPE_SYM)
+      contents = fields[contents_key];
+      fields = mapdelete(fields, contents_key);
+    endif
+    return {$document_template:mk(kind, contents, fields), resolved};
+  endmethod
+
+  method _annotate_command owner: ARCH_WIZARD
+    "Resolve eligible inline code in the viewer's command environment without executing it.";
+    let {code, viewer, environment, resolved} = args;
+    set_task_perms(caller_perms());
+    const label = code.text;
+    (index(label, "\n") || index(label, "`")) && return {code, resolved};
+    const words = label:words_list();
+    const name = length(words) ? words[1] | "";
+    if (!maphaskey(resolved, name))
+      resolved[name] = {};
+      for receiver in (environment)
+        const definer = `receiver:find_verb_definer(name) ! E_VERBNF, E_PERM => $nothing';
+        if (!valid(definer))
+          continue;
         endif
-      endif
-      parts = {@parts, content[cursor..opening - 1], fragment};
-      cursor = closing + width;
-    endwhile
-    return $format.paragraph:mk(@parts, content[cursor..$]);
+        const info = verb_info(definer, name);
+        const argspec = verb_args(definer, name);
+        if (index(info[2], "r") && argspec != {"this", "none", "this"})
+          resolved[name] = {receiver, definer, argspec};
+          break;
+        endif
+      endfor
+    endif
+    const reference = resolved[name];
+    !length(reference) && return {code, resolved};
+    let invocation;
+    if (index(label, "<"))
+      invocation = this:command_usage(label, viewer, reference[3]);
+      "Examples with more than two input fields remain code; the interaction protocol has two slots.";
+      typeof(invocation) == TYPE_FLYWEIGHT || return {code, resolved};
+    elseif (index(label, "["))
+      return {code, resolved};
+    else
+      invocation = $format.annotation:command(label, code);
+    endif
+    const fragment = $obj_utils:command_with_source(invocation, reference[1], name, reference[2], viewer);
+    return {fragment, resolved};
   endmethod
 
   method command_usage owner: ARCH_WIZARD

@@ -9,7 +9,7 @@ object NOTE [
   fertile: true
   readable: true
 
-  property content_type (owner: ARCH_WIZARD, flags: "rc") = 'text_plain;
+  property content_kind (owner: ARCH_WIZARD, flags: "rc") = 'literal;
   property erase_msg (owner: ARCH_WIZARD, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'actor>,
     " ",
@@ -155,9 +155,8 @@ object NOTE [
       return true;
     endif
     "Display the text";
-    content = $format.block:mk(text:join("\n"));
+    content = $format:authored(this.content_kind, text:join("\n"));
     event = $event:mk_info(who, content);
-    event = event:with_metadata('preferred_content_types, {this.content_type});
     who:inform_current(event);
     if (!silent && valid(who.location))
       event = $event:mk_info(who, @this.read_msg):with_dobj(this):with_this(who.location);
@@ -172,7 +171,9 @@ object NOTE [
     "Only callable by this object itself";
     caller != this && raise(E_PERM, "do_write must be called by this object");
     {who, line, ?silent = false} = args;
-    this.text = {@this.text, line};
+    const updated = {@this.text, line};
+    $format:authored(this.content_kind, updated:join("\n"));
+    this.text = updated;
     if (!silent && valid(who.location))
       event = $event:mk_info(who, @this.write_msg):with_dobj(this):with_this(who.location);
       `who.location:announce(event) ! E_VERBNF';
@@ -248,7 +249,9 @@ object NOTE [
       player:inform_current(event);
       return;
     endif
-    this.text = listdelete(text, line);
+    const updated = listdelete(text, line);
+    $format:authored(this.content_kind, updated:join("\n"));
+    this.text = updated;
     event = $event:mk_info(player, "Line deleted.");
     player:inform_current(event);
   endverb
@@ -310,7 +313,7 @@ object NOTE [
 
   method set_text owner: ARCH_WIZARD
     "Set the text content if caller can write.";
-    const {new_text} = args;
+    const {new_text, ?kind = this.content_kind} = args;
     const cp = caller_perms();
     "Owner and wizards can always write";
     const can_write = cp == this.owner || cp.wizard || this:can_write(cp)['allowed];
@@ -320,16 +323,22 @@ object NOTE [
     if (typeof(new_text) != TYPE_LIST)
       raise(E_TYPE, "Text must be a list of strings.");
     endif
+    kind in {'literal, 'djot_blocks} || raise(E_INVARG, "Notes require literal or block Djot");
+    for line in (new_text)
+      typeof(line) == TYPE_STR || raise(E_TYPE, "Text must be a list of strings.");
+    endfor
+    $format:authored(kind, new_text:join("\n"));
     this.text = new_text;
+    this.content_kind = kind;
     return true;
   endmethod
 
   method look_self owner: ARCH_WIZARD
     "Describe writing only when the caller may read the note.";
     const actor = caller_perms();
-    let description = this.description;
+    let description = this:description();
     if (this:can_read(actor)['allowed] && length(this:text()) > 0)
-      description = description + "  There appears to be some writing on it.";
+      description = $format.block:mk(description, "There appears to be some writing on it.");
     endif
     return <$look, .what = this, .title = this:name(), .description = description>;
   endmethod

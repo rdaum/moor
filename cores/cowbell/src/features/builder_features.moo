@@ -874,6 +874,7 @@ object BUILDER_FEATURES [
 
   verb "@describe" (any any any) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object> as <description> -- Set object description.";
+    "Prefix the object with --djot or --literal to select the description syntax.";
     caller != player && raise(E_PERM);
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
@@ -883,9 +884,18 @@ object BUILDER_FEATURES [
     endif
     try
       "Try to match as object first, then fall through to passage matching on ordinary not-found errors.";
+      let description_kind = false;
+      let target_spec = dobjstr;
+      if (target_spec:starts_with("--djot "))
+        description_kind = 'djot_blocks;
+        target_spec = target_spec[8..$];
+      elseif (target_spec:starts_with("--literal "))
+        description_kind = 'literal;
+        target_spec = target_spec[11..$];
+      endif
       target_obj = false;
       try
-        target_obj = $match:match_object(dobjstr, player);
+        target_obj = $match:match_object(target_spec, player);
       except e (E_INVARG, E_PROPNF)
         target_obj = false;
       except e (ANY)
@@ -898,13 +908,16 @@ object BUILDER_FEATURES [
         endif
         new_description = iobjstr:trim();
         !new_description && raise(E_INVARG, "Description cannot be blank.");
-        this:_do_describe_object(target_obj, new_description);
+        this:_do_describe_object(target_obj, new_description,
+          typeof(description_kind) == TYPE_SYM ? description_kind | target_obj.description_kind);
         obj_name = `target_obj.name ! ANY => tostr(target_obj)';
         message = "Set description of \"" + obj_name + "\" (" + tostr(target_obj) + ").";
         player:inform_current($event:mk_info(player, message));
         return 1;
       else
         "Not an object - try to match as a passage direction";
+        typeof(description_kind) != TYPE_SYM
+          || raise(E_INVARG, "Content type selection requires an object description");
         result = this:_do_describe_passage(dobjstr, iobjstr);
         if (result)
           return 1;
@@ -966,8 +979,8 @@ object BUILDER_FEATURES [
     "Internal helper to set object description with elevated permissions";
     caller == this || raise(E_PERM);
     set_task_perms(player);
-    {target_obj, new_description} = args;
-    target_obj.description = new_description;
+    const {target_obj, new_description, ?kind = target_obj.description_kind} = args;
+    target_obj:set_description(new_description, kind);
   endmethod
 
   method _do_describe_passage owner: ARCH_WIZARD
