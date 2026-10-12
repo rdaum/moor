@@ -615,9 +615,9 @@ export function bindAnnotationMarkers(html: string, annotations?: AnnotationTabl
         if (sourceLink) element.classList.add("semantic-source-link");
         element.title = sourceLink ? `${action}: ${label}` : action;
         element.setAttribute("aria-label", `${action}: ${label}`);
-        // Prose stays undecorated; structured room lists identify people.
+        // Prose stays undecorated; reference lists identify people.
         const icon = annotation.kind === "object"
-            ? (annotation.objectKind === "person" && element.closest(".room_snapshot_chip_row") ? "person" : undefined)
+            ? (annotation.objectKind === "person" && element.closest(".reference-columns") ? "person" : undefined)
             : annotation.kind === "command"
             ? (annotation.action?.icon ?? (element.closest(".reference-columns") ? "command" : undefined))
             : annotation.kind === "help"

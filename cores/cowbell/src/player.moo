@@ -111,7 +111,7 @@ object PLAYER [
       return player:emit_room_look(target);
     endif
     look_d = target:look_self();
-    player:inform_current(look_d:into_event():with_audience('utility));
+    player:inform_current($look:narrative(look_d:capture(player)):with_audience('utility));
   endverb
 
   method _look_passage owner: ARCH_WIZARD

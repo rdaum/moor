@@ -1,27 +1,27 @@
 object LOOK [
   import_export_id -> "look"
 ]
-  name: "Object 'look' Flyweight Delegate"
+  name: "Object Look"
   parent: ROOT
   owner: HACKER
 
-  override description (owner: HACKER, flags: "rc") = "The $look flyweight delegate holds the attributes involved in looking at an object, and can be transformed into output events. It always has mandatory 'title and 'description slots, and then optional contents which are a series of integration descriptions.";
+  override description (owner: HACKER, flags: "rc") = "Look inputs capture one viewer's document and references before narrative or panel layout.";
 
-  method mk owner: HACKER
-    {what, @contents} = args;
-    return <this, .what = what, .title = what:name(), .description = what:description(), .exits = {}, .ambient_passages = {}, .actions = {}, {@contents}>;
+  method mk owner: ARCH_WIZARD
+    "Collect an object's authored description and visible contents for later viewer capture.";
+    set_task_perms(caller_perms());
+    const {what, @contents} = args;
+    return <this, .what = what, .title = what:name(), .description = what:description(),
+      .exits = {}, .ambient_passages = {}, .actions = {}, contents>;
   endmethod
 
   method actor_idle_status owner: HACKER
-    "Get a descriptive idle status for an actor (player or NPC)";
-    {who} = args;
-    "NPCs don't have connection state - no status";
+    "Describe a player's current connection state; NPCs have no idle status.";
+    const {who} = args;
     is_player(who) || return "";
-    "Players who aren't connected are sleeping";
     who in connected_players() || return "deeply asleep";
-    if (typeof(idle = idle_seconds(who)) == TYPE_ERR)
-      return "";
-    endif
+    const idle = idle_seconds(who);
+    typeof(idle) == TYPE_ERR && return "";
     idle < 60 && return "awake";
     idle < 180 && return "dozing";
     idle < 600 && return "idle";
@@ -29,286 +29,210 @@ object LOOK [
     return "sleeping";
   endmethod
 
-  method into_event owner: HACKER
-    "Three lines -- title, description, contents.";
-    "Description is the item description but is also appended to with integrations. Objects with an :integrate_description verb are put there.";
-    "The remainder go into the contents block, separated by type: actors vs things.";
-    title = $format.title:mk($sub:dc());
-    "Normalize base description so lists with $sub flyweights remain intact";
-    description = this.description;
-    desc_content = {};
-    if (typeof(description) == TYPE_LIST)
-      desc_content = description;
-    elseif (typeof(description) in {TYPE_STR, TYPE_FLYWEIGHT})
-      desc_content = {description};
-    else
-      desc_content = {tostr(description)};
-    endif
-    integrated_contents = {};
-    things = {};
-    actors = {};
-    deeply_asleep = {};
-    flyweight_contents = flycontents(this);
-    for o in (flyweight_contents)
-      if (o == player)
+  method capture owner: ARCH_WIZARD
+    "Capture labels, references, and resolved description once under the caller's authority.";
+    "The returned LookView has no deferred content callbacks. Layout methods use only its values.";
+    set_task_perms(caller_perms());
+    const {viewer} = args;
+    const event = $event:mk_look(viewer):with_dobj(this.what)
+      :with_presentation_hint('inset):with_group('look, this.what)
+      :with_metadata('collapse_title, this.title);
+    let description = typeof(this.description) == TYPE_LIST ? this.description | {this.description};
+    let actors = {};
+    let things = {};
+    for item in (flycontents(this))
+      if (!valid(item) || item == viewer)
         continue;
       endif
-      integrated_description = `o:integrate_description() ! E_VERBNF => false';
-      if (typeof(integrated_description) == TYPE_FLYWEIGHT
-          || (typeof(integrated_description) in {TYPE_STR, TYPE_LIST} && length(integrated_description)))
-        integrated_contents = {@integrated_contents, integrated_description};
-      elseif (o:is_actor())
-        "Collect actor with idle status for inspect links";
-        status = this:actor_idle_status(o);
-        if (status == "deeply asleep")
-          deeply_asleep = {@deeply_asleep, {o, ""}};
-        elseif (status && status != "awake")
-          actors = {@actors, {o, status}};
-        else
-          actors = {@actors, {o, ""}};
-        endif
+      const integrated = `item:integrate_description() ! E_VERBNF => false';
+      const has_integration = typeof(integrated) == TYPE_FLYWEIGHT
+        || (typeof(integrated) in {TYPE_STR, TYPE_LIST} && length(integrated));
+      if (has_integration)
+        const content = typeof(integrated) == TYPE_STR && !integrated:ends_with(".")
+          ? integrated + "." | integrated;
+        description = {@description, "  ", content};
+      endif
+      const actor = item:is_actor();
+      const status = actor ? $look:actor_idle_status(item) | "";
+      const name = actor ? item:name() | item:display_name();
+      const label = length(status) && status != "awake" ? name + " (" + status + ")" | name;
+      const descriptor = is_anonymous(item) ? [] | ["kind" -> "object",
+        "ref" -> $url_utils:to_curie_str(item), "objectKind" -> item:reference_kind()];
+      let entry = $look:_entry(label, descriptor);
+      entry['object] = item;
+      entry['status] = status;
+      entry['bare] = $look:_entry(name, descriptor);
+      entry['integrated] = has_integration;
+      if (actor)
+        actors = {@actors, entry};
       else
-        things = {@things, o};
+        things = {@things, entry};
       endif
     endfor
-    "Combine integrated object descriptions and ambient passages into the main paragraph";
-    ambient_passages = `this.ambient_passages ! E_PROPNF => {}';
-    if (length(integrated_contents))
-      for ic in (integrated_contents)
-        if (typeof(ic) == TYPE_STR && !ic:ends_with("."))
-          ic = ic + ".";
-        endif
-        desc_content = {@desc_content, "  ", ic};
-      endfor
-    endif
-    if (length(ambient_passages))
-      "Process ambient passages based on prose_style";
-      fragment_passages = {};
-      for ap in (ambient_passages)
-        "Handle formats: string, {desc, style}, or {desc, style, label}";
-        label = "";
-        if (typeof(ap) == TYPE_LIST && length(ap) >= 3)
-          {description, prose_style, label} = ap;
-        elseif (typeof(ap) == TYPE_LIST && length(ap) >= 2)
-          {description, prose_style} = ap;
-        else
-          description = ap;
-          prose_style = 'fragment;
-        endif
-        if (prose_style == 'sentence)
-          "Complete sentence - linkify direction if label provided";
-          if (label)
-            formatted = $format.link:linkify_direction(description, label, this.what);
-            "Capitalize the result";
-            if (typeof(formatted) == TYPE_STR)
-              formatted = formatted:capitalize();
-              if (!formatted:ends_with(".") && !formatted:ends_with("!") && !formatted:ends_with("?"))
-                formatted = formatted + ".";
-              endif
-            endif
-          else
-            formatted = description:capitalize();
-            if (typeof(formatted) == TYPE_STR && !formatted:ends_with(".") && !formatted:ends_with("!") && !formatted:ends_with("?"))
-              formatted = formatted + ".";
-            endif
-          endif
-          desc_content = {@desc_content, "  ", formatted};
-        else
-          "Fragment - strip trailing punctuation since we wrap in 'You see X.'";
-          if (typeof(description) == TYPE_STR)
-            while (length(description) > 0 && (description:ends_with(".") || description:ends_with("!") || description:ends_with("?")))
-              description = description[1..length(description) - 1];
-            endwhile
-          endif
-          "Linkify with lowercase if label provided, collect for 'You see X' treatment";
-          if (label)
-            linkified = $format.link:linkify_direction(description, label, this.what, true);
-            fragment_passages = {@fragment_passages, linkified};
-          else
-            fragment_passages = {@fragment_passages, description:initial_lowercase()};
-          endif
-        endif
-      endfor
-      "Combine fragment passages with 'You see' wrapper";
-      if (length(fragment_passages))
-        "Build paragraph content: 'You see X, Y and Z.'";
-        parts = {"  You see "};
-        for i in [1..length(fragment_passages)]
-          frag = fragment_passages[i];
-          if (i > 1 && i == length(fragment_passages))
-            parts = {@parts, " and "};
-          elseif (i > 1)
-            parts = {@parts, ", "};
-          endif
-          parts = {@parts, frag};
-        endfor
-        parts = {@parts, "."};
-        desc_content = {@desc_content, $format.paragraph:inline(parts)};
+    const directions = `this.exits ! E_PROPNF => {}';
+    const ambient = `this.ambient_passages ! E_PROPNF => {}';
+    let all_directions = directions;
+    for passage in (ambient)
+      if (typeof(passage) == TYPE_LIST && length(passage) >= 3
+          && !(passage[3] in all_directions))
+        all_directions = {@all_directions, passage[3]};
       endif
+    endfor
+    let exits = {};
+    let exit_descriptors = [];
+    for direction in (all_directions)
+      const descriptor = this.what:exit_annotation(direction);
+      exit_descriptors[direction] = descriptor;
+      let entry = $look:_entry(direction, descriptor);
+      entry['ambient] = !(direction in directions);
+      exits = {@exits, entry};
+    endfor
+    description = {@description, @$look:_ambient(ambient, exit_descriptors)};
+    const source = toflyweight($event, flyslots(event), $format:blocks(description));
+    const resolved = source:resolve(viewer);
+    let actions = {};
+    for action in (`this.actions ! E_PROPNF => {}')
+      const {command, label} = action;
+      actions = {@actions, $look:_entry(label, ["kind" -> "command", "command" -> command])};
+    endfor
+    const thumbnail = this.what:thumbnail();
+    const title_descriptor = is_anonymous(this.what) ? [] | ["kind" -> "object",
+      "ref" -> $url_utils:to_curie_str(this.what), "objectKind" -> this.what:reference_kind()];
+    const title = $look:_entry(this.title, title_descriptor)['content];
+    return ['room_ref -> this.what, 'title -> title,
+      'title_text -> this.title, 'description -> resolved, 'exits -> exits,
+      'actors -> actors, 'things -> things, 'actions -> actions, 'event -> event,
+      'viewer -> viewer, 'thumbnail -> thumbnail];
+  endmethod
+
+  method _entry owner: HACKER
+    "Pair a literal label with a captured interaction descriptor and canonical inline nodes.";
+    const {label, descriptor} = args;
+    const text = $format:literal_inline(label);
+    const content = length(descriptor) ? {$document_node:mk('reference, text,
+      ['descriptor -> $document_schema:_descriptor_from_wire(descriptor)])} | text;
+    return ['label -> label, 'descriptor -> descriptor, 'content -> content];
+  endmethod
+
+  method _ambient owner: HACKER
+    "Build ambient prose from captured descriptions and passage descriptors, without room reads.";
+    const {passages, descriptors} = args;
+    let sentences = {};
+    let fragments = {};
+    for passage in (passages)
+      let text = passage;
+      let style = 'fragment;
+      let direction = "";
+      if (typeof(passage) == TYPE_LIST)
+        {text, style, ?direction = ""} = passage;
+      endif
+      if (style == 'sentence)
+        text = text:capitalize();
+        if (length(text) && !(text[$] in {".", "!", "?"}))
+          text = text + ".";
+        endif
+      else
+        while (length(text) && text[$] in {".", "!", "?"})
+          text = text[1..length(text) - 1];
+        endwhile
+        text = text:initial_lowercase();
+      endif
+      let content = $format:literal_inline(text);
+      const position = length(direction) ? index(text, direction) | 0;
+      if (position && maphaskey(descriptors, direction))
+        const label = text[position..position + length(direction) - 1];
+        content = {@$format:literal_inline(text[1..position - 1]),
+          @$look:_entry(label, descriptors[direction])['content],
+          @$format:literal_inline(text[position + length(direction)..$])};
+      endif
+      const inline = $document_template:mk('inline, content);
+      if (style == 'sentence)
+        sentences = {@sentences, "  ", inline};
+      else
+        fragments = {@fragments, ['content -> content]};
+      endif
+    endfor
+    if (length(fragments))
+      sentences = {@sentences, "  You see ", @$look:_join(fragments), "."};
     endif
-    "Retain explicit blocks in programmatic descriptions";
-    block_elements = {title, @$format:blocks(desc_content)};
-    "Add exits if present (with command links)";
-    exits = `this.exits ! E_PROPNF => {}';
-    if (length(exits) > 0)
-      block_elements = {@block_elements, this:format_exits(exits)};
+    return sentences;
+  endmethod
+
+  method _join owner: HACKER
+    "Join captured entry labels with commas and a final conjunction.";
+    const {entries} = args;
+    let content = {};
+    for i in [1..length(entries)]
+      if (i > 1)
+        const separator = i == length(entries) ? " and " | ", ";
+        content = {@content, @$format:literal_inline(separator)};
+      endif
+      content = {@content, @entries[i]['content]};
+    endfor
+    return content;
+  endmethod
+
+  method narrative owner: HACKER
+    "Assemble a narrative event from an inert LookView. No object labels or content are reread.";
+    const {view} = args;
+    let blocks = {$document_node:mk('heading, view['title], ['level -> 3]),
+      @flycontents(view['description])};
+    const exits = {entry for entry in (view['exits]) if (!entry['ambient])};
+    if (length(exits))
+      const prefix = length(exits) == 1 ? "An exit leads out " | "Exits lead out ";
+      blocks = {@blocks, $document_node:mk('paragraph, {
+        @$format:literal_inline(prefix), @$look:_join(exits), @$format:literal_inline(".")})};
     endif
-    "Add actions if present (interactive object commands)";
-    actions = `this.actions ! E_PROPNF => {}';
-    if (length(actions) > 0)
-      block_elements = {@block_elements, this:format_actions(actions)};
+    if (length(view['actions]))
+      blocks = {@blocks, $look:_list(view['actions])};
     endif
+    const things = {thing for thing in (view['things]) if (!thing['integrated])};
     if (length(things))
-      block_elements = {@block_elements, this:format_things(things)};
+      blocks = {@blocks, $document_node:mk('paragraph, {
+        @$format:literal_inline("You see "), @$look:_join(things),
+        @$format:literal_inline(" here.")})};
     endif
-    if (length(actors))
-      block_elements = {@block_elements, this:format_actors(actors)};
-    endif
-    if (length(deeply_asleep))
-      block_elements = {@block_elements, this:format_sleeping(deeply_asleep)};
-    endif
-    b = $format.block:mk(@block_elements);
-    event = $event:mk_look(player, b):with_dobj(this.what):with_presentation_hint('inset):with_group('look, this.what):with_metadata('collapse_title, this.what:name());
-    "Add thumbnail if the target has one";
-    if (respond_to(this.what, 'thumbnail))
-      pic = `this.what:thumbnail() ! ANY => false';
-      if (pic && typeof(pic) == TYPE_LIST && length(pic) == 2)
-        event = event:with_metadata('thumbnail, pic);
+    for sleeping in ({false, true})
+      const actors = {actor for actor in (view['actors]) if (
+        !actor['integrated] && ((actor['status] == "deeply asleep") == sleeping))};
+      if (length(actors))
+        const ending = (length(actors) == 1 ? " is" | " are")
+          + (sleeping ? " deeply asleep." | " here.");
+        "Sleeping is already expressed by the sentence, so use the captured bare name.";
+        const labels = sleeping ? {sleeping_actor['bare] for sleeping_actor in (actors)} | actors;
+        blocks = {@blocks, $document_node:mk('paragraph, {
+          @$look:_join(labels), @$format:literal_inline(ending)})};
       endif
+    endfor
+    let event = toflyweight($event, flyslots(view['event]), blocks);
+    if (typeof(view['thumbnail]) == TYPE_LIST && length(view['thumbnail]) == 2)
+      event = event:with_metadata('thumbnail, view['thumbnail]);
     endif
     return event;
   endmethod
 
-  method validate owner: HACKER
-    typeof(this) != TYPE_FLYWEIGHT && return false;
-    try
-      return this.what && this.title && this.description;
-    except (E_PROPNF)
-      return false;
-    endtry
+  method _list owner: HACKER
+    "Build a canonical reference list from captured entries.";
+    const {entries} = args;
+    return $document_node:mk('list, {['blocks -> {
+      $document_node:mk('paragraph, entry['content])}] for entry in (entries)}, ['style -> 'bullet]);
   endmethod
 
-  method format_exits owner: ARCH_WIZARD
-    "Create a paragraph for exit links.";
-    "Args: list of exit direction strings.";
-    {exits} = args;
-    typeof(exits) == TYPE_LIST || raise(E_TYPE, "Exits must be a list");
-    length(exits) == 0 && return "";
-    "Build parts list with links separated by commas";
-    "Exit links retain the originating room and registered passage.";
-    parts = {};
-    if (length(exits) == 1)
-      parts = {"An exit leads out ", $format.annotation:exit(this.what, exits[1]), "."};
-    else
-      parts = {"Exits lead out "};
-      for i in [1..length(exits)]
-        if (i > 1 && i == length(exits))
-          parts = {@parts, " and "};
-        elseif (i > 1)
-          parts = {@parts, ", "};
-        endif
-        parts = {@parts, $format.annotation:exit(this.what, exits[i])};
-      endfor
-      parts = {@parts, "."};
-    endif
-    return $format.paragraph:mk(parts);
-  endmethod
-
-  method format_things owner: ARCH_WIZARD
-    "Create a paragraph for 'You see X, Y and Z here.' with inspect links.";
-    "Args: list of objects.";
-    {objects} = args;
-    typeof(objects) == TYPE_LIST || raise(E_TYPE, "Objects must be a list");
-    length(objects) == 0 && return "";
-    parts = {"You see "};
-    for i in [1..length(objects)]
-      if (i > 1 && i == length(objects))
-        parts = {@parts, " and "};
-      elseif (i > 1)
-        parts = {@parts, ", "};
+  method panel owner: HACKER
+    "Render a panel from the captured description and entry groups. Its title stays separate.";
+    const {view, ?format = 'text_html} = args;
+    let blocks = flycontents(view['description]);
+    for section in ({{"Exits", view['exits]}, {"Things", {@view['actions], @view['things]}},
+        {"People", view['actors]}})
+      const {label, entries} = section;
+      if (length(entries))
+        blocks = {@blocks, $document_node:mk('heading, $format:literal_inline(label),
+          ['level -> 4]), $look:_list(entries)};
       endif
-      item = objects[i];
-      label = `item:display_name() ! E_VERBNF => item.name';
-      parts = {@parts, $format.annotation:object(item, label)};
     endfor
-    parts = {@parts, " here."};
-    return $format.paragraph:mk(parts);
-  endmethod
-
-  method format_actors owner: ARCH_WIZARD
-    "Create a paragraph for 'X, Y and Z are here.' with inspect links.";
-    "Args: list of {actor, status} pairs where status can be empty string.";
-    {actor_data} = args;
-    typeof(actor_data) == TYPE_LIST || raise(E_TYPE, "Actor data must be a list");
-    length(actor_data) == 0 && return "";
-    parts = {};
-    for i in [1..length(actor_data)]
-      if (i > 1 && i == length(actor_data))
-        parts = {@parts, " and "};
-      elseif (i > 1)
-        parts = {@parts, ", "};
-      endif
-      {actor, status} = actor_data[i];
-      actor_name = `actor:name() ! E_VERBNF => actor.name';
-      label = status && status != "" ? actor_name + " (" + status + ")" | actor_name;
-      parts = {@parts, $format.annotation:object(actor, label)};
-    endfor
-    verb_form = length(actor_data) == 1 ? " is" | " are";
-    parts = {@parts, verb_form, " here."};
-    return $format.paragraph:mk(parts);
-  endmethod
-
-  method format_sleeping owner: ARCH_WIZARD
-    "Create a paragraph for 'X, Y and Z are deeply asleep.' with inspect links.";
-    "Args: list of {actor, status} pairs (status ignored for sleeping).";
-    {actor_data} = args;
-    typeof(actor_data) == TYPE_LIST || raise(E_TYPE, "Actor data must be a list");
-    length(actor_data) == 0 && return "";
-    parts = {};
-    for i in [1..length(actor_data)]
-      if (i > 1 && i == length(actor_data))
-        parts = {@parts, " and "};
-      elseif (i > 1)
-        parts = {@parts, ", "};
-      endif
-      {actor, status} = actor_data[i];
-      actor_name = `actor:name() ! E_VERBNF => actor.name';
-      parts = {@parts, $format.annotation:object(actor, actor_name)};
-    endfor
-    verb_form = length(actor_data) == 1 ? " is" | " are";
-    parts = {@parts, verb_form, " deeply asleep."};
-    return $format.paragraph:mk(parts);
-  endmethod
-
-  method format_actions owner: ARCH_WIZARD
-    "Create a paragraph for action links from interactive objects.";
-    "Args: list of {command, label} tuples.";
-    {actions} = args;
-    typeof(actions) == TYPE_LIST || raise(E_TYPE, "Actions must be a list");
-    length(actions) == 0 && return "";
-    "Build parts list with links";
-    parts = {};
-    for i in [1..length(actions)]
-      {cmd, label} = actions[i];
-      if (i > 1)
-        parts = {@parts, " "};
-      endif
-      parts = {@parts, $format.annotation:command(cmd, label)};
-    endfor
-    return $format.paragraph:mk(parts);
-  endmethod
-
-  method into_presentation owner: ARCH_WIZARD
-    "Return a panel payload with its heading separated before serialization.";
-    const {?content_type = 'text_html} = args;
-    const title = this.what:name();
-    const document = this:into_event():resolve(player);
-    let blocks = flycontents(document);
-    if (length(blocks) && blocks[1].kind == 'heading)
-      blocks = blocks[2..$];
-    endif
-    const result = $document:render($document:mk(blocks), content_type);
-    return ["title" -> title, "content" -> result['body],
-      "content_type" -> tostr(content_type), "annotations" -> result['annotations]];
+    const result = $document:render($document:mk(blocks), format);
+    return ["room" -> view['room_ref], "title" -> view['title_text],
+      "content" -> result['body], "content_type" -> strsub(tostr(format), "_", "/", 1),
+      "annotations" -> result['annotations]];
   endmethod
 endobject

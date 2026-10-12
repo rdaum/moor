@@ -18,6 +18,9 @@ Cowbell entries.
 
 ### Changed
 
+- Room narrative and panels share one captured view. Meadow preserves formatted descriptions and
+  captured references in its room panel. Room snapshots now carry a rendered body and annotations.
+
 - Descriptions no longer infer substitution templates from braces. Use explicit substitution constructors.
   Notes and letters use `content_kind` (`literal` or `djot_blocks`) in place of output-format preferences.
 - Events now resolve viewer-specific document content before rendering. Delivery reuses that

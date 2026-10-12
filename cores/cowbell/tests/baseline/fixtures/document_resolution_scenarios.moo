@@ -298,7 +298,7 @@ object DOCUMENT_RESOLUTION_SCENARIOS
     for prototype in ({$agent_room, $agentic.coding_room})
       const room = create(prototype, player, 2);
       try
-        const document = room:look_self():into_event():resolve(player);
+        const document = $look:narrative(room:look_self():capture(player)):resolve(player);
         let lists = 0;
         for block in ($document:encode(document)["blocks"])
           block["kind"] == "list" && (lists = lists + 1);
@@ -363,12 +363,12 @@ object DOCUMENT_RESOLUTION_SCENARIOS
       move(container, player);
       move(item, container);
       container.open = false;
-      const closed = container:look_self():into_event():resolve(player);
+      const closed = $look:narrative(container:look_self():capture(player)):resolve(player);
       $test_utils:assert_eq(this:_plain(closed),
         "Document box\n\nFirst paragraph.\n\nSecond paragraph.\n\nThe document box is shut.",
         "Closed view retains the description and resolves its own container binding");
       container.open = true;
-      const opened = container:look_self():into_event():resolve(player);
+      const opened = $look:narrative(container:look_self():capture(player)):resolve(player);
       $test_utils:assert_true(index(this:_plain(opened), "It contains hidden *token*."), "Visible contents are literal");
       $test_utils:assert_eq(length($document:render(opened, 'text_html)['annotations]), 2,
         "Container and visible contents retain references");

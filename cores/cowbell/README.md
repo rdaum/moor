@@ -88,7 +88,7 @@ Status messages contain literal labels and counters. Producers do not embed ANSI
 strings. Delivery chooses the output format.
 
 The current delivery path does not yet attach the encoded document to notifications or history.
-Shared room capture and a complete rewrite envelope also remain pending.
+A complete rewrite envelope also remains pending.
 
 **Core Objects:**
 
@@ -298,6 +298,21 @@ limits. `decode` validates metadata before reconstructing document values.
 Node kinds and internal record keys use symbols. Metadata uses string keys and string enum values.
 The [schema](src/document/document_schema.moo) defines the complete node vocabulary and field
 layout. Rendering options are `width` (1–1024, default 80) and `code_line_numbers` (default `true`).
+
+### Captured room views
+
+`room:look_self():capture(viewer)` captures one `LookView` under the caller's permissions.
+Its `title` is an inline node list, and `description` is a resolved document. Exits, actors, things,
+and actions contain captured labels, reference descriptors, and inline nodes.
+
+`$look:narrative(view)` builds the narrative event. `$look:panel(view)` renders the panel body.
+Both use the same values, without calling content producers or reading names again.
+The panel retains its separate title and includes reference lists for exits, things, and people.
+Meadow displays the core-rendered body and its annotation table; it does not convert raw descriptions.
+
+Receiver delivery captures the view with the receiver's permissions. Only live room-state events
+update the panel. Replayed narrative cannot replace it. A capture that finishes after the viewer
+leaves the room cannot publish that room as current state.
 
 ### Authored content
 

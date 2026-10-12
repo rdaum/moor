@@ -125,7 +125,7 @@ object ROOM [
       endif
       for viewer in (this.contents)
         suspend_if_needed();
-        if (!is_player(viewer))
+        if (!is_player(viewer) || viewer == who)
           continue;
         endif
         `viewer:emit_room_snapshot_state(viewer, this) ! ANY => 0';
@@ -302,37 +302,24 @@ object ROOM [
     endfor
   endmethod
 
-  method look_self owner: HACKER
-    "Override look_self to include exit information and actions";
-    "Get base look from parent";
-    look_data = pass(@args);
-    "Add exits if we're in an area with passages";
-    area = this.location;
-    exits = {};
-    ambient_passages = {};
+  method look_self owner: ARCH_WIZARD
+    "Collect authored room content, passages, and actions from one contents list.";
+    set_task_perms(caller_perms());
+    let look = pass(@args);
+    const area = this.location;
     if (valid(area) && respond_to(area, 'get_exit_info))
-      {exits, ambient_passages} = area:get_exit_info(this);
+      const {exits, ambient} = area:get_exit_info(this);
+      look.exits = exits;
+      look.ambient_passages = ambient;
     endif
-    "Collect actions from objects in the room";
-    actions = {};
-    for item in (this.contents)
-      suspend_if_needed();
-      item_actions = `item:available_actions() ! E_VERBNF => {}';
-      if (typeof(item_actions) == TYPE_LIST && length(item_actions) > 0)
-        actions = {@actions, @item_actions};
-      endif
+    let actions = {};
+    for item in (flycontents(look))
+      const available = `item:available_actions() ! E_VERBNF => {}';
+      typeof(available) == TYPE_LIST || raise(E_TYPE, "Actions must be a list");
+      actions = {@actions, @available};
     endfor
-    "Build updated flyweight if we have exits, passages, or actions";
-    if (length(exits) > 0)
-      look_data.exits = exits;
-    endif
-    if (length(ambient_passages) > 0)
-      look_data.ambient_passages = ambient_passages;
-    endif
-    if (length(actions) > 0)
-      look_data.actions = actions;
-    endif
-    return look_data;
+    look.actions = actions;
+    return look;
   endmethod
 
   method check_can_dig_from owner: ARCH_WIZARD
@@ -1136,42 +1123,10 @@ object ROOM [
     endif
   endverb
 
-  method room_snapshot owner: HACKER
-    "Return structured room state for OOB clients.";
-    "{?viewer = player, ?look_data = this:look_self()}";
-    {?viewer = player, ?look_data = 0} = args;
-    if (typeof(look_data) != TYPE_FLYWEIGHT)
-      look_data = this:look_self();
-    endif
-    exits = `look_data.exits ! E_PROPNF => {}';
-    ambient_passages = `look_data.ambient_passages ! E_PROPNF => {}';
-    all_exits = {@exits};
-    for ap in (ambient_passages)
-      suspend_if_needed();
-      if (typeof(ap) == TYPE_LIST && length(ap) >= 3)
-        label = ap[3];
-        if (typeof(label) == TYPE_STR && label && !(label in all_exits))
-          all_exits = {@all_exits, label};
-        endif
-      endif
-    endfor
-    const exit_links = { ["label" -> direction, "annotation" -> this:exit_annotation(direction)] for direction in (all_exits) };
-    available_actions = `look_data.actions ! E_PROPNF => {}';
-    actors = {};
-    things = {};
-    for o in (this:contents())
-      suspend_if_needed();
-      if (!valid(o) || o == viewer)
-        continue;
-      endif
-      name = `o:name() ! E_VERBNF => o.name';
-      if (o:is_actor())
-        status = `look_data:actor_idle_status(o) ! ANY => ""';
-        actors = {@actors, ["object" -> o, "name" -> name, "status" -> status]};
-      else
-        things = {@things, ["object" -> o, "name" -> name, "objectKind" -> o:reference_kind()]};
-      endif
-    endfor
-    return ["room" -> this, "title" -> this:name(), "description" -> this:description(), "exits" -> all_exits, "exit_links" -> exit_links, "ambient_passages" -> ambient_passages, "actions" -> available_actions, "actors" -> actors, "things" -> things];
+  method room_snapshot owner: ARCH_WIZARD
+    "Capture a viewer's current room panel. Combined delivery captures once in the receiver.";
+    set_task_perms(caller_perms());
+    const {?viewer = player} = args;
+    return $look:panel(this:look_self():capture(viewer));
   endmethod
 endobject

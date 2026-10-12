@@ -895,38 +895,33 @@
   margin-bottom: 0;
 }
 
-.top_dock_panel_content .room_snapshot_chips {
-  display: flex;
-  flex-direction: column;
-  gap: 0.26rem;
-  margin-top: 0.38rem;
-}
-
-.top_dock_panel_content .room_snapshot_row {
-  display: grid;
-  grid-template-columns: 4.25rem minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.375rem;
-  min-width: 0;
-}
-
-.top_dock_panel_content .room_snapshot_row_label {
+.room_look_panel .content-html > h4,
+.room_look_panel .text_djot > h4 {
+  margin: 0.65rem 0 0.25rem;
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--color-text-secondary) 85%, var(--color-text-primary));
-  white-space: nowrap;
+  color: var(--color-text-secondary);
 }
 
-.top_dock_panel_content .room_snapshot_chip_row {
+.room_look_panel .content-renderer .reference-columns {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  min-width: 0;
+  columns: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
-.top_dock_panel_content .room_snapshot_chip_row .semantic-annotation {
+.room_look_panel .content-renderer .reference-columns > li {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+}
+
+.room_look_panel .reference-columns .semantic-annotation {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -944,7 +939,7 @@
   color: color-mix(in srgb, var(--color-text-primary) 86%, transparent);
 }
 
-.top_dock_panel_content .room_snapshot_chip_row .semantic-annotation:hover {
+.room_look_panel .reference-columns .semantic-annotation:hover {
   background: color-mix(in srgb, var(--color-bg-hover) 70%, var(--color-bg-header));
   border-color: color-mix(in srgb, var(--color-border-dark) 58%, transparent);
   color: var(--color-text-primary);
@@ -4205,7 +4200,7 @@ button:disabled {
 }
 .command-card-header h2 { min-width: 0; overflow-wrap: anywhere; }
 .command-card-header button { flex-shrink: 0; }
-.top_dock_panel_content .room_snapshot_chip_row .semantic-person {
+.room_look_panel .reference-columns .semantic-person {
     background: transparent;
     border-color: transparent;
 }

@@ -17,10 +17,12 @@ import type { NarrativeRef } from "../components/Narrative";
 import { createEditorLaunchBridge } from "./editorLaunchBridge";
 import { useNarrativePipeline } from "./useNarrativePipeline";
 
+const presentations = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn() }));
+
 vi.mock("../context/PresentationContext", () => ({
     usePresentationContext: () => ({
-        addPresentation: vi.fn(),
-        removePresentation: vi.fn(),
+        addPresentation: presentations.add,
+        removePresentation: presentations.remove,
     }),
 }));
 
@@ -137,4 +139,46 @@ it("does not replay successfully flushed messages when a later append fails duri
     expect(() => result.current.narrativeCallbackRef(narrative)).toThrow("append failed");
     act(() => result.current.narrativeCallbackRef(narrative));
     expect(addNarrativeContent.mock.calls.map(call => call[0])).toEqual(["accepted", "try again", "try again"]);
+});
+
+it("historical room narrative cannot reopen or replace the current room panel", () => {
+    presentations.add.mockClear();
+    presentations.remove.mockClear();
+    const { result } = renderHook(() => useNarrativePipeline(createEditorLaunchBridge()));
+    const addNarrativeContent = vi.fn<NarrativeRef["addNarrativeContent"]>();
+    act(() => {
+        result.current.narrativeCallbackRef({ addNarrativeContent } as unknown as NarrativeRef);
+        result.current.handlers.handleDataMessage({
+            namespace: "state",
+            eventKind: "room_snapshot",
+            timestamp: "2026-10-12T00:00:00Z",
+            payload: {
+                room: 20,
+                title: "Current room",
+                content: "<p>Now</p>",
+                content_type: "text/html",
+                annotations: {},
+            },
+        });
+    });
+    const current = presentations.add.mock.calls[0][0];
+    act(() =>
+        result.current.handlers.handleNarrativeMessage(
+            "Old room",
+            undefined,
+            "text/plain",
+            true,
+            undefined,
+            "inset",
+            "look_10",
+            undefined,
+            undefined,
+            undefined,
+            { lookKind: "room", lookRoom: "oid:10" },
+        )
+    );
+    expect(addNarrativeContent.mock.calls.at(-1)?.[0]).toBe("Old room");
+    expect(presentations.add).toHaveBeenCalledOnce();
+    expect(presentations.add.mock.calls[0][0]).toBe(current);
+    expect(presentations.remove).not.toHaveBeenCalled();
 });

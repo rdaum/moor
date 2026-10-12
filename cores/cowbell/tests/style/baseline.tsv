@@ -228,13 +228,6 @@ count	file	verb	kind	detail
 1	events/event_receiver.moo	_is_gagged_event owner: ARCH_WIZARD	implicit-local	source
 1	events/event_receiver.moo	_is_gagged_event owner: ARCH_WIZARD	implicit-local	verb_loc
 1	events/event_receiver.moo	_is_gagged_event owner: ARCH_WIZARD	implicit-local	verb_name
-1	events/event_receiver.moo	emit_room_look owner: ARCH_WIZARD	implicit-local	look_d
-1	events/event_receiver.moo	emit_room_look owner: ARCH_WIZARD	implicit-local	look_event
-1	events/event_receiver.moo	emit_room_look owner: ARCH_WIZARD	implicit-local	room
-1	events/event_receiver.moo	emit_room_snapshot_state owner: ARCH_WIZARD	implicit-local	look_d
-1	events/event_receiver.moo	emit_room_snapshot_state owner: ARCH_WIZARD	implicit-local	room
-1	events/event_receiver.moo	emit_room_snapshot_state owner: ARCH_WIZARD	implicit-local	snapshot
-1	events/event_receiver.moo	emit_room_snapshot_state owner: ARCH_WIZARD	implicit-local	viewer
 1	events/event_receiver.moo	tell owner: HACKER	implicit-local	conn
 1	events/event_receiver.moo	tell owner: HACKER	implicit-local	conns
 1	events/event_receiver.moo	tell owner: HACKER	implicit-local	content_type
@@ -2877,71 +2870,6 @@ count	file	verb	kind	detail
 1	llm/mr_welcome.moo	test_navigation_tool_metadata owner: HACKER	implicit-local	r1
 1	llm/mr_welcome.moo	test_navigation_tool_metadata owner: HACKER	implicit-local	r2
 1	llm/mr_welcome.moo	test_navigation_tool_metadata owner: HACKER	implicit-local	route
-1	look.moo	actor_idle_status owner: HACKER	conditional-assignment	idle = idle_seconds(who)
-1	look.moo	actor_idle_status owner: HACKER	implicit-local	idle
-1	look.moo	actor_idle_status owner: HACKER	implicit-local	who
-1	look.moo	format_actions owner: ARCH_WIZARD	implicit-local	actions
-1	look.moo	format_actions owner: ARCH_WIZARD	implicit-local	cmd
-1	look.moo	format_actions owner: ARCH_WIZARD	implicit-local	label
-1	look.moo	format_actions owner: ARCH_WIZARD	implicit-local	parts
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	actor
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	actor_data
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	actor_name
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	label
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	parts
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	status
-1	look.moo	format_actors owner: ARCH_WIZARD	implicit-local	verb_form
-1	look.moo	format_exits owner: ARCH_WIZARD	implicit-local	exits
-1	look.moo	format_exits owner: ARCH_WIZARD	implicit-local	parts
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	actor
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	actor_data
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	actor_name
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	parts
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	status
-1	look.moo	format_sleeping owner: ARCH_WIZARD	implicit-local	verb_form
-1	look.moo	format_things owner: ARCH_WIZARD	implicit-local	item
-1	look.moo	format_things owner: ARCH_WIZARD	implicit-local	label
-1	look.moo	format_things owner: ARCH_WIZARD	implicit-local	objects
-1	look.moo	format_things owner: ARCH_WIZARD	implicit-local	parts
-1	look.moo	into_event owner: HACKER	implicit-local	actions
-1	look.moo	into_event owner: HACKER	implicit-local	actors
-1	look.moo	into_event owner: HACKER	implicit-local	ambient_passages
-1	look.moo	into_event owner: HACKER	implicit-local	b
-1	look.moo	into_event owner: HACKER	implicit-local	block_elements
-1	look.moo	into_event owner: HACKER	implicit-local	deeply_asleep
-1	look.moo	into_event owner: HACKER	implicit-local	desc_content
-1	look.moo	into_event owner: HACKER	implicit-local	description
-1	look.moo	into_event owner: HACKER	implicit-local	event
-1	look.moo	into_event owner: HACKER	implicit-local	exits
-1	look.moo	into_event owner: HACKER	implicit-local	flyweight_contents
-1	look.moo	into_event owner: HACKER	implicit-local	formatted
-1	look.moo	into_event owner: HACKER	implicit-local	frag
-1	look.moo	into_event owner: HACKER	implicit-local	fragment_passages
-1	look.moo	into_event owner: HACKER	implicit-local	integrated_contents
-1	look.moo	into_event owner: HACKER	implicit-local	integrated_description
-1	look.moo	into_event owner: HACKER	implicit-local	label
-1	look.moo	into_event owner: HACKER	implicit-local	linkified
-1	look.moo	into_event owner: HACKER	implicit-local	parts
-1	look.moo	into_event owner: HACKER	implicit-local	pic
-1	look.moo	into_event owner: HACKER	implicit-local	prose_style
-1	look.moo	into_event owner: HACKER	implicit-local	status
-1	look.moo	into_event owner: HACKER	implicit-local	things
-1	look.moo	into_event owner: HACKER	implicit-local	title
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	close_h3
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	content
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	content_type
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	event
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	open_h3
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	output
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	prefix
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	suffix
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	suffix_start
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	title
-1	look.moo	into_presentation owner: ARCH_WIZARD	implicit-local	transformed
-1	look.moo	mk owner: HACKER	implicit-local	contents
-1	look.moo	mk owner: HACKER	implicit-local	what
-1	look.moo	mk owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	look.moo	validate owner: HACKER	missing-docstring	Describe the contract before executable statements.
 1	messaging/dm.moo	display owner: ARCH_WIZARD	implicit-local	age
 1	messaging/dm.moo	display owner: ARCH_WIZARD	implicit-local	age_str
 1	messaging/dm.moo	display owner: ARCH_WIZARD	implicit-local	colored_loc
@@ -4763,12 +4691,6 @@ count	file	verb	kind	detail
 1	world/room.moo	lock (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	target
 1	world/room.moo	lock (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	to_room
 1	world/room.moo	lock (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	unlock_rule
-1	world/room.moo	look_self owner: HACKER	implicit-local	actions
-1	world/room.moo	look_self owner: HACKER	implicit-local	ambient_passages
-1	world/room.moo	look_self owner: HACKER	implicit-local	area
-1	world/room.moo	look_self owner: HACKER	implicit-local	exits
-1	world/room.moo	look_self owner: HACKER	implicit-local	item_actions
-1	world/room.moo	look_self owner: HACKER	implicit-local	look_data
 1	world/room.moo	match_scope_for owner: HACKER	implicit-local	actor
 1	world/room.moo	match_scope_for owner: HACKER	implicit-local	context
 1	world/room.moo	match_scope_for owner: HACKER	implicit-local	entries
@@ -4798,17 +4720,6 @@ count	file	verb	kind	detail
 1	world/room.moo	rewrite_announced owner: ARCH_WIZARD	implicit-local	conns
 1	world/room.moo	rewrite_announced owner: ARCH_WIZARD	implicit-local	new_event
 1	world/room.moo	rewrite_announced owner: ARCH_WIZARD	implicit-local	rewrite_id
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	actors
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	all_exits
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	ambient_passages
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	available_actions
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	exits
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	label
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	look_data
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	name
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	status
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	things
-1	world/room.moo	room_snapshot owner: HACKER	implicit-local	viewer
 1	world/room.moo	say (any any any) owner: HACKER flags: "rxd"	missing-docstring	Describe the contract before executable statements.
 1	world/room.moo	transport_destinations owner: ARCH_WIZARD	implicit-local	connections
 1	world/room.moo	transport_destinations owner: ARCH_WIZARD	implicit-local	results
