@@ -202,7 +202,7 @@ object AGENTIC_CODING_ROOM [
     this.agentic_tool_state = "awaiting_model";
     this.agentic_tool_note = "Waiting for model response...";
     this.agentic_wait_started = time();
-    this:_tell_requester($ansi:wrap("waiting for model response...", 'dim));
+    this:_tell_requester("waiting for model response...");
     const parent_tid = task_id();
     let run_tid = 0;
     fork child_tid (0)
@@ -239,7 +239,7 @@ object AGENTIC_CODING_ROOM [
         this.agentic_last_error = result;
         this.agentic_tool_state = "timeout";
         this.agentic_tool_note = "Model call timed out after " + tostr(task_timeout) + "s";
-        this:_tell_requester($ansi:wrap("model call timed out after " + tostr(task_timeout) + "s", 'red));
+        this:_tell_requester(("model call timed out after " + tostr(task_timeout) + "s"));
         done = 1;
       endif
     endwhile
@@ -264,13 +264,13 @@ object AGENTIC_CODING_ROOM [
     this.history = {@this.history, entry};
     if (status == 'complete)
       content = typeof(result) == TYPE_STR ? result | toliteral(result);
-      this:_announce("### Task Completed for " + task_player.name + "\n\n" + content);
+      this:_announce($format.block:mk($format.title:mk("Task Completed for " + task_player.name), content));
     else
       brief = failure_reason ? failure_reason | typeof(result) == TYPE_STR ? result | toliteral(result);
       if (length(brief) > 220)
         brief = brief[1..220] + "...";
       endif
-      task_player:inform_current($event:mk_info(task_player, $ansi:wrap("  \u2192 Task failed: " + brief, 'red)));
+      task_player:inform_current($event:mk_info(task_player, ("  \u2192 Task failed: " + brief)));
       this:_announce("Task failed for " + task_player.name + ". Reason: " + brief);
     endif
     this.current_task = "";
@@ -768,11 +768,11 @@ object AGENTIC_CODING_ROOM [
       return;
     endif
     const iter = `this.agent.current_iteration ! ANY => 0';
-    const prefix = $ansi:wrap("[turn " + tostr(iter) + "]", 'cyan);
-    const label = $ansi:wrap("tool", 'dim) + ": " + $ansi:wrap(tool_name, 'bold, 'yellow);
+    const prefix = ("[turn " + tostr(iter) + "]");
+    const label = "tool" + ": " + tool_name;
     let msg = prefix + " " + label;
     if (summary)
-      msg = msg + " " + $ansi:wrap("(" + summary + ")", 'dim);
+      msg = msg + " " + ("(" + summary + ")");
     endif
     this:_tell_requester(msg);
   endmethod
@@ -793,11 +793,11 @@ object AGENTIC_CODING_ROOM [
     endif
     this.agentic_tool_note = preview;
     this.agentic_last_error = tool_name + ": " + preview;
-    let msg = $ansi:wrap("error", 'bold, 'red) + " " + $ansi:wrap(tool_name, 'red);
+    let msg = "error" + " " + tool_name;
     if (summary)
-      msg = msg + " " + $ansi:wrap("(" + summary + ")", 'dim);
+      msg = msg + " " + ("(" + summary + ")");
     endif
-    msg = msg + " - " + $ansi:wrap(preview, 'red);
+    msg = msg + " - " + preview;
     this:_tell_requester(msg);
   endmethod
 
@@ -820,9 +820,9 @@ object AGENTIC_CODING_ROOM [
       return;
     endif
     const summary = this:_tool_call_summary(tool_args);
-    let msg = $ansi:wrap("ok", 'green) + " " + $ansi:wrap(tool_name, 'bold, 'green);
+    let msg = "ok" + " " + tool_name;
     if (summary)
-      msg = msg + " " + $ansi:wrap("(" + summary + ")", 'dim);
+      msg = msg + " " + ("(" + summary + ")");
     endif
     this:_tell_requester(msg);
   endmethod
@@ -898,7 +898,7 @@ object AGENTIC_CODING_ROOM [
     if (shown == 0)
       lines = {@lines, "  (No history entries for you.)"};
     endif
-    player:inform_current($event:mk_info(player, lines));
+    player:inform_current($event:mk_info(player, $format.block:mk(@lines)));
   endverb
 
   verb description (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -912,10 +912,10 @@ object AGENTIC_CODING_ROOM [
     let role = 0;
     let tail = 0;
     let tokens = 0;
-    const intro = $ansi:wrap("A virtual workspace where you can interact with an AI agent.", 'dim);
-    const cmd_header = "\n" + $ansi:wrap("Commands:", 'bold, 'cyan);
-    const cmds = $format.list:mk({$ansi:wrap("do <task>", 'green) + " - Queue a task for the agent", $ansi:wrap("resume [notes]", 'green) + " - Resume your last failed task from saved context", $ansi:wrap("status", 'green) + " - Check current activity", $ansi:wrap("halt", 'green) + " - Interrupt current task", $ansi:wrap("queue", 'green) + " - Show pending tasks", $ansi:wrap("history", 'green) + " - Show completed tasks", $ansi:wrap("tool", 'green) + " - Show available tools (aliases: tools, @tools)", $ansi:wrap("context", 'green) + " - Context details / compact / reset", $ansi:wrap("progress", 'green) + " - Live tool-update verbosity"}, false);
-    const ctx_header = "\n" + $ansi:wrap("Context:", 'bold, 'cyan);
+    const intro = "A virtual workspace where you can interact with an AI agent.";
+    const cmd_header = $format.title:mk("Commands", 4);
+    const cmds = $format.list:mk({"do <task>" + " - Queue a task for the agent", "resume [notes]" + " - Resume your last failed task from saved context", "status" + " - Check current activity", "halt" + " - Interrupt current task", "queue" + " - Show pending tasks", "history" + " - Show completed tasks", "tool" + " - Show available tools (aliases: tools, @tools)", "context" + " - Context details / compact / reset", "progress" + " - Live tool-update verbosity"}, false);
+    const ctx_header = $format.title:mk("Context", 4);
     let ctx_items = {};
     let ctx = {};
     let ctx_source = "none";

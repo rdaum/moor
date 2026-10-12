@@ -2,20 +2,30 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 @nonprogrammer
 % dm RUNTIME_PROGRAMMER Messaging receipt probe
+~~You (in Runtime Test Chamber) → RUNTIME_PROGRAMMER:
+=
 ~~Messaging receipt probe
 @event text/plain utility
 @programmer
 ; return length(player.direct_messages) == 1 && player.last_dm_from == #90102;
 true
+~~RUNTIME_PLAYER (in Runtime Test Chamber)
+=
 ~~Messaging receipt probe
 % reply Messaging reply probe
+~~You (in Runtime Test Chamber) → RUNTIME_PLAYER:
+=
 ~~Messaging reply probe
 @wizard
 ; return length(#90102.direct_messages) == 1 && #90102.last_dm_from == #90101;
 true
 @nonprogrammer
 % message 1
+~~RUNTIME_PROGRAMMER (in Runtime Test Chamber)
+=
 ~~Messaging reply probe
+~~RUNTIME_PROGRAMMER (in Runtime Test Chamber)
+=
 ~~Messaging reply probe
 % dm RUNTIME_PLAYER self
 ~~Talking to yourself?

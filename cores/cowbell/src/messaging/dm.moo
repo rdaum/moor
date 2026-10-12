@@ -50,18 +50,17 @@ object DM [
   endmethod
 
   method display owner: ARCH_WIZARD
-    "Render this DM for display to the recipient.";
-    {?for_player = this.to} = args;
-    sender = this.from;
-    sender_name = valid(sender) ? sender.name | "(unknown)";
-    loc = this.location;
-    age = time() - this.sent;
-    age_str = age < 60 ? "just now" | age:format_time_seconds() + " ago";
-    "Build colorized version";
-    colored_sender = $ansi:colorize(sender_name, 'bright_cyan);
-    colored_loc = valid(loc) ? " (in " + $ansi:colorize(loc.name, 'dim) + ")" | "";
-    colored_time = $ansi:colorize("[" + age_str + "]", 'yellow);
-    return colored_sender + colored_loc + " " + colored_time + ": " + this.text;
+    "Construct the recipient's attribution and literal body paragraphs.";
+    set_task_perms(caller_perms());
+    const {?for_player = this.to} = args;
+    const sender = this.from;
+    const source = valid(sender) ? $format.annotation:object(sender) | "(unknown sender)";
+    const loc = this.location;
+    const place = valid(loc) ? {" (in ", $format.annotation:object(loc), ")"} | {};
+    const age = time() - this.sent;
+    const age_text = age < 60 ? "just now" | age:format_time_seconds() + " ago";
+    const header = $format.paragraph:mk(source, @place, " [", age_text, "]:");
+    return $format.block:mk(header, this.text);
   endmethod
 
   method display_short owner: ARCH_WIZARD
@@ -78,7 +77,7 @@ object DM [
   endmethod
 
   method display_tts owner: ARCH_WIZARD
-    "Return plain text version for screen readers (no ANSI codes).";
+    "Return spoken attribution and message text.";
     {?for_player = this.to} = args;
     sender = this.from;
     sender_name = valid(sender) ? sender.name | "unknown";
@@ -90,50 +89,32 @@ object DM [
   endmethod
 
   method display_event owner: ARCH_WIZARD
-    "Return a fully-formed event for displaying this DM to the recipient.";
-    "Includes colorized display, TTS, metadata, and grouping.";
-    {recipient} = args;
-    display_str = this:display(recipient);
-    tts_str = this:display_tts(recipient);
-    group = tosym("dm_" + $url_utils:to_curie_str(this.from));
-    event = $event:mk_dm(recipient, display_str);
-    event = event:with_presentation_hint('inset);
-    event = event:with_group(group);
-    event = event:with_tts(tts_str);
-    event = event:with_metadata('dm_from, this.from);
-    event = event:with_metadata('dm_location, this.location);
-    event = event:with_metadata('dm_content, this.text);
-    event = event:with_metadata('dm_timestamp, this.sent);
-    return event;
+    "Build the recipient's private message event with attribution, spoken text, and grouping.";
+    set_task_perms(caller_perms());
+    const {recipient} = args;
+    const group = tosym("dm_" + $url_utils:to_curie_str(this.from));
+    return $event:mk_dm(recipient, this:display(recipient))
+      :with_presentation_hint('inset):with_group(group):with_tts(this:display_tts(recipient))
+      :with_metadata('dm_from, this.from):with_metadata('dm_location, this.location)
+      :with_metadata('dm_content, this.text):with_metadata('dm_timestamp, this.sent);
   endmethod
 
   method sender_echo_event owner: ARCH_WIZARD
-    "Return event confirming DM was sent, shown to the sender.";
-    "Format: You (in Location) \u2192 Target: message";
-    sender = this.from;
-    recipient = this.to;
-    loc = this.location;
-    recipient_name = valid(recipient) ? recipient.name | "???";
-    "Build colorized display";
-    loc_str = valid(loc) ? " (in " + $ansi:colorize(loc.name, 'dim) + ")" | "";
-    arrow = $ansi:colorize(" \u2192 ", 'bright_black);
-    colored_you = $ansi:colorize("You", 'bright_cyan);
-    colored_target = $ansi:colorize(recipient_name, 'bright_magenta);
-    display_str = colored_you + loc_str + arrow + colored_target + ": " + this.text;
-    "Build TTS version";
-    tts_loc = valid(loc) ? " in " + loc.name | "";
-    tts_str = "Message sent to " + recipient_name + tts_loc + ": " + this.text;
-    "Build event";
-    group = tosym("dm_" + $url_utils:to_curie_str(recipient));
-    event = $event:mk_dm(sender, display_str);
-    event = event:with_audience('utility);
-    event = event:with_presentation_hint('inset);
-    event = event:with_group(group);
-    event = event:with_tts(tts_str);
-    event = event:with_metadata('dm_to, recipient);
-    event = event:with_metadata('dm_location, loc);
-    event = event:with_metadata('dm_content, this.text);
-    event = event:with_metadata('dm_timestamp, this.sent);
-    return event;
+    "Build a receipt with the captured location, recipient reference, and literal message paragraphs.";
+    set_task_perms(caller_perms());
+    const sender = this.from;
+    const recipient = this.to;
+    const loc = this.location;
+    const recipient_name = valid(recipient) ? recipient:name() | "(unknown recipient)";
+    const target = valid(recipient) ? $format.annotation:object(recipient, recipient_name) | recipient_name;
+    const place = valid(loc) ? {" (in ", $format.annotation:object(loc), ")"} | {};
+    const header = $format.paragraph:mk("You", @place, " → ", target, ":");
+    const spoken_place = valid(loc) ? " in " + loc:name() | "";
+    const spoken = "Message sent to " + recipient_name + spoken_place + ": " + this.text;
+    const group = tosym("dm_" + $url_utils:to_curie_str(recipient));
+    return $event:mk_dm(sender, $format.block:mk(header, this.text))
+      :with_audience('utility):with_presentation_hint('inset):with_group(group):with_tts(spoken)
+      :with_metadata('dm_to, recipient):with_metadata('dm_location, loc)
+      :with_metadata('dm_content, this.text):with_metadata('dm_timestamp, this.sent);
   endmethod
 endobject

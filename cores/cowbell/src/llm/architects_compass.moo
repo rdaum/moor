@@ -13,11 +13,6 @@ object ARCHITECTS_COMPASS [
   override description (owner: ARCH_WIZARD, flags: "rc") = "A precision instrument for spatial construction and world building. When worn, it provides tools for creating rooms, passages, and objects. Can interface with neural augmentation systems for conversational operation.";
   override placeholder_text (owner: ARCH_WIZARD, flags: "rc") = "Ask about building rooms, passages, objects...";
   override processing_message (owner: ARCH_WIZARD, flags: "rc") = "Analyzing spatial construction request...";
-  override progress_steps (owner: ARCH_WIZARD, flags: "rc") = {
-    {"list_prototypes", 'complete, "[SCAN] Listing prototypes"},
-    {"doc_lookup", 'in_progress, "[DOC] Loading $thing docs"}
-  };
-  override prompt_color (owner: ARCH_WIZARD, flags: "rc") = 'bright_green;
   override prompt_label (owner: ARCH_WIZARD, flags: "rc") = "[COMPASS]";
   override prompt_text (owner: ARCH_WIZARD, flags: "rc") = "Enter building query:";
   override requires_wearing_only (owner: ARCH_WIZARD, flags: "rc") = false;
@@ -78,13 +73,13 @@ object ARCHITECTS_COMPASS [
     endif
     message = "";
     if (tool_name == "explain")
-      message = $ansi:colorize("[COMPASS]", 'bright_green) + " " + tool_args["message"];
+      message = "[COMPASS] " + tool_args["message"];
     elseif (tool_name == "build_room")
-      message = $ansi:colorize("[BUILD]", 'bright_green) + " Creating room: " + $ansi:colorize(tool_args["name"], 'white);
+      message = "[BUILD] Creating room: " + (tool_args["name"]);
     elseif (tool_name == "dig_passage")
-      message = $ansi:colorize("[DIG]", 'bright_green) + " Creating passage: " + $ansi:colorize(tool_args["direction"], 'yellow);
+      message = "[DIG] Creating passage: " + (tool_args["direction"]);
     elseif (tool_name == "remove_passage")
-      message = $ansi:colorize("[REMOVE]", 'red) + " Removing passage to: " + $ansi:colorize(tool_args["target_room"], 'white);
+      message = "[REMOVE] Removing passage to: " + (tool_args["target_room"]);
     elseif (tool_name == "set_passage_description")
       direction = tool_args["direction"];
       desc_snippet = tool_args["description"];
@@ -94,15 +89,15 @@ object ARCHITECTS_COMPASS [
       endif
       ambient = maphaskey(tool_args, "ambient") ? tool_args["ambient"] | true;
       ambient_label = ambient ? " (ambient)" | " (explicit)";
-      message = $ansi:colorize("[PASSAGE]", 'magenta) + " Setting " + $ansi:colorize(direction, 'yellow) + " description" + ambient_label + ": \"" + desc_snippet + "\"";
+      message = "[PASSAGE] Setting " + direction + " description" + ambient_label + ": \"" + desc_snippet + "\"";
     elseif (tool_name == "create_object")
       parent_spec = tool_args["parent"];
-      message = $ansi:colorize("[CREATE]", 'cyan) + " Instantiating: " + $ansi:colorize(tool_args["name"], 'white) + " from parent " + $ansi:colorize(parent_spec, 'yellow);
+      message = "[CREATE] Instantiating: " + (tool_args["name"]) + " from parent " + parent_spec;
     elseif (tool_name == "recycle_object")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[RECYCLE]", 'red) + " Destroying: " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[RECYCLE] Destroying: " + display_name + obj_suffix;
     elseif (tool_name == "rename_object")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
@@ -112,7 +107,7 @@ object ARCHITECTS_COMPASS [
       if (new_name:contains(":"))
         new_name = $str_proto:split(new_name, ":")[1];
       endif
-      message = $ansi:colorize("[RENAME]", 'yellow) + " Renaming " + $ansi:colorize(display_name, 'white) + obj_suffix + " to \"" + new_name + "\"";
+      message = "[RENAME] Renaming " + display_name + obj_suffix + " to \"" + new_name + "\"";
     elseif (tool_name == "describe_object")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
@@ -122,67 +117,67 @@ object ARCHITECTS_COMPASS [
         desc_snippet = desc_snippet[1..50] + "...";
       endif
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[DESCRIBE]", 'cyan) + " Setting description for " + $ansi:colorize(display_name, 'white) + obj_suffix + ": \"" + desc_snippet + "\"";
+      message = "[DESCRIBE] Setting description for " + display_name + obj_suffix + ": \"" + desc_snippet + "\"";
     elseif (tool_name == "move_object")
       obj_spec = tool_args["object"];
       dest_spec = tool_args["destination"];
       obj_display_name = this:_resolve_display_name(obj_spec, wearer);
       dest_display_name = this:_resolve_display_name(dest_spec, wearer);
-      message = $ansi:colorize("[MOVE]", 'yellow) + " Moving " + $ansi:colorize(obj_display_name, 'white) + " to " + $ansi:colorize(dest_display_name, 'white);
+      message = "[MOVE] Moving " + obj_display_name + " to " + dest_display_name;
     elseif (tool_name == "set_integrated_description")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
       integrated_desc = tool_args["integrated_description"];
       if (integrated_desc == "")
-        message = $ansi:colorize("[INTEGRATE]", 'magenta) + " Clearing integrated description for " + $ansi:colorize(display_name, 'white) + obj_suffix;
+        message = "[INTEGRATE] Clearing integrated description for " + display_name + obj_suffix;
       else
         "Truncate long descriptions to first 50 chars";
         if (length(integrated_desc) > 50)
           integrated_desc = integrated_desc[1..50] + "...";
         endif
-        message = $ansi:colorize("[INTEGRATE]", 'magenta) + " Setting integrated description for " + $ansi:colorize(display_name, 'white) + obj_suffix + ": \"" + integrated_desc + "\"";
+        message = "[INTEGRATE] Setting integrated description for " + display_name + obj_suffix + ": \"" + integrated_desc + "\"";
       endif
     elseif (tool_name == "doc_lookup")
-      message = $ansi:colorize("[DOC]", 'bright_blue) + " Loading docs for " + $ansi:colorize(tool_args["target"], 'white);
+      message = "[DOC] Loading docs for " + (tool_args["target"]);
     elseif (tool_name == "list_messages")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Listing message templates on " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[MSG] Listing message templates on " + display_name + obj_suffix;
     elseif (tool_name == "get_message_template")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Reading " + $ansi:colorize(tool_args["property"], 'yellow) + " on " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[MSG] Reading " + (tool_args["property"]) + " on " + display_name + obj_suffix;
     elseif (tool_name == "set_message_template")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[MSG]", 'bright_magenta) + " Setting " + $ansi:colorize(tool_args["property"], 'yellow) + " on " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[MSG] Setting " + (tool_args["property"]) + " on " + display_name + obj_suffix;
     elseif (tool_name == "grant_capability")
-      message = $ansi:colorize("[GRANT]", 'bright_yellow) + " Granting permissions on: " + $ansi:colorize(tool_args["target"], 'white);
+      message = "[GRANT] Granting permissions on: " + (tool_args["target"]);
     elseif (tool_name == "audit_owned")
-      message = $ansi:colorize("[AUDIT]", 'cyan) + " Scanning owned objects";
+      message = "[AUDIT] Scanning owned objects";
     elseif (tool_name == "area_map")
-      message = $ansi:colorize("[MAP]", 'bright_cyan) + " Surveying current area";
+      message = "[MAP] Surveying current area";
     elseif (tool_name == "find_route")
       to_room_spec = tool_args["to_room"];
       display_name = this:_resolve_display_name(to_room_spec, wearer);
       obj_suffix = display_name != to_room_spec ? " (" + to_room_spec + ")" | "";
-      message = $ansi:colorize("[ROUTE]", 'bright_cyan) + " Finding path to: " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[ROUTE] Finding path to: " + display_name + obj_suffix;
     elseif (tool_name == "list_prototypes")
-      message = $ansi:colorize("[PROTOTYPES]", 'bright_magenta) + " Listing available object templates";
+      message = "[PROTOTYPES] Listing available object templates";
     elseif (tool_name == "inspect_object")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[INSPECT]", 'bright_cyan) + " Examining: " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[INSPECT] Examining: " + display_name + obj_suffix;
     elseif (tool_name == "list_rules")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
-      message = $ansi:colorize("[RULES]", 'bright_magenta) + " Listing rules on " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[RULES] Listing rules on " + display_name + obj_suffix;
     elseif (tool_name == "set_rule")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
@@ -193,33 +188,33 @@ object ARCHITECTS_COMPASS [
       if (length(expr) > 50)
         expr = expr[1..50] + "...";
       endif
-      message = $ansi:colorize("[RULE]", 'bright_magenta) + " Setting " + $ansi:colorize(prop_name, 'yellow) + " on " + $ansi:colorize(display_name, 'white) + obj_suffix + ": " + expr;
+      message = "[RULE] Setting " + prop_name + " on " + display_name + obj_suffix + ": " + expr;
     elseif (tool_name == "show_rule")
       obj_spec = tool_args["object"];
       display_name = this:_resolve_display_name(obj_spec, wearer);
       obj_suffix = display_name != obj_spec ? " (" + obj_spec + ")" | "";
       prop_name = tool_args["property"];
-      message = $ansi:colorize("[RULE]", 'bright_magenta) + " Reading " + $ansi:colorize(prop_name, 'yellow) + " on " + $ansi:colorize(display_name, 'white) + obj_suffix;
+      message = "[RULE] Reading " + prop_name + " on " + display_name + obj_suffix;
     elseif (tool_name == "test_rule")
       expr = tool_args["expression"];
       "Truncate long expressions";
       if (length(expr) > 40)
         expr = expr[1..40] + "...";
       endif
-      message = $ansi:colorize("[TEST]", 'bright_cyan) + " Testing rule: " + expr;
+      message = "[TEST] Testing rule: " + expr;
     elseif (tool_name == "create_project")
       description = tool_args["description"];
       "Truncate long descriptions";
       if (length(description) > 50)
         description = description[1..50] + "...";
       endif
-      message = $ansi:colorize("[PROJECT]", 'bright_green) + " Creating project: " + description;
+      message = "[PROJECT] Creating project: " + description;
     elseif (tool_name == "record_creation")
       subject = tool_args["subject"];
       key = tool_args["key"];
-      message = $ansi:colorize("[RECORD]", 'bright_green) + " Recording " + subject + "/" + key + " in project";
+      message = "[RECORD] Recording " + subject + "/" + key + " in project";
     elseif (tool_name == "project_status")
-      message = $ansi:colorize("[PROJECT]", 'bright_yellow) + " Checking building project status";
+      message = "[PROJECT] Checking building project status";
     elseif (tool_name == "ask_user")
       question = tool_args["question"];
       "Truncate long questions";
@@ -232,20 +227,13 @@ object ARCHITECTS_COMPASS [
       elseif (maphaskey(tool_args, "input_type") && typeof(tool_args["input_type"]) == TYPE_STR)
         suffix = " [" + tool_args["input_type"] + "]";
       endif
-      message = $ansi:colorize("[QUESTION]", 'bright_yellow) + " Asking: " + question + suffix;
+      message = "[QUESTION] Asking: " + question + suffix;
     else
-      message = $ansi:colorize("[PROCESS]", 'cyan) + " " + tool_name;
+      message = "[PROCESS] " + tool_name;
     endif
     return message;
   endmethod
 
-  method _get_tool_content_types owner: HACKER
-    "Specify djot rendering for all tool messages to support markdown formatting";
-    {tool_name, tool_args} = args;
-    caller == this || caller == this.owner || caller.wizard || raise(E_PERM);
-    "All compass tool messages can contain markdown, so render as djot";
-    return {'text_djot, 'text_plain};
-  endmethod
 
   method _format_tts_message owner: HACKER
     "Format TTS-friendly message for screen readers - no ANSI codes or brackets";
@@ -431,7 +419,7 @@ object ARCHITECTS_COMPASS [
     task = this.agent:create_task("Building Project: " + argstr);
     this.current_building_task = task.task_id;
     task:mark_in_progress();
-    player:inform_current($event:mk_info(player, $ansi:colorize("[PROJECT]", 'bright_green) + " Building Project #" + tostr(task.task_id) + " started: " + argstr):with_presentation_hint('inset):with_group('llm, this):with_tts("Building project " + tostr(task.task_id) + " started: " + argstr));
+    player:inform_current($event:mk_info(player, "[PROJECT] Building Project #" + tostr(task.task_id) + " started: " + argstr):with_presentation_hint('inset):with_group('llm, this):with_tts("Building project " + tostr(task.task_id) + " started: " + argstr));
   endverb
 
   verb get_building_progress (none none none) owner: HACKER flags: "rd"
@@ -441,16 +429,16 @@ object ARCHITECTS_COMPASS [
       return;
     endif
     if (this.current_building_task == -1)
-      player:inform_current($event:mk_info(player, $ansi:colorize("[PROJECT]", 'bright_green) + " No active building project. Use 'plan building <description>' to begin."):with_presentation_hint('inset):with_group('llm, this):with_tts("No active building project. Use plan building to begin."));
+      player:inform_current($event:mk_info(player, "[PROJECT] No active building project. Use 'plan building <description>' to begin."):with_presentation_hint('inset):with_group('llm, this):with_tts("No active building project. Use plan building to begin."));
       return;
     endif
     task_obj = this.agent.current_tasks[this.current_building_task];
     if (!valid(task_obj))
-      player:inform_current($event:mk_info(player, $ansi:colorize("[ERROR]", 'red) + " Building project #" + tostr(this.current_building_task) + " is no longer available."):with_tts("Error: Building project " + tostr(this.current_building_task) + " is no longer available."));
+      player:inform_current($event:mk_info(player, "[ERROR] Building project #" + tostr(this.current_building_task) + " is no longer available."):with_tts("Error: Building project " + tostr(this.current_building_task) + " is no longer available."));
       return;
     endif
     status = task_obj:get_status();
-    progress_lines = {$ansi:colorize("[PROJECT STATUS]", 'bright_green), "  ID: " + tostr(status["task_id"]), "  Status: " + tostr(status["status"]), "  Description: " + status["description"]};
+    progress_lines = {"[PROJECT STATUS]", "  ID: " + tostr(status["task_id"]), "  Status: " + tostr(status["status"]), "  Description: " + status["description"]};
     status["status"] == 'completed && (progress_lines = {@progress_lines, "  Completed: " + status["result"]});
     status["status"] == 'failed && (progress_lines = {@progress_lines, "  Error: " + status["error"]});
     status["status"] == 'blocked && (progress_lines = {@progress_lines, "  Blocked: " + status["error"]});

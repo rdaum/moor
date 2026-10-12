@@ -39,7 +39,7 @@ object LOOK [
     desc_content = {};
     if (typeof(description) == TYPE_LIST)
       desc_content = description;
-    elseif (typeof(description) == TYPE_STR)
+    elseif (typeof(description) in {TYPE_STR, TYPE_FLYWEIGHT})
       desc_content = {description};
     else
       desc_content = {tostr(description)};
@@ -54,7 +54,8 @@ object LOOK [
         continue;
       endif
       integrated_description = `o:integrate_description() ! E_VERBNF => false';
-      if (integrated_description)
+      if (typeof(integrated_description) == TYPE_FLYWEIGHT
+          || (typeof(integrated_description) in {TYPE_STR, TYPE_LIST} && length(integrated_description)))
         integrated_contents = {@integrated_contents, integrated_description};
       elseif (o:is_actor())
         "Collect actor with idle status for inspect links";
@@ -145,8 +146,8 @@ object LOOK [
         desc_content = {@desc_content, $format.paragraph:inline(parts)};
       endif
     endif
-    "Keep the description as a paragraph before adding the remaining blocks";
-    block_elements = {title, $format.paragraph:mk(desc_content)};
+    "Retain explicit blocks in programmatic descriptions";
+    block_elements = {title, @$format:blocks(desc_content)};
     "Add exits if present (with command links)";
     exits = `this.exits ! E_PROPNF => {}';
     if (length(exits) > 0)

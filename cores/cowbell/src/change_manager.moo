@@ -2087,7 +2087,7 @@ object CHANGE_MANAGER [
     let page = {};
     let next = offset;
     for i in [offset..min(offset + 39, length(lines))]
-      const line = tostr(i, ": ", lines[i]);
+      const line = lines[i];
       if (value_bytes(page) + value_bytes(line) > 60000)
         length(page) || raise(E_QUOTA, "One source line exceeds the terminal page limit.");
         break;
@@ -2095,7 +2095,7 @@ object CHANGE_MANAGER [
       page = {@page, line};
       next = i + 1;
     endfor
-    let output = {$format.title:mk(title, 3), $format.code:mk(page, "moo")};
+    let output = {$format.title:mk(title, 3), $format.code:mk(page, "moo", offset)};
     if (next <= length(lines))
       output = {@output, $format.paragraph:mk(tostr("More source: ", command, " ", next))};
     endif
@@ -2529,9 +2529,9 @@ object CHANGE_MANAGER [
       let code = {};
       for i in [offset..min(offset + 49, length(lines))]
         value_bytes(code) + value_bytes(lines[i]) <= 60000 || raise(E_QUOTA, "Source page is too large.");
-        code = {@code, tostr(i, ": ", lines[i])};
+        code = {@code, lines[i]};
       endfor
-      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local contents" | words[5] == "base" ? "Accepted baseline" | "Upstream contents"), 3), $format.paragraph:mk(this:_command_review_link(detail, detail["row"]["label"], detail["row"]["id"])), $format.code:mk(code, "moo")};
+      let output = {$format.title:mk(tostr(words[5] == "live" ? "Local contents" | words[5] == "base" ? "Accepted baseline" | "Upstream contents"), 3), $format.paragraph:mk(this:_command_review_link(detail, detail["row"]["label"], detail["row"]["id"])), $format.code:mk(code, "moo", offset)};
       if (offset == 1 && words[5] == "incoming" && maphaskey(detail["row"], "definition_text"))
         output = {$format.paragraph:mk("Apply creates this verb with the following definition. Flags: r permits reading, x permits calls from programs, and d enables error reporting. Arguments control command matching."), $format.code:mk(explode(detail["row"]["definition_text"], "\n", true)), @output};
       endif

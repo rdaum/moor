@@ -46,7 +46,7 @@ true
 ; const review = $change_manager:review(3, 1); return {review["decision_counts"], review["operation"]};
 {["blocked" -> 1, "selected" -> 51, "unresolved" -> 1], "update"}
 
-; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "1", "56", "incoming"}))):resolve(player), 'text_plain)['body]; return {index(text, "Upstream contents") != 0, index(text, "$diff_target:update1") != 0, index(text, "1: return 2;") != 0};
+; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "1", "56", "incoming"}))):resolve(player), 'text_plain)['body]; return {index(text, "Upstream contents") != 0, index(text, "$diff_target:update1") != 0, index(text, "1 | return 2;") != 0};
 {true, true, true}
 
 ; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"resolve", "3", "1", "108", "local"}))):resolve(player), 'text_plain)['body]; return {index(text, "Generation 2") != 0, index(text, "Keep my code saved") != 0};
@@ -63,7 +63,7 @@ true
 {["blocked" -> 1, "selected" -> 52, "unresolved" -> 0], "$diff_target:same1"}
 
 // Existing service row IDs still work.
-; const row = $change_manager:review(3, 2, {3, 2, 56})["rows"][1]["id"]; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "2", row, "incoming"}))):resolve(player), 'text_plain)['body]; return index(text, "1: return 2;") != 0;
+; const row = $change_manager:review(3, 2, {3, 2, 56})["rows"][1]["id"]; const text = $document:render($event:mk_info(player, $format.block:mk(@$change_manager:command({"source", "3", "2", row, "incoming"}))):resolve(player), 'text_plain)['body]; return index(text, "1 | return 2;") != 0;
 true
 
 ; return `$change_manager:command({"source", "3", "2", "999", "incoming"}) ! E_INVARG => "missing"';

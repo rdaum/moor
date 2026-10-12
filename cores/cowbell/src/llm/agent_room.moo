@@ -83,8 +83,7 @@ object AGENT_ROOM [
     const {message} = args;
     "Create a proper room event";
     const agent = valid(this.agent) ? this.agent | this;
-    "Set as djot so client renders markdown correctly";
-    const event = $event:mk_announce(agent, message):as_djot();
+    const event = $event:mk_announce(agent, message);
     this:announce(event);
   endmethod
 
@@ -190,7 +189,7 @@ object AGENT_ROOM [
     if (hidden > 0 && !show_all)
       lines = {@lines, "  (" + tostr(hidden) + " task(s) for other requesters hidden)"};
     endif
-    player:inform_current($event:mk_info(player, lines));
+    player:inform_current($event:mk_info(player, $format.block:mk(@lines)));
   endverb
 
   verb history (none none none) owner: ARCH_WIZARD flags: "xd"
@@ -227,14 +226,14 @@ object AGENT_ROOM [
     if (shown == 0)
       lines = {@lines, "  (No history entries for you.)"};
     endif
-    player:inform_current($event:mk_info(player, lines));
+    player:inform_current($event:mk_info(player, $format.block:mk(@lines)));
   endverb
 
   verb description (none none none) owner: ARCH_WIZARD flags: "rxd"
     "Formatted description with explicit newlines.";
-    const intro = $ansi:wrap("A virtual workspace where you can interact with an AI agent.", 'dim);
-    const cmd_header = "\n" + $ansi:wrap("Commands:", 'bold, 'cyan);
-    const cmds = $format.list:mk({$ansi:wrap("do <task>", 'green) + " - Queue a task for the agent", $ansi:wrap("status", 'green) + " - Check current activity", $ansi:wrap("halt", 'green) + " - Interrupt current task", $ansi:wrap("queue", 'green) + " - Show pending tasks", $ansi:wrap("history", 'green) + " - Show completed tasks"}, false);
+    const intro = "A virtual workspace where you can interact with an AI agent.";
+    const cmd_header = $format.title:mk("Commands", 4);
+    const cmds = $format.list:mk({"do <task>" + " - Queue a task for the agent", "status" + " - Check current activity", "halt" + " - Interrupt current task", "queue" + " - Show pending tasks", "history" + " - Show completed tasks"}, false);
     return {intro, cmd_header, cmds};
   endverb
 
@@ -252,15 +251,10 @@ object AGENT_ROOM [
     elseif (typeof(code) != typeof(""))
       code = toliteral(code);
     endif
-    "Build raw Markdown/Djot code block";
-    let report = "";
-    if (title && length(title) > 0)
-      report = "### " + title + "\n\n";
-    endif
-    const lang_str = tostr(language);
-    report = report + "```" + lang_str + "\n" + code + "\n```";
-    "Announce to room using _announce (which uses as_djot)";
-    this:_announce(report);
+    let blocks = {};
+    length(title) && (blocks = {$format.title:mk(title)});
+    blocks = {@blocks, $format.code:mk(code, language)};
+    this:_announce($format.block:mk(@blocks));
     return "Code presented: " + title;
   endmethod
 
@@ -282,14 +276,9 @@ object AGENT_ROOM [
       content = this:_flatten_content(content);
       title = typeof(title) != TYPE_STR ? tostr(title) | title;
     endif
-    "Build raw markdown string";
-    let report = "";
-    if (title && length(title) > 0)
-      report = "### " + title + "\n\n";
-    endif
-    report = report + content;
-    "Announce to room using improved _announce (with as_djot)";
-    this:_announce(report);
+    let blocks = {};
+    length(title) && (blocks = {$format.title:mk(title)});
+    this:_announce($format.block:mk(@blocks, content));
     return "Report presented: " + (title ? title | "(untitled)");
   endmethod
 
@@ -342,25 +331,10 @@ object AGENT_ROOM [
     else
       raise(E_TYPE, "rows must be a list of lists");
     endif
-    "Build raw Djot/Markdown table string";
-    let table_str = "";
-    if (title && length(title) > 0)
-      table_str = "### " + title + "\n\n";
-    endif
-    "Header row";
-    table_str = table_str + "| " + headers:join(" | ") + " |\n";
-    "Separator row";
-    let sep_parts = {};
-    for h in (headers)
-      sep_parts = {@sep_parts, "---"};
-    endfor
-    table_str = table_str + "| " + sep_parts:join(" | ") + " |\n";
-    "Data rows";
-    for row in (rows)
-      table_str = table_str + "| " + row:join(" | ") + " |\n";
-    endfor
-    "Announce to room using _announce (which uses as_djot)";
-    this:_announce(table_str);
+    let blocks = {};
+    length(title) && (blocks = {$format.title:mk(title)});
+    blocks = {@blocks, $format.table:mk(headers, rows)};
+    this:_announce($format.block:mk(@blocks));
     return "Table presented: " + tostr(length(rows)) + " rows";
   endmethod
 
@@ -412,13 +386,13 @@ object AGENT_ROOM [
     const max_preview = 12;
     if (total_lines > max_preview)
       preview_lines = code_lines[1..max_preview];
-      preview_str = preview_lines:join("\n") + "\n... (" + tostr(total_lines - max_preview) + " more lines)";
+      preview_str = preview_lines:join("\n");
     else
       preview_str = code_lines:join("\n");
     endif
-    "Create formatted content (Markdown)";
-    const report = "### " + title + "\n\n" + context_line + "\n\n```moo\n" + preview_str + "\n```";
-    "Announce to room using improved _announce (with as_djot)";
+    const omitted = total_lines > max_preview ? tostr(total_lines - max_preview) + " more lines." | "";
+    const report = $format.block:mk($format.title:mk(title), context_line,
+      $format.code:mk(preview_str, "moo", 1), omitted);
     this:_announce(report);
     "RETURN FULL CODE to the agent so it can actually see it";
     return ["code" -> code_lines:join("\n"), "flags" -> flags, "argspec" -> argspec, "total_lines" -> total_lines];
@@ -433,19 +407,18 @@ object AGENT_ROOM [
     let pct = 0;
     let query_preview = 0;
     let recent = 0;
-    let status_color = 0;
     let task_preview = 0;
     const look_data = pass(@args);
     "Build status section with explicit newlines";
-    const status_header = "\n" + $ansi:wrap("Agent Status:", 'bold, 'cyan);
+    const status_header = $format.title:mk("Agent Status", 4);
     let status_items = {};
     if (this.current_task && length(this.current_task) > 0)
       task_preview = this.current_task[1..min(50, length(this.current_task))];
       if (length(this.current_task) > 50)
         task_preview = task_preview + "...";
       endif
-      status_items = {@status_items, "State: " + $ansi:wrap("Working", 'bold, 'yellow)};
-      status_items = {@status_items, "Task: " + $ansi:wrap("\"" + task_preview + "\"", 'white)};
+      status_items = {@status_items, "State: " + "Working"};
+      status_items = {@status_items, "Task: " + ("\"" + task_preview + "\"")};
       "Get progress info if agent exists";
       if (valid(this.agent))
         iter = `this.agent.iteration ! ANY => 0';
@@ -453,19 +426,19 @@ object AGENT_ROOM [
         last_tool = `this.agent.last_tool ! ANY => ""';
         if (iter > 0)
           pct = toint(iter * 100 / max_iter);
-          status_items = {@status_items, "Progress: " + $ansi:wrap(tostr(iter) + "/" + tostr(max_iter), 'cyan) + " (" + tostr(pct) + "%)"};
+          status_items = {@status_items, "Progress: " + (tostr(iter) + "/" + tostr(max_iter)) + " (" + tostr(pct) + "%)"};
         endif
         if (last_tool && length(last_tool) > 0)
-          status_items = {@status_items, "Tool: " + $ansi:wrap(last_tool, 'dim)};
+          status_items = {@status_items, "Tool: " + last_tool};
         endif
       endif
     else
-      status_items = {@status_items, "State: " + $ansi:wrap("Idle", 'green)};
+      status_items = {@status_items, "State: " + "Idle"};
     endif
     "Queue info";
     const queue_len = length(this.task_queue);
     if (queue_len > 0)
-      status_items = {@status_items, "Queue: " + $ansi:wrap(tostr(queue_len) + " pending", 'yellow)};
+      status_items = {@status_items, "Queue: " + (tostr(queue_len) + " pending")};
     endif
     const status_list = $format.list:mk(status_items, false);
     "History summary";
@@ -477,8 +450,7 @@ object AGENT_ROOM [
       if (length(recent['query]) > 40)
         query_preview = query_preview + "...";
       endif
-      status_color = recent['status] == 'complete ? 'green | 'red;
-      history_part = {"\n" + $ansi:wrap("Last Task:", 'dim) + " [" + $ansi:wrap(tostr(recent['status]), status_color) + "] " + query_preview};
+      history_part = {"\n" + "Last Task:" + " [" + (tostr(recent['status])) + "] " + query_preview};
     endif
     "Combine description with status as list";
     let base_desc = look_data.description;
@@ -693,7 +665,7 @@ object AGENT_ROOM [
     const max_preview = 8;
     if (total_lines > max_preview)
       preview_lines = code_lines[1..max_preview];
-      preview_str = preview_lines:join("\n") + "\n... (" + tostr(total_lines - max_preview) + " more lines)";
+      preview_str = preview_lines:join("\n");
     else
       preview_str = code;
     endif
@@ -707,13 +679,14 @@ object AGENT_ROOM [
           unique_cites = {@unique_cites, c};
         endif
       endfor
-      citation_msg = $ansi:wrap(" (citing " + unique_cites:join(", ") + ")", 'dim);
+      citation_msg = (" (citing " + unique_cites:join(", ") + ")");
     endif
-    const context_line = $ansi:wrap("[Programming verb]", 'dim) + citation_msg;
+    const context_line = "[Programming verb]" + citation_msg;
     const title = obj_ref + ":" + verb_name + " [" + v_flags + "] " + v_args + " (" + tostr(total_lines) + " lines)";
     const title_fw = $format.title:mk(title, 4);
-    const code_fw = $format.code:mk(preview_str, 'moo);
-    const content = $format.block:mk($format.paragraph:mk(context_line), title_fw, code_fw);
+    const code_fw = $format.code:mk(preview_str, 'moo, 1);
+    const omitted = total_lines > max_preview ? tostr(total_lines - max_preview) + " more lines." | "";
+    const content = $format.block:mk($format.paragraph:mk(context_line), title_fw, code_fw, omitted);
     "Announce to room";
     let final_agent = this;
     if (valid(this.agent))
@@ -733,7 +706,7 @@ object AGENT_ROOM [
     const {message} = args;
     const requester = this.task_requester;
     !valid(requester) && return;
-    const content = $ansi:wrap("  \u2192 " + message, 'dim);
+    const content = ("  \u2192 " + message);
     requester:inform_current($event:mk_info(requester, content));
   endmethod
 
@@ -872,15 +845,14 @@ object AGENT_ROOM [
         content = agent:_coerce_string(result);
       endif
       content = typeof(content) == typeof("") ? content | toliteral(content);
-      "Build raw markdown result";
-      report = "### " + title + "\n\n" + content;
+      report = $format.block:mk($format.title:mk(title), content);
       this:_announce(report);
     else
       brief = typeof(result) == typeof("") ? result | toliteral(result);
       if (length(brief) > 100)
         brief = brief[1..100] + "...";
       endif
-      msg = $ansi:wrap("  \u2192 Task " + tostr(status) + ": " + brief, 'red);
+      msg = ("  \u2192 Task " + tostr(status) + ": " + brief);
       task_player:inform_current($event:mk_info(task_player, msg));
       this:_announce("Task failed for " + task_player.name + ".");
     endif

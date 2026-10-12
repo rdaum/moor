@@ -297,7 +297,7 @@ object WIZ_FEATURES [
     endif
     for i in [1..length(announce_times)]
       seconds = announce_times[i];
-      base_msg = $format.code:mk("** Server will shut down in " + tostr(seconds) + " second(s): " + msg + " **");
+      base_msg = $format.paragraph:mk("Server will shut down in " + tostr(seconds) + " second(s): " + msg);
       event = $event:mk_info(player, $format.title:mk("Shutdown ..."), base_msg):with_audience('utility):with_presentation_hint('inset);
       for p in (connected_players())
         `p:tell(event) ! E_VERBNF => p:tell(event)';
@@ -307,7 +307,7 @@ object WIZ_FEATURES [
         suspend(next_delay);
       endif
     endfor
-    final_msg = $format.code:mk("## Server shutdown: " + msg + " ##");
+    final_msg = $format.block:mk($format.title:mk("Server shutdown"), msg);
     final_event = $event:mk_info(player, final_msg):with_audience('utility):with_presentation_hint('inset);
     for p in (connected_players())
       `p:tell(final_event) ! E_VERBNF => p:tell(final_event)';
