@@ -26,6 +26,8 @@ Cowbell entries.
 
 ### Fixed
 
+- Wearing LLM devices no longer fails with a numeric type error when displaying token usage.
+  The diagnostic status method uses the same corrected calculation.
 - Help topics and command lists use columns again in rich clients, including commands with separate
   programmer source links. Ordinary prose and numbered lists keep their existing layout.
 - Closed-container looks resolve denial messages with the container binding and preserve structured

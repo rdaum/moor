@@ -145,7 +145,7 @@ object LLM_WEARABLE [
     "Show context status";
     const token_limit = this.agent.token_limit;
     const compaction_threshold = this.agent.compaction_threshold;
-    const threshold_tokens = toint(token_limit * compaction_threshold);
+    const threshold_tokens = toint(tofloat(token_limit) * compaction_threshold);
     if (typeof(last_usage) == TYPE_MAP && maphaskey(last_usage, "prompt_tokens"))
       "We have actual prompt token data from a previous call";
       prompt_tokens = last_usage["prompt_tokens"];
@@ -515,7 +515,7 @@ object LLM_WEARABLE [
     const prompt_tokens = last_usage["prompt_tokens"];
     const token_limit = this.agent.token_limit;
     const compaction_threshold = this.agent.compaction_threshold;
-    const threshold_tokens = token_limit * compaction_threshold;
+    const threshold_tokens = toint(tofloat(token_limit) * compaction_threshold);
     const context_percent = prompt_tokens * 100 / token_limit;
     const threshold_percent = prompt_tokens * 100 / threshold_tokens;
     if (threshold_percent >= 100)
