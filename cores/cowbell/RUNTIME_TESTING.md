@@ -70,6 +70,8 @@ parser without adding a parser dependency to the core test runner.
 
 Fixture `#90122` checks event resolution: captured locations, actor and observer wording, literal
 bindings, selected alternatives, caller permissions, producer hooks, and bounded expansion.
+It also exercises private-message paragraphs, agent reports, malformed table rows, source-range
+numbering, generated help, code documentation, and structured room/container descriptions.
 Headless event scenarios also check MIME negotiation and reuse across connections.
 
 ## Commands and committed events

@@ -1304,7 +1304,7 @@ object LLM_ROOM_OBSERVER [
     const s = this:observer_debug_status();
     const lines = {"Observer: " + s["name"] + " (" + s["object"] + ")", "Enabled: " + toliteral(s["enabled"]), "Responding: " + toliteral(s["responding"]), "Loop task: " + tostr(s["loop_task"]), "Loop alive: " + toliteral(s["loop_alive"]), "Loop probe error: " + s["loop_probe_error"], "Thinking task: " + tostr(s["thinking_task"]), "Agent valid: " + toliteral(s["agent_valid"]), "Agent context len: " + tostr(s["agent_context_len"]), "Event buffer len: " + tostr(s["event_buffer_len"]), "Last spoke at: " + tostr(s["last_spoke_at"]), "Last loop probe at: " + tostr(s["last_loop_probe_at"]), "Last loop probe error: " + s["last_loop_probe_error"], "Last loop restart at: " + tostr(s["last_loop_restart_at"])};
     const content = $format.block:mk($format.title:mk("Observer Status"), @lines);
-    const event = $event:mk_info(player, content):with_audience('utility):as_djot():as_inset():with_group('utility, player);
+    const event = $event:mk_info(player, content):with_audience('utility):as_inset():with_group('utility, player);
     player:inform_current(event);
   endverb
 

@@ -148,8 +148,7 @@ object ACTOR [
   method mk_say_event owner: HACKER
     event = $event:mk_say(this, $sub:nc(), " ", $sub:self_alt("say", "says"), ", \"", args[1], "\""):with_this(this.location);
     event = event:with_metadata('content, args[1]);
-    event = event:with_metadata('preferred_content_types, {'text_html, 'text_djot});
-    event = event:as_djot():with_presentation_hint('speech_bubble);
+    event = event:with_presentation_hint('speech_bubble);
     return event;
   endmethod
 
@@ -163,8 +162,7 @@ object ACTOR [
     "Thoughts always show the actor's name, never 'You'";
     event = $event:mk_think(this, this:name(), " . o O ( ", args[1], " )"):with_this(this.location);
     event = event:with_metadata('content, args[1]);
-    event = event:with_metadata('preferred_content_types, {'text_html, 'text_djot});
-    event = event:as_djot():with_presentation_hint('thought_bubble);
+    event = event:with_presentation_hint('thought_bubble);
     return event;
   endmethod
 
@@ -210,7 +208,7 @@ object ACTOR [
       endif
     endif
     parts = {@parts, "."};
-    event = $event:mk_move(this, @parts):as_djot();
+    event = $event:mk_move(this, @parts);
     valid(from_room) && (event = event:with_this(from_room):with_location(from_room));
     valid(to_room) && (event = event:with_iobj(to_room));
     return event;
@@ -244,7 +242,7 @@ object ACTOR [
       endif
     endif
     parts = {@parts, "."};
-    event = $event:mk_move(this, @parts):as_djot();
+    event = $event:mk_move(this, @parts);
     valid(to_room) && (event = event:with_this(to_room):with_location(to_room));
     valid(from_room) && (event = event:with_iobj(from_room));
     return event;
@@ -324,7 +322,7 @@ object ACTOR [
     event = $event:mk_shout(this, $sub:nc(), " ", $sub:self_alt("shout", "shouts"), ", \"", text, "\""):with_this(this.location);
     event = event:with_metadata('content, text);
     event = event:with_metadata('loudness, 5);
-    event = event:as_djot():with_presentation_hint('speech_bubble);
+    event = event:with_presentation_hint('speech_bubble);
     return event;
   endmethod
 

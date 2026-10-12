@@ -59,8 +59,7 @@ top of the event and behaviour systems without requiring framework changes.
 
 **Rich Content & Formatting:**
 
-- HTML rendering system (`html.moo`)
-- ANSI color codes (`ansi.moo`)
+- Canonical document values and HTML, Djot, and plain text renderers (`document/`)
 - Format objects: block, list, table, title, code (`format*.moo`)
 - Rich look descriptions with structured content (`look.moo`, `examination.moo`)
 - Support for multiple content types (text/plain, text/html, text/djot)
@@ -82,6 +81,14 @@ Named event bindings use `with_text_binding`, `with_object_binding`, or `with_co
 `$sub:binding(name)` reads text or an object name. `$sub:content_binding(name)` inserts structured
 inline content. The old `compose`, `render_as`, and `transform_for` interfaces are removed.
 Authored Djot parsing is pending; markup in descriptions and help prose currently remains literal.
+
+Programmatic output uses document structure: agent reports contain code and table nodes, private
+messages keep attribution separate from body paragraphs, and source listings carry a line origin.
+Status messages contain literal labels and counters. Producers do not embed ANSI or build markup
+strings. Delivery chooses the output format.
+
+The current delivery path does not yet attach the encoded document to notifications or history.
+Shared room capture and a complete rewrite envelope also remain pending.
 
 **Core Objects:**
 

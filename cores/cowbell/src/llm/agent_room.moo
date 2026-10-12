@@ -316,16 +316,15 @@ object AGENT_ROOM [
     if (typeof(rows) == TYPE_LIST)
       clean_rows = {};
       for row in (rows)
-        if (typeof(row) == TYPE_LIST)
-          clean_row = {};
-          for cell in (row)
-            if (typeof(cell) != TYPE_STR)
-              cell = valid(agent) && "_coerce_string" in verbs(agent) ? agent:_coerce_string(cell) | tostr(cell);
-            endif
-            clean_row = {@clean_row, cell};
-          endfor
-          clean_rows = {@clean_rows, clean_row};
-        endif
+        typeof(row) == TYPE_LIST || raise(E_TYPE, "Each row must be a list");
+        clean_row = {};
+        for cell in (row)
+          if (typeof(cell) != TYPE_STR)
+            cell = valid(agent) && "_coerce_string" in verbs(agent) ? agent:_coerce_string(cell) | tostr(cell);
+          endif
+          clean_row = {@clean_row, cell};
+        endfor
+        clean_rows = {@clean_rows, clean_row};
       endfor
       rows = clean_rows;
     else

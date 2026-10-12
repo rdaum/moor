@@ -755,7 +755,7 @@ object DATA_VISOR [
     iobj in {"none", "this", "any"} || raise(E_INVARG("iobj must be 'none', 'this', or 'any'"));
     $prog_utils:is_valid_prep(prep) || raise(E_INVARG("prep must be 'none', 'any', or a valid preposition"));
     "Show rationale first";
-    const rationale_title = $format.title:mk("Proposed verb creation: " + tostr(o) + ":" + verb_names + "");
+    const rationale_title = $format.title:mk({"Proposed verb creation: ", $format.code:inline(tostr(o) + ":" + verb_names)});
     const rationale_content = $format.block:mk(rationale_title, rationale);
     wearer:inform_current($event:mk_info(wearer, rationale_content):as_inset():with_group('llm, this));
     "Show verb signature";

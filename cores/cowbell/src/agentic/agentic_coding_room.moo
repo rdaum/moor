@@ -1226,7 +1226,8 @@ object AGENTIC_CODING_ROOM [
     let query = 0;
     let requester = 0;
     if (this.current_task)
-      return player:inform_current($event:mk_error(player, "A task is already running. Use `status` or `halt` first."));
+      return player:inform_current($event:mk_error(player, "A task is already running. Use ",
+        $format.annotation:command("status", "status"), " or ", $format.annotation:command("halt", "halt"), " first."));
     endif
     const extra = argstr:trim();
     const show_all = `player.wizard ! ANY => false';

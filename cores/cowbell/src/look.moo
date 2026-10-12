@@ -168,7 +168,7 @@ object LOOK [
       block_elements = {@block_elements, this:format_sleeping(deeply_asleep)};
     endif
     b = $format.block:mk(@block_elements);
-    event = $event:mk_look(player, b):with_dobj(this.what):with_metadata('preferred_content_types, {'text_html, 'text_plain}):with_presentation_hint('inset):with_group('look, this.what):with_metadata('collapse_title, this.what:name());
+    event = $event:mk_look(player, b):with_dobj(this.what):with_presentation_hint('inset):with_group('look, this.what):with_metadata('collapse_title, this.what:name());
     "Add thumbnail if the target has one";
     if (respond_to(this.what, 'thumbnail))
       pic = `this.what:thumbnail() ! ANY => false';

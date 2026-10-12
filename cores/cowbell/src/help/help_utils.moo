@@ -182,20 +182,17 @@ object HELP_UTILS [
   endmethod
 
   method format_documentation_display owner: ARCH_WIZARD
-    "Format documentation for display as a block. Takes title string and documentation, returns $format.block.";
-    "Args: {title_string, documentation_text}";
-    "Returns: formatted block flyweight";
+    "Construct a heading and documentation blocks. Source lines become literal prose; explicit blocks retain their structure.";
     set_task_perms(caller_perms());
-    {title, doc_text} = args;
-    typeof(title) == TYPE_STR || raise(E_TYPE("Documentation title must be a string, got " + toliteral(title)));
-    if (!doc_text || doc_text == "" || (typeof(doc_text) == TYPE_LIST && length(doc_text) == 0))
-      return $format.block:mk(title, "(No documentation available)");
-    endif
-    "If doc_text is a list, join with newlines; otherwise use as-is";
+    let {title, doc_text} = args;
     if (typeof(doc_text) == TYPE_LIST)
       doc_text = doc_text:join("\n");
     endif
-    return $format.block:mk(title, doc_text);
+    if ((typeof(doc_text) == TYPE_STR && !length(doc_text))
+        || (typeof(doc_text) == TYPE_BOOL && !doc_text))
+      doc_text = "(No documentation available)";
+    endif
+    return $format.block:mk($format.title:mk(title), doc_text);
   endmethod
 
   method display_location_context owner: ARCH_WIZARD
@@ -289,7 +286,8 @@ object HELP_UTILS [
     if (dash_pos > 0)
       usage = hint_content[1..dash_pos - 1]:trim();
       description = hint_content[dash_pos + 4..$]:trim();
-      content = "Usage: `" + verb_name + " " + usage + "`";
+      content = $format.paragraph:mk("Usage: ",
+        this:command_usage(verb_name + " " + usage, player, verb_args(definer, verb_name)));
     else
       description = hint_content;
       content = "";

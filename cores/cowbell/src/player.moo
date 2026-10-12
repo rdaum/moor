@@ -302,7 +302,7 @@ object PLAYER [
       current = $pronouns:display(this:pronouns());
       available = $pronouns:list_presets();
       content = $format.block:mk($format.title:mk("Your Pronouns"), "Current: " + current, "", "Available presets:", $format.code:mk(available:join(", ")), "", "Usage: @pronouns [pronoun-set]");
-      event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+      event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
       this:inform_current(event);
       return;
     endif
@@ -310,7 +310,7 @@ object PLAYER [
     pronoun_set = $pronouns:lookup(query);
     if (typeof(pronoun_set) != TYPE_FLYWEIGHT)
       content = $format.block:mk($format.title:mk("Unknown Pronoun Set"), "No preset matches: " + query, "", "Available presets:", $format.code:mk($pronouns:list_presets():join(", ")), "", "Usage: @pronouns [pronoun-set]");
-      event = $event:mk_error(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+      event = $event:mk_error(this, content):with_audience('utility):as_inset():with_group('utility, this);
       this:inform_current(event);
       return;
     endif
@@ -318,7 +318,7 @@ object PLAYER [
     this.pronouns = pronoun_set;
     display = $pronouns:display(pronoun_set);
     content = $format.block:mk($format.title:mk("Pronouns Updated"), "Pronouns set to: " + display, "", "Usage: @pronouns [pronoun-set]");
-    event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+    event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
     this:inform_current(event);
   endverb
 
@@ -567,8 +567,10 @@ object PLAYER [
       endif
     endfor
     if (new_dm_count > 0)
-      msg = new_dm_count == 1 ? "*You have a new direct message.* Type `dms` to read it." | tostr("*You have ", new_dm_count, " new direct messages.* Type `dms` to read them.");
-      event = $event:mk_info(this, msg):as_djot():as_inset():with_group('dm_notify);
+      msg = $format.paragraph:mk(new_dm_count == 1 ? "You have a new direct message. Type "
+        | tostr("You have ", new_dm_count, " new direct messages. Type "),
+        $format.annotation:command("dms", "dms"), new_dm_count == 1 ? " to read it." | " to read them.");
+      event = $event:mk_info(this, msg):as_inset():with_group('dm_notify);
       this:inform_current(event);
     endif
     "Check for unread mail.";
@@ -576,8 +578,10 @@ object PLAYER [
     if (valid(mailbox))
       unread = mailbox:unread_count();
       if (unread > 0)
-        msg = unread == 1 ? "*You have an unread letter.* Type `mail` to check your mailbox." | tostr("*You have ", unread, " unread letters.* Type `mail` to check your mailbox.");
-        event = $event:mk_info(this, msg):as_djot():as_inset():with_group('mail_notify);
+        msg = $format.paragraph:mk(unread == 1 ? "You have an unread letter. Type "
+          | tostr("You have ", unread, " unread letters. Type "),
+          $format.annotation:command("mail", "mail"), " to check your mailbox.");
+        event = $event:mk_info(this, msg):as_inset():with_group('mail_notify);
         this:inform_current(event);
       endif
     endif
@@ -770,7 +774,7 @@ object PLAYER [
       lines = {@lines, "(Unowned)"};
     endif
     "Description";
-    if (exam.description && exam.description != "")
+    if (typeof(exam.description) == TYPE_FLYWEIGHT || exam.description)
       lines = {@lines, exam.description};
     else
       lines = {@lines, "(No description set.)"};
@@ -813,7 +817,7 @@ object PLAYER [
       lines = {};
       "Location context first";
       context_block = `$help_utils:display_location_context(this) ! ANY => 0';
-      if (context_block && context_block != 0)
+      if (typeof(context_block) == TYPE_FLYWEIGHT)
         lines = {@lines, context_block};
       endif
       "Help topics near the top";
@@ -827,7 +831,7 @@ object PLAYER [
         endfor
         lines = {@lines, "", $format.title:mk("Help Topics", 4)};
         lines = {@lines, $format.list:mk({ $format.annotation:help(topic_entry.provider, topic_entry.name) for topic_entry in (topics) }, false)};
-        lines = {@lines, "Type `help <topic>` for details."};
+        lines = {@lines, $format.paragraph:mk("Type ", $format.code:inline("help <topic>"), " for details.")};
       endif
       "Then commands";
       cmd_env = this:command_environment();
@@ -844,7 +848,7 @@ object PLAYER [
         lines = {@lines, $format.code:mk("@doc object\n@doc object:verb")};
       endif
       content = $format.block:mk($format.title:mk("Help"), @lines);
-      event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_metadata('collapse_title, "Help"):with_group('help, this);
+      event = $event:mk_info(this, content):with_audience('utility):as_inset():with_metadata('collapse_title, "Help"):with_group('help, this);
       this:inform_current(event);
       return;
     endif
@@ -860,7 +864,7 @@ object PLAYER [
       query = query[8..$]:trim();
     endif
     if (!query)
-      return this:inform_current($event:mk_error(this, "Usage: `help [topic|object|source] <name>`"):with_audience('utility));
+      return this:inform_current($event:mk_error(this, "Usage: ", $format.code:inline("help [topic|object|source] <name>")):with_audience('utility));
     endif
     "Support: help source (list)";
     if (query in {"source", "sources"})
@@ -907,8 +911,8 @@ object PLAYER [
         for s in (sources)
           names = {@names, s.name};
         endfor
-        content = $format.block:mk($format.title:mk("Unknown Help Source"), $format.paragraph:mk("No help source matches '" + source_query + "'."), "", $format.list:mk(names), "", $format.paragraph:mk("Try: `help source <name>`"));
-        event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+        content = $format.block:mk($format.title:mk("Unknown Help Source"), $format.paragraph:mk("No help source matches '" + source_query + "'."), $format.list:mk(names), $format.paragraph:mk("Try: ", $format.code:inline("help source <name>")));
+        event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
         this:inform_current(event);
         return;
       endif
@@ -924,9 +928,9 @@ object PLAYER [
         const topic_links = { $format.paragraph:mk($format.annotation:help(src, topic_entry.name), " \u2014 ", topic_entry.summary) for topic_entry in (topics) };
         lines = {@lines, $format.list:mk(topic_links, false)};
       endif
-      lines = {@lines, "", "Tip: `help <topic> from " + src.name + "`"};
+      lines = {@lines, $format.paragraph:mk("Tip: ", $format.code:inline("help <topic> from " + src.name))};
       content = $format.block:mk($format.title:mk("Help Source"), @lines);
-      event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+      event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
       this:inform_current(event);
       return;
     endif
@@ -952,7 +956,7 @@ object PLAYER [
           if (typeof(topic_result) != TYPE_INT)
             prose_lines = topic_result:render_prose();
             content = $format.block:mk($format.title:mk(topic_result.name), @prose_lines);
-            event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+            event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
             this:inform_current(event);
             return;
           endif
@@ -1020,7 +1024,7 @@ object PLAYER [
             topic = filtered[1][2];
             prose_lines = topic:render_prose();
             content = $format.block:mk($format.title:mk(topic.name), @prose_lines);
-            event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+            event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
             this:inform_current(event);
             return;
           endif
@@ -1050,7 +1054,7 @@ object PLAYER [
         endfor
         src = complex_match(source_scope, sources, keys, 0.3);
         if (src == $failed_match)
-          return this:inform_current($event:mk_error(this, "No help source matches '" + source_scope + "'. Try: `help source <source>`"):with_audience('utility));
+          return this:inform_current($event:mk_error(this, "No help source matches '" + source_scope + "'. Try: ", $format.code:inline("help source <source>")):with_audience('utility));
         endif
         try
           topic_result = src:help_topics(this, query);
@@ -1060,7 +1064,7 @@ object PLAYER [
         if (typeof(topic_result) != TYPE_INT)
           prose_lines = topic_result:render_prose();
           content = $format.block:mk($format.title:mk(topic_result.name), @prose_lines);
-          event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+          event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
           this:inform_current(event);
           return;
         endif
@@ -1076,7 +1080,7 @@ object PLAYER [
       elseif (typeof(topic_result) != TYPE_INT)
         prose_lines = topic_result:render_prose();
         content = $format.block:mk($format.title:mk(topic_result.name), @prose_lines);
-        event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+        event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
         this:inform_current(event);
         return;
       endif
@@ -1154,14 +1158,14 @@ object PLAYER [
           lines = {@lines, $format.code:mk("@doc " + query + "\n@doc " + query + ":verb")};
         endif
         content = $format.block:mk($format.title:mk("Help for " + target_obj:display_name() + "(" + toliteral(target_obj) + ")"), @lines);
-        event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+        event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
         this:inform_current(event);
         return;
       endif
     endif
     "Neither object nor topic found - try LLM suggestions";
     if (!this:suggest_help_topic(query))
-      this:inform_current($event:mk_error(this, "No help found for '" + query + "'. Try `help` to see available topics."):with_audience('utility));
+      this:inform_current($event:mk_error(this, "No help found for '" + query + "'. Try ", $format.annotation:command("help", "help"), " to see available topics."):with_audience('utility));
     endif
   endverb
 
@@ -1169,7 +1173,7 @@ object PLAYER [
     "Show help for current location context. Returns modified lines list.";
     context_block = `$help_utils:display_location_context(this) ! ANY => 0';
     lines = {};
-    if (context_block && context_block != 0)
+    if (typeof(context_block) == TYPE_FLYWEIGHT)
       lines = {@lines, context_block};
     endif
     cmd_env = this:command_environment();
@@ -2059,7 +2063,7 @@ object PLAYER [
     set_task_perms(this);
     if (!args || length(args) < 1)
       usage = $format.block:mk($format.title:mk("Usage"), $format.code:mk("@gag <player|object>"));
-      event = $event:mk_error(this, usage):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+      event = $event:mk_error(this, usage):with_audience('utility):as_inset():with_group('utility, this);
       return this:inform_current(event);
     endif
     ref = args:join(" ");
@@ -2119,7 +2123,7 @@ object PLAYER [
     set_task_perms(this);
     if (!args || length(args) < 1)
       usage = $format.block:mk($format.title:mk("Usage"), $format.code:mk("@ungag <player|object>\n@ungag everyone"));
-      event = $event:mk_error(this, usage):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+      event = $event:mk_error(this, usage):with_audience('utility):as_inset():with_group('utility, this);
       return this:inform_current(event);
     endif
     ref = args:join(" ");
@@ -2275,7 +2279,7 @@ object PLAYER [
     endif
     parts = {@parts, "", "Usage:", $format.code:mk("@gag <player|object>\n@ungag <player|object>\n@ungag everyone")};
     content = $format.block:mk(@parts);
-    event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+    event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
     return this:inform_current(event);
   endverb
 
@@ -2316,19 +2320,19 @@ object PLAYER [
       summary && (header = header + " - " + summary);
       header = header + " (from " + source_name + ")";
       lines = {@lines, header};
-      lines = {@lines, "    Try: `help " + topic.name + " from " + source_name + "`"};
+      lines = {@lines, $format.paragraph:mk("Try: ", $format.code:inline("help " + topic.name + " from " + source_name))};
       "Secondary (expert) options.";
       if (this.programmer)
         source_ref = toliteral(source);
         source == $prog_features && (source_ref = "$prog_features");
         source == $sysobj.help_topics && (source_ref = "$sysobj.help_topics");
-        lines = {@lines, "    Advanced: `help " + source_ref + ":" + topic.name + "`"};
-        cat && (lines = {@lines, "    Advanced: `help " + cat + " " + topic.name + "`"});
+        lines = {@lines, $format.paragraph:mk("Advanced: ", $format.code:inline("help " + source_ref + ":" + topic.name))};
+        cat && (lines = {@lines, $format.paragraph:mk("Advanced: ", $format.code:inline("help " + cat + " " + topic.name))});
       endif
-      items = {@items, lines:join("\n")};
+      items = {@items, $format.block:mk(@lines)};
     endfor
-    content = $format.block:mk($format.title:mk("Ambiguous Topic"), $format.paragraph:mk("Multiple help topics match '" + query + "':"), "", $format.list:mk(items), "", $format.paragraph:mk("Be more specific, or browse with: `help source`"));
-    event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+    content = $format.block:mk($format.title:mk("Ambiguous Topic"), $format.paragraph:mk("Multiple help topics match '" + query + "':"), $format.list:mk(items), $format.paragraph:mk("Be more specific, or browse with: ", $format.code:inline("help source")));
+    event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
     this:inform_current(event);
     return;
   endmethod
@@ -2360,8 +2364,8 @@ object PLAYER [
     if (!unique)
       return this:inform_current($event:mk_error(this, "No help sources are available here."):with_audience('utility));
     endif
-    content = $format.block:mk($format.title:mk("Help Sources"), $format.paragraph:mk("These objects provide help topics in your current context:"), "", $format.list:mk(unique), "", $format.paragraph:mk("Try: `help source <name>`"));
-    event = $event:mk_info(this, content):with_audience('utility):as_djot():as_inset():with_group('utility, this);
+    content = $format.block:mk($format.title:mk("Help Sources"), $format.paragraph:mk("These objects provide help topics in your current context:"), $format.list:mk(unique), $format.paragraph:mk("Try: ", $format.code:inline("help source <name>")));
+    event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
     this:inform_current(event);
     return;
   endmethod
@@ -2968,7 +2972,7 @@ object PLAYER [
     endif
     token = `this.assist_last_token ! ANY => ""';
     if (typeof(token) != TYPE_STR || token == "" || !maphaskey(pending, token))
-      this:inform_current($event:mk_info(this, "Nothing recent to assist with. Try your command or help query again, then type `assist`."):with_audience('utility));
+      this:inform_current($event:mk_info(this, "Nothing recent to assist with. Try your command or help query again, then type ", $format.code:inline("assist"), "."):with_audience('utility));
       return true;
     endif
     ctx = pending[token];
@@ -3367,7 +3371,7 @@ object PLAYER [
       return false;
     endif
     rewrite_id = uuid();
-    fallback = "No help found for '" + query + "'. Try `help` to see available topics.";
+    fallback = "No help found for '" + query + "'. Try help to see available topics.";
     placeholder = $event:mk_error(this, "No help found for '" + query + "'. Checking suggestions..."):with_rewritable(rewrite_id, 30, fallback):with_presentation_hint('processing):with_audience('utility);
     this:inform_connection(current_conn, placeholder);
     is_programmer = this.programmer;
@@ -3450,11 +3454,11 @@ object PLAYER [
             topic_lines = {@topic_lines, $format.annotation:help(providers[topic_name], topic_name)};
           endfor
           body = $format.block:mk(note, "Try one of these:", $format.list:mk(topic_lines));
-          result_event = $event:mk_info(this, $format.block:mk("No help found for '" + query + "', but...\n", body)):as_djot():as_inset();
+          result_event = $event:mk_info(this, $format.block:mk("No help found for '" + query + "', but...\n", body)):as_inset();
           this:rewrite_event(rewrite_id, result_event, current_conn);
         else
           guidance = length(note) > 0 ? note | "I couldn't find a close help topic for that.";
-          generic = guidance + " Try `help` to see available topics.";
+          generic = guidance + " Try help to see available topics.";
           this:rewrite_event(rewrite_id, generic, current_conn);
         endif
       except e (ANY)

@@ -424,28 +424,27 @@ object CONTAINER [
   endmethod
 
   method look_self owner: ARCH_WIZARD
-    "Custom look that shows contents with container-appropriate language";
+    "Capture the description and visible contents, resolving a denied view with its container binding.";
     set_task_perms(caller_perms());
-    description = this.description;
-    can_view = this:can_view_contents(player);
-    if (can_view)
-      "Show contents";
-      contents_list = {};
-      for item in (this.contents)
-        if (valid(item))
-          contents_list = {@contents_list, item:display_name()};
-        endif
-      endfor
-      if (length(contents_list))
-        description = description + "  It contains " + contents_list:english_list() + ".";
+    const description = this:description();
+    let blocks = $format:blocks(typeof(description) == TYPE_LIST ? description | {description});
+    if (this:can_view_contents(player))
+      const contents = {item for item in (this.contents) if (valid(item))};
+      if (length(contents))
+        let parts = {"It contains "};
+        for i in [1..length(contents)]
+          if (i > 1)
+            parts = {@parts, i == length(contents) ? " and " | ", "};
+          endif
+          parts = {@parts, $format.annotation:object(contents[i], contents[i]:display_name())};
+        endfor
+        blocks = {@blocks, $format.paragraph:mk(@parts, ".")};
       endif
     else
-      "Can't see inside";
-      deny_msg = this.take_denied_msg;
-      rendered_msg = $sub:render(deny_msg, ['iobj -> this]);
-      description = description + "  " + rendered_msg:capitalize() + ".";
+      const denied = $event:mk_info(player, this.take_denied_msg):with_iobj(this):resolve(player);
+      blocks = {@blocks, @flycontents(denied)};
     endif
-    return <$look, .what = this, .title = this:name(), .description = description>;
+    return <$look, .what = this, .title = this:name(), .description = $document_template:mk('blocks, blocks)>;
   endmethod
 
   method inspection_state owner: ARCH_WIZARD
