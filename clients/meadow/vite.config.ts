@@ -13,6 +13,7 @@
 
 import react from "@vitejs/plugin-react";
 import { execSync } from "child_process";
+import { hostname } from "node:os";
 import { resolve } from "path";
 import { defineConfig } from "vite";
 import wasm from "vite-plugin-wasm";
@@ -63,6 +64,7 @@ export default defineConfig({
     },
     server: {
         port: 3000,
+        allowedHosts: [hostname()],
         proxy: {
             "/v1": process.env.MOOR_API_URL || "http://localhost:8080",
             "/ws": {

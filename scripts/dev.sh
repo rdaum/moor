@@ -53,6 +53,8 @@ By default, the baseline comes from the common ancestor of HEAD and origin/main.
 Working files supply the live code, so local edits remain distinct from upstream.
 Git preparation uses local history; it does not fetch from the remote.
 Meadow: http://localhost:3000    Web host: http://localhost:8080
+Both web servers listen on all IPv4 interfaces. From another machine, use
+http://<this-machine-IP>:3000, including this machine's tailnet IP.
 Worker IPC sockets are printed at startup so other workers can attach.
 EOF
 }
@@ -185,7 +187,7 @@ add_command() {
 add_command "$bin_dir/moor-daemon" "${daemon_args[@]}"
 add_command "$bin_dir/moor-web-host" "${client_args[@]}" \
     --data-dir "$data_dir/web-host" --listen-address 0.0.0.0:8080 --enable-webhooks
-add_command npm run dev --workspace meadow -- --strictPort
+add_command npm run dev --workspace meadow -- --host 0.0.0.0 --strictPort
 if [[ $curl_worker == true ]]; then
     names+=(curl)
     add_command "$bin_dir/moor-curl-worker" "${client_args[@]}" --data-dir "$data_dir/curl-worker"
@@ -198,6 +200,7 @@ fi
 
 export RUST_BACKTRACE=${RUST_BACKTRACE:-1}
 printf 'Core: %s\nData: %s\nMeadow: http://localhost:3000\nWeb host: http://localhost:8080\n' "$core" "$data_dir"
+printf 'Both web servers listen on all IPv4 interfaces; remote access: http://<this-machine-IP>:3000\n'
 printf 'Worker IPC:\n  RPC: %s\n  Requests: %s\n  Responses: %s\n' "$rpc_address" "$requests_address" "$responses_address"
 service_names=$(IFS=,; echo "${names[*]}")
 exec node_modules/.bin/concurrently --shell "$(command -v bash)" \
