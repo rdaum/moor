@@ -104,7 +104,7 @@ it("keeps prose objects undecorated and only renders authored command icons", ()
 
 it("identifies people in structured room lists", () => {
     const html = renderHtmlContent(
-        "<div class=\"room_snapshot_chip_row\"><span data-moor-annotation=\"person\">Pat</span></div>",
+        "<ul class=\"reference-columns\"><li><span data-moor-annotation=\"person\">Pat</span></li></ul>",
         false,
         decodeAnnotations({ person: { kind: "object", ref: "oid:45", objectKind: "person" } }),
     );

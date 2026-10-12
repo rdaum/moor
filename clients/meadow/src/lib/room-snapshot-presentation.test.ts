@@ -16,34 +16,47 @@
 import { describe, expect, it } from "vitest";
 import { roomSnapshotToPresentation } from "./room-snapshot-presentation";
 
-describe("room snapshot annotations", () => {
-    it("preserves Cowbell's exact command independently of the displayed direction", () => {
-        const annotation = {
-            kind: "command",
-            command: "go e",
-            exit: { source: "oid:10", destination: "oid:20", passage: "identity" },
-        };
-        const presentation = roomSnapshotToPresentation({
-            room: 10,
-            title: "Hall",
-            exits: ["east"],
-            exit_links: [{ label: "East door", annotation }],
-        });
-        expect(presentation?.content).toContain("data-moor-annotation=\"a1\">East door");
+describe("captured room presentations", () => {
+    const annotation = {
+        kind: "command",
+        command: "go e",
+        exit: { source: "oid:10", destination: "oid:20", passage: "identity" },
+    };
+    const snapshot = {
+        room: 10,
+        title: "Hall",
+        content: "<p>A <strong>brass</strong> bell.</p><p data-moor-annotation=\"a1\">East door</p>",
+        content_type: "text/html",
+        annotations: { a1: annotation },
+    };
+    it("uses the core body unchanged with its own annotation table and separate title", () => {
+        const presentation = roomSnapshotToPresentation(snapshot);
+        expect(presentation?.content).toBe(snapshot.content);
         expect(presentation?.annotations?.a1).toEqual(annotation);
-        expect(presentation?.content).not.toContain("moo://");
+        expect(presentation?.attributes).toEqual([["title", "Hall"], ["kind", "room_look"], ["room", "oid:10"]]);
     });
-    it("does not infer an executable command from a direction alone", () => {
-        const presentation = roomSnapshotToPresentation({ exits: ["east"], exit_links: [{ label: "east" }] });
-        expect(presentation?.content).not.toContain("data-moor-annotation");
+    it.each(["text/html", "text/djot", "text/plain"])("accepts rendered %s without interpreting the content", type => {
+        const presentation = roomSnapshotToPresentation({ ...snapshot, content_type: type, content: "*literal*" });
+        expect(presentation?.content).toBe("*literal*");
+        expect(presentation?.content_type).toBe(type);
     });
-    it("retains distinct identities for identical object labels", () => {
+    it("rejects raw descriptions and unsupported bodies instead of inventing a representation", () => {
+        expect(roomSnapshotToPresentation({ room: 10, title: "Hall", description: "raw" })).toBeNull();
+        expect(roomSnapshotToPresentation({ ...snapshot, content_type: "text/unknown" })).toBeNull();
+        expect(roomSnapshotToPresentation({ ...snapshot, content: {} })).toBeNull();
+    });
+    it("retains separate identities for identical labels and validates descriptors", () => {
         const presentation = roomSnapshotToPresentation({
-            things: [{ name: "key", object: { oid: 11 } }, { name: "key", object: { oid: 12 } }],
+            ...snapshot,
+            annotations: {
+                a1: { kind: "object", ref: "oid:11" },
+                a2: { kind: "object", ref: "oid:12" },
+                bad: { kind: "command", command: "go east\n@shutdown" },
+            },
         });
-        expect(Object.values(presentation?.annotations ?? {})).toEqual([{ kind: "object", ref: "oid:11" }, {
-            kind: "object",
-            ref: "oid:12",
-        }]);
+        expect(presentation?.annotations).toEqual({
+            a1: { kind: "object", ref: "oid:11" },
+            a2: { kind: "object", ref: "oid:12" },
+        });
     });
 });

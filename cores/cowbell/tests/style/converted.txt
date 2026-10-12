@@ -239,3 +239,9 @@ events/event_receiver.moo:tell
 events/event_receiver.moo:_resolve_event
 events/event_receiver.moo:_event_render
 world/passage.moo:movement_event
+look.moo
+world/room.moo:look_self
+world/room.moo:room_snapshot
+events/event_receiver.moo:_capture_room
+events/event_receiver.moo:emit_room_look
+events/event_receiver.moo:emit_room_snapshot_state

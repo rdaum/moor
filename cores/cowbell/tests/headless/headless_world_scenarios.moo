@@ -361,7 +361,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_eq(descriptor["exit"]["destination"], $url_utils:to_curie_str(destination), "destination is explicit");
       $test_utils:assert_eq(source:exit_annotation("e")["exit"], descriptor["exit"], "aliases describe the same passage");
       const snapshot = source:room_snapshot(player);
-      $test_utils:assert_eq(snapshot["exit_links"][1]["annotation"], descriptor, "pinned room uses the same command descriptor");
+      $test_utils:assert_eq(mapvalues(snapshot["annotations"])[1], descriptor, "pinned room uses the same command descriptor");
       area:update_passage(source, destination, passage:with_open(false));
       $test_utils:assert_eq(source:exit_annotation("east"), descriptor, "door state does not change identity");
       area:set_passage(source, destination, passage);

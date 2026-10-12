@@ -301,42 +301,38 @@ object EVENT_RECEIVER [
     return false;
   endmethod
 
+  method _capture_room owner: ARCH_WIZARD
+    "Capture room content under this viewer's permissions, including producer callbacks.";
+    caller == this || raise(E_PERM);
+    set_task_perms(this);
+    const {room} = args;
+    return room:look_self():capture(this);
+  endmethod
+
   method emit_room_look owner: ARCH_WIZARD
-    "Emit room look to narrative notify plus OOB room panel state.";
+    "Capture once, then deliver narrative and current panel state from the same LookView.";
     this:_can_inform_as(caller, caller_perms()) || raise(E_PERM);
-    {?room = this.location} = args;
-    if (!valid(room) || !isa(room, $room))
-      room = this.location;
-    endif
-    if (!valid(room) || !isa(room, $room))
-      return;
-    endif
-    look_d = room:look_self();
-    look_event = look_d:into_event();
-    look_event = look_event:with_metadata('look_kind, "room");
-    look_event = look_event:with_metadata('look_room, room);
-    "Emit OOB structured room state for this viewer only.";
-    `this:emit_room_snapshot_state(this, room, look_d) ! ANY';
-    "Always emit the existing narrative event path.";
-    this:inform_current(look_event);
+    const {?room = this.location} = args;
+    valid(room) && isa(room, $room) || return;
+    const view = this:_capture_room(room);
+    const event = $look:narrative(view):with_metadata('look_kind, "room")
+      :with_metadata('look_room, room);
+    this:emit_room_snapshot_state(this, room, view);
+    this:inform_current(event);
   endmethod
 
   method emit_room_snapshot_state owner: ARCH_WIZARD
-    "Emit room snapshot state to a specific viewer.";
+    "Publish live panel state for this receiver; stale captures cannot replace the current room.";
     this:_can_inform_as(caller, caller_perms()) || raise(E_PERM);
-    {viewer, room, ?look_d = 0} = args;
-    if (!valid(viewer) || !is_player(viewer))
-      return;
-    endif
-    if (!valid(room) || !isa(room, $room))
-      return;
-    endif
-    try
-      snapshot = room:room_snapshot(viewer, look_d);
-      emit_data(viewer, 'state, 'room_snapshot, snapshot);
-    except e (ANY)
-      "Best-effort snapshot broadcast.";
-    endtry
+    const {viewer, room, ?captured = false} = args;
+    viewer == this || raise(E_PERM);
+    is_player(this) && valid(room) && isa(room, $room) || return;
+    this.location == room || return;
+    const view = typeof(captured) == TYPE_MAP ? captured | this:_capture_room(room);
+    view['viewer] == this && view['room_ref] == room || raise(E_INVARG, "Room view mismatch");
+    const snapshot = $look:panel(view);
+    this.location == room || return;
+    emit_data(this, 'state, 'room_snapshot, snapshot);
   endmethod
 
   method test_can_inform_as_checks_explicit_authority owner: HACKER
