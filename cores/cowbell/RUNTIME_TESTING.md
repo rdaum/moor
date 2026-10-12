@@ -57,6 +57,17 @@ make -C cores/cowbell runtime-headless HEADLESS_FILTERS=90010 HEADLESS_PLAYER_FI
 Method selection must discover at least one test. An empty filter fails. A method process has a
 600-second limit; each method also has `HEADLESS_TIMEOUT`, which defaults to 10 seconds.
 
+The document contract scenarios use fixture `#90121`. They cover canonical nodes, metadata
+roundtrips, all three renderers, invalid trees, references, and resource limits:
+
+```sh
+make -C cores/cowbell test MOORC_TYPE=direct TEST_FILTER='#90121'
+```
+
+These scenarios use inert content and need no connection, worker, or live world. They are also part
+of the default method suite. Their sample output can be checked with the installed Djot client
+parser without adding a parser dependency to the core test runner.
+
 ## Commands and committed events
 
 `runtime-session` uses the shared runner in `cores/tools/session-runner` with `--cowbell`. This option enables
