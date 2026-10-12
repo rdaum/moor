@@ -4157,8 +4157,6 @@ count	file	verb	kind	detail
 1	types/str_proto.moo	indefinite_article owner: HACKER	implicit-local	first_char
 1	types/str_proto.moo	indefinite_article owner: HACKER	implicit-local	s
 1	types/str_proto.moo	initial_lowercase owner: HACKER	implicit-local	string
-1	types/str_proto.moo	join_list owner: HACKER	implicit-local	lst
-1	types/str_proto.moo	join_list owner: HACKER	implicit-local	separator
 1	types/str_proto.moo	literal_object owner: HACKER	implicit-local	string
 1	types/str_proto.moo	map_chars owner: ARCH_WIZARD	implicit-local	func
 1	types/str_proto.moo	map_chars owner: ARCH_WIZARD	implicit-local	result
@@ -4217,36 +4215,17 @@ count	file	verb	kind	detail
 1	types/str_proto.moo	repeat owner: HACKER	implicit-local	count
 1	types/str_proto.moo	repeat owner: HACKER	implicit-local	result
 1	types/str_proto.moo	repeat owner: HACKER	implicit-local	string
-1	types/str_proto.moo	replace_all owner: HACKER	implicit-local	new_part
-1	types/str_proto.moo	replace_all owner: HACKER	implicit-local	old_part
-1	types/str_proto.moo	replace_all owner: HACKER	implicit-local	parts
-1	types/str_proto.moo	replace_all owner: HACKER	implicit-local	s
 1	types/str_proto.moo	reverse owner: HACKER	implicit-local	instr
 1	types/str_proto.moo	reverse owner: HACKER	implicit-local	out
-1	types/str_proto.moo	space owner: HACKER	conditional-assignment	n = abs(n)
-1	types/str_proto.moo	space owner: HACKER	implicit-local	f
-1	types/str_proto.moo	space owner: HACKER	implicit-local	fill
-1	types/str_proto.moo	space owner: HACKER	implicit-local	m
-1	types/str_proto.moo	space owner: HACKER	implicit-local	n
-1	types/str_proto.moo	split owner: HACKER	conditional-assignment	index_pos = index(remaining, delim)
-1	types/str_proto.moo	split owner: HACKER	implicit-local	delimiter
-1	types/str_proto.moo	split owner: HACKER	implicit-local	string
 1	types/str_proto.moo	substring owner: HACKER	implicit-local	len
 1	types/str_proto.moo	substring owner: HACKER	implicit-local	start
 1	types/str_proto.moo	substring owner: HACKER	implicit-local	string
 1	types/str_proto.moo	test_match_objid_helpers owner: HACKER	implicit-local	result
 1	types/str_proto.moo	test_match_objid_helpers owner: HACKER	implicit-local	uuid_str
-1	types/str_proto.moo	test_split_search_and_transform_helpers owner: ARCH_WIZARD	implicit-local	expected
 1	types/str_proto.moo	test_time_article_and_curie_helpers owner: HACKER	implicit-local	next_run
 1	types/str_proto.moo	title_case owner: HACKER	implicit-local	result
 1	types/str_proto.moo	title_case owner: HACKER	implicit-local	string
 1	types/str_proto.moo	title_case owner: HACKER	implicit-local	words
-1	types/str_proto.moo	to_list owner: HACKER	conditional-assignment	i = index(subject, separator)
-1	types/str_proto.moo	to_list owner: HACKER	implicit-local	breaklen
-1	types/str_proto.moo	to_list owner: HACKER	implicit-local	i
-1	types/str_proto.moo	to_list owner: HACKER	implicit-local	parts
-1	types/str_proto.moo	to_list owner: HACKER	implicit-local	separator
-1	types/str_proto.moo	to_list owner: HACKER	implicit-local	subject
 1	types/str_proto.moo	toobj owner: HACKER	implicit-local	s
 1	types/str_proto.moo	trim owner: HACKER	implicit-local	chars
 1	types/str_proto.moo	trim owner: HACKER	implicit-local	finish
@@ -4275,7 +4254,6 @@ count	file	verb	kind	detail
 1	types/str_proto.moo	words owner: HACKER	implicit-local	rest
 1	types/str_proto.moo	words owner: HACKER	implicit-local	token
 1	types/str_proto.moo	words owner: HACKER	implicit-local	toklist
-1	types/str_proto.moo	words_list owner: ARCH_WIZARD	implicit-local	string
 1	types/sym_proto.moo	as_string owner: HACKER	implicit-local	sym
 1	types/sym_proto.moo	contains owner: HACKER	implicit-local	needle
 1	types/sym_proto.moo	contains owner: HACKER	implicit-local	sym

@@ -85,6 +85,9 @@ object HEADLESS_COLLECTION_SCENARIOS
     if (operation == "reduce")
       return {1}:reduce({acc, item} => (#90100.runtime_probe = 99), 0);
     endif
+    if (operation in {"map_chars", "filter_chars"})
+      return "a":(operation)({char} => (#90100.runtime_probe = 99));
+    endif
     return {1}:(operation)({item} => (#90100.runtime_probe = 99));
   endmethod
 
@@ -94,7 +97,7 @@ object HEADLESS_COLLECTION_SCENARIOS
     try
       #90100.runtime_probe = 42;
       for operation in ({"map", "filter", "reduce", "find", "find_index", "any", "all",
-          "group_by"})
+          "group_by", "map_chars", "filter_chars"})
         $test_utils:assert_raises(E_PERM, this, "_callback_write", {operation},
           "Callback must not write a foreign property");
         $test_utils:assert_eq(#90100.runtime_probe, 42, "Denied callback preserves state");

@@ -235,3 +235,16 @@ change_manager.moo
 
 agentic/agentic_event_queue.moo
 events/msg_bag.moo
+
+types/str_proto.moo:is_numeric
+types/str_proto.moo:join_list
+types/str_proto.moo:replace_all
+types/str_proto.moo:space
+types/str_proto.moo:split
+types/str_proto.moo:test_case_whitespace_and_padding
+types/str_proto.moo:test_list_word_and_paragraph_helpers
+types/str_proto.moo:test_padding_boundaries
+types/str_proto.moo:test_split_boundaries
+types/str_proto.moo:test_split_search_and_transform_helpers
+types/str_proto.moo:to_list
+types/str_proto.moo:words_list

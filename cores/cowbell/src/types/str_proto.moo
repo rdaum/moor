@@ -250,10 +250,9 @@ object STR_PROTO [
   endmethod
 
   method is_numeric owner: HACKER
-    "Usage:  is_numeric(string)";
-    "Is string numeric (composed of one or more digits possibly preceded by a minus sign)?";
-    "Return true or false.";
-    return match(args[1], "^ *[-+]?[0-9]+ *$");
+    "Return true for an integer string with an optional sign and surrounding spaces.";
+    const {string} = args;
+    return !!match(string, "^ *[-+]?[0-9]+ *$");
   endmethod
 
   method literal_object owner: HACKER
@@ -302,54 +301,29 @@ object STR_PROTO [
   endmethod
 
   method space owner: HACKER
-    "space(len,fill) returns a string of length abs(len) consisting of copies of fill.  If len is negative, fill is anchored on the right instead of the left.";
-    "len has an upper limit of 100,000.";
-    {n, ?fill = " "} = args;
-    if (typeof(n) == TYPE_STR)
-      n = length(n);
-    endif
-    if ((n = abs(n)) > 100000)
-      raise(E_INVARG);
-    endif
-    if (fill != " ")
-      fill = fill + fill;
-      fill = fill + fill;
-      fill = fill + fill;
-    elseif (n < 70)
-      return "                                                                      "[1..n];
-    else
-      fill = "                                                                      ";
-    endif
-    m = (n - 1) / length(fill);
-    while (m)
-      fill = fill + fill;
-      m = m / 2;
+    "Return abs(width) characters of repeated fill, up to 100,000 characters.";
+    "Negative widths anchor fill on the right. A string width uses its length.";
+    "Empty fill raises E_INVARG when padding is required.";
+    const {width, ?fill = " "} = args;
+    const signed_width = typeof(width) == TYPE_STR ? length(width) | width;
+    typeof(signed_width) == TYPE_INT || raise(E_TYPE, "Width must be an integer or string");
+    typeof(fill) == TYPE_STR || raise(E_TYPE, "Fill must be a string");
+    const size = abs(signed_width);
+    size <= 100000 || raise(E_INVARG, "Width exceeds 100,000 characters");
+    size == 0 && return "";
+    fill || raise(E_INVARG, "Fill must not be empty");
+    let padding = fill;
+    while (length(padding) < size)
+      padding = padding + padding;
     endwhile
-    f = length(fill);
-    return n > 0 ? fill[1..n] | fill[f + 1 + n..f];
+    return signed_width < 0 ? padding[length(padding) - size + 1..$] | padding[1..size];
   endmethod
 
   method to_list owner: HACKER
-    "Usage:  $string:to_list(str <subject>[, str <separator>])";
-    "";
-    "Returns a list of those substrings of <subject> separated by <separator>.  <separator> defaults to space.";
-    "";
-    "Differs from $string:explode in that";
-    "";
-    "  * <separator> can effectively be longer than one character.";
-    "  * runs of <separator> are not treated as single occurrences.";
-    "";
-    "$string:to_list  (string, separator) is the inverse of";
-    "$string:from_list(list  , separator)";
-    {subject, ?separator = " "} = args;
-    breaklen = length(separator);
-    parts = {};
-    i = 0;
-    while (i = index(subject, separator))
-      parts = {@parts, subject[1..i - 1]};
-      subject = subject[i + breaklen..$];
-    endwhile
-    return {@parts, subject};
+    "Split on separator, retaining empty fields and ignoring case by default.";
+    "An empty separator returns {subject}. Pass true as case_matters for exact matching.";
+    const {subject, ?separator = " ", ?case_matters = false} = args;
+    return this:split(subject, separator, case_matters);
   endmethod
 
   method toobj owner: HACKER
@@ -694,33 +668,30 @@ object STR_PROTO [
   endmethod
 
   method split owner: HACKER
-    "split(string, delimiter) => list of substrings split by delimiter";
-    "Example: \"a,b,c\":split(\",\") => {\"a\", \"b\", \"c\"}";
-    {string, delimiter} = args;
-    if (length(delimiter) == 1)
+    "Split on delimiter, retaining empty fields. Matching is case-sensitive by default.";
+    "An empty delimiter returns {string}. Pass false as case_matters to ignore case.";
+    const {string, delimiter, ?case_matters = true} = args;
+    (typeof(string) == TYPE_STR && typeof(delimiter) == TYPE_STR) || raise(E_TYPE);
+    const delimiter_length = length(delimiter);
+    delimiter_length == 0 && return {string};
+    if (delimiter_length == 1 && case_matters)
       return explode(string, delimiter, 1);
     endif
-    fn split_string(text, delim)
-      if (delim == "")
-        return {text};
-      endif
-      let parts = {};
-      let remaining = text;
-      let index_pos = 0;
-      while (index_pos = index(remaining, delim))
-        parts = {@parts, remaining[1..index_pos - 1]};
-        remaining = remaining[index_pos + length(delim)..$];
-      endwhile
-      return {@parts, remaining};
-    endfn
-    return split_string(string, delimiter);
+    let parts = {};
+    let remaining = string;
+    while (true)
+      const position = index(remaining, delimiter, case_matters);
+      position || return {@parts, remaining};
+      parts = {@parts, remaining[1..position - 1]};
+      remaining = remaining[position + delimiter_length..$];
+    endwhile
   endmethod
 
   method join_list owner: HACKER
-    "join_list(list, separator) => string with list elements joined by separator";
-    "Example: {\"a\", \"b\", \"c\"}:join_list(\",\") => \"a,b,c\"";
-    {lst, separator} = args;
-    return lst:join(separator);
+    "Compatibility entry point for $str_proto:join_list(list, separator).";
+    "Prefer list:join(separator) for primitive dispatch.";
+    const {items, separator} = args;
+    return items:join(separator);
   endmethod
 
   method starts_with owner: HACKER
@@ -742,13 +713,10 @@ object STR_PROTO [
   endmethod
 
   method replace_all owner: HACKER
-    "replace_all(string, old, new) => string with all occurrences of old replaced with new";
-    "Example: \"hello world\":replace_all(\"l\", \"x\") => \"hexxo worxd\"";
-    s = args[1];
-    old_part = args[2];
-    new_part = args[3];
-    parts = this:split(s, old_part);
-    return parts:join(new_part);
+    "Replace all occurrences of old with new. Matching is case-sensitive by default.";
+    "An empty old string leaves the input unchanged. Pass false to ignore case.";
+    const {string, old, new, ?case_matters = true} = args;
+    return strsub(string, old, new, case_matters);
   endmethod
 
   method reverse owner: HACKER
@@ -819,11 +787,9 @@ object STR_PROTO [
   endmethod
 
   method words_list owner: ARCH_WIZARD
-    "words_list(string) => list of words split by whitespace using modern approach";
-    "Example: \"hello world test\":words_list() => {\"hello\", \"world\", \"test\"}";
-    set_task_perms(caller_perms());
-    string = args[1];
-    return this:split(this:trim(string), " "):filter({w} => w != "");
+    "Split on spaces, tabs, carriage returns, and newlines. Ignore empty fields.";
+    const {string} = args;
+    return explode(strtr(string, "\t\r\n", "   ", 1), " ");
   endmethod
 
   method map_chars owner: ARCH_WIZARD
@@ -1008,85 +974,89 @@ object STR_PROTO [
 
   method test_case_whitespace_and_padding owner: HACKER
     "Cover case, trimming, spacing, and padding helpers.";
-    $test_utils:assert_eq("cowbell":capitalize(), "Cowbell", "capitalize lowercase word");
-    $test_utils:assert_eq("Cowbell":initial_lowercase(), "cowbell", "initial_lowercase uppercase word");
-    $test_utils:assert_eq("hELLo":lowercase(), "hello", "lowercase mixed word");
-    $test_utils:assert_eq("hELLo":uppercase(), "HELLO", "uppercase mixed word");
-    $test_utils:assert_eq("  cowbell  ":trim(), "cowbell", "trim default whitespace");
-    $test_utils:assert_eq("***cowbell***":trim("*"), "cowbell", "trim custom character");
-    $test_utils:assert_eq("***cowbell***":triml("*"), "cowbell***", "triml custom character");
-    $test_utils:assert_eq("***cowbell***":trimr("*"), "***cowbell", "trimr custom character");
-    $test_utils:assert_eq("moo":center(7), "  moo  ", "center default fill");
-    $test_utils:assert_eq("moo":centre(-2), "mo", "centre negative length truncates");
-    $test_utils:assert_eq(this:space(5, "*"), "*****", "space custom fill");
-    $test_utils:assert_eq("hi":pad_left(5), "   hi", "pad_left default fill");
-    $test_utils:assert_eq("hi":pad_right(5, "."), "hi...", "pad_right custom fill");
-    $test_utils:assert_eq("hello world":title_case(), "Hello World", "title_case basic words");
+    $test_utils:assert_true(equal("cowbell":capitalize(), "Cowbell"), "capitalize lowercase word");
+    $test_utils:assert_true(equal("Cowbell":initial_lowercase(), "cowbell"), "initial_lowercase uppercase word");
+    $test_utils:assert_true(equal("hELLo":lowercase(), "hello"), "lowercase mixed word");
+    $test_utils:assert_true(equal("hELLo":uppercase(), "HELLO"), "uppercase mixed word");
+    $test_utils:assert_true(equal("  cowbell  ":trim(), "cowbell"), "trim default whitespace");
+    $test_utils:assert_true(equal("***cowbell***":trim("*"), "cowbell"), "trim custom character");
+    $test_utils:assert_true(equal("***cowbell***":triml("*"), "cowbell***"), "triml custom character");
+    $test_utils:assert_true(equal("***cowbell***":trimr("*"), "***cowbell"), "trimr custom character");
+    $test_utils:assert_true(equal("moo":center(7), "  moo  "), "center default fill");
+    $test_utils:assert_true(equal("moo":centre(-2), "mo"), "centre negative length truncates");
+    $test_utils:assert_true(equal(this:space(5, "*"), "*****"), "space custom fill");
+    $test_utils:assert_true(equal("hi":pad_left(5), "   hi"), "pad_left default fill");
+    $test_utils:assert_true(equal("hi":pad_right(5, "."), "hi..."), "pad_right custom fill");
+    $test_utils:assert_true(equal("hello world":title_case(), "Hello World"), "title_case basic words");
     return true;
   endmethod
 
   method test_list_word_and_paragraph_helpers owner: HACKER
     "Cover list conversion, word parsing, and paragraph append helpers.";
-    $test_utils:assert_eq("a::b::":to_list("::"), {"a", "b", ""}, "to_list preserves trailing empty part");
-    $test_utils:assert_eq(this:join_list({"a", "b", "c"}, "|"), "a|b|c", "join_list joins with separator");
-    $test_utils:assert_eq("  alpha beta  ":words(), {"alpha", "beta"}, "words trims and splits");
-    $test_utils:assert_eq("alpha \"big dog\"":words(), {"alpha", "big dog"}, "words respects quotes");
-    $test_utils:assert_eq("  alpha beta":word_start(), {{3, 7}, {9, 12}}, "word_start reports source offsets");
-    $test_utils:assert_eq(" hello   world test ":words_list(), {"hello", "world", "test"}, "words_list drops empty fields");
-    $test_utils:assert_eq("":append_to_paragraph(), {""}, "append_to_paragraph empty receiver");
-    $test_utils:assert_eq("dog":append_to_paragraph("cats and "), {"cats and dog"}, "append_to_paragraph appends to last line");
-    $test_utils:assert_eq("dog":append_to_paragraph("cats and, also...", "a ", ""), {"cats and, also...", "a ", "dog"}, "append_to_paragraph preserves intermediate lines");
+    $test_utils:assert_true(equal("a::b::":to_list("::"), {"a", "b", ""}), "to_list preserves trailing empty part");
+    $test_utils:assert_true(equal(this:join_list({"a", "b", "c"}, "|"), "a|b|c"), "join_list joins with separator");
+    $test_utils:assert_true(equal("  alpha beta  ":words(), {"alpha", "beta"}), "words trims and splits");
+    $test_utils:assert_true(equal("alpha \"big dog\"":words(), {"alpha", "big dog"}), "words respects quotes");
+    $test_utils:assert_true(equal("  alpha beta":word_start(), {{3, 7}, {9, 12}}), "word_start reports source offsets");
+    $test_utils:assert_true(equal(" hello   world test ":words_list(), {"hello", "world", "test"}), "words_list drops empty fields");
+    $test_utils:assert_true(equal("\tone\ttwo\r\nthree\n":words_list(), {"one", "two", "three"}),
+      "words_list splits all documented whitespace");
+    $test_utils:assert_true(equal(" \t\r\n":words_list(), {}), "Whitespace-only input");
+    $test_utils:assert_true(equal("":append_to_paragraph(), {""}), "append_to_paragraph empty receiver");
+    $test_utils:assert_true(equal("dog":append_to_paragraph("cats and "), {"cats and dog"}), "append_to_paragraph appends to last line");
+    $test_utils:assert_true(equal("dog":append_to_paragraph("cats and, also...", "a ", ""), {"cats and, also...", "a ", "dog"}), "append_to_paragraph preserves intermediate lines");
     return true;
   endmethod
 
   method test_object_reference_helpers owner: HACKER
     "Cover object-reference parsing helpers.";
-    $test_utils:assert_eq("#1":toobj(), #1, "toobj numbered object");
-    $test_utils:assert_eq("not an object":toobj(), E_TYPE, "toobj rejects non-object strings");
-    $test_utils:assert_eq("#1":literal_object(), #1, "literal_object numbered object");
-    $test_utils:assert_eq("$root":literal_object(), $root, "literal_object sysobj property");
-    $test_utils:assert_eq("$str_proto":literal_object(), $str_proto, "literal_object str_proto sysobj property");
-    $test_utils:assert_eq("missing":literal_object(), $failed_match, "literal_object rejects bare strings");
-    $test_utils:assert_eq("raw":render_as('text), "raw", "render_as returns strings unchanged");
-    $test_utils:assert_eq("raw":compose(), "raw", "compose returns strings unchanged");
+    $test_utils:assert_true(equal("#1":toobj(), #1), "toobj numbered object");
+    $test_utils:assert_true(equal("not an object":toobj(), E_TYPE), "toobj rejects non-object strings");
+    $test_utils:assert_true(equal("#1":literal_object(), #1), "literal_object numbered object");
+    $test_utils:assert_true(equal("$root":literal_object(), $root), "literal_object sysobj property");
+    $test_utils:assert_true(equal("$str_proto":literal_object(), $str_proto), "literal_object str_proto sysobj property");
+    $test_utils:assert_true(equal("missing":literal_object(), $failed_match), "literal_object rejects bare strings");
+    $test_utils:assert_true(equal("raw":render_as('text), "raw"), "render_as returns strings unchanged");
+    $test_utils:assert_true(equal("raw":compose(), "raw"), "compose returns strings unchanged");
     return true;
   endmethod
 
   method test_parse_verbref owner: HACKER
     "Cover MOO verb-reference parsing.";
-    $test_utils:assert_eq("#1":parse_verbref(), false, "missing colon should fail");
-    $test_utils:assert_eq(":":parse_verbref(), false, "empty object and verb should fail");
-    $test_utils:assert_eq("$str_proto:look_self":parse_verbref(), {"$str_proto", "look_self"}, "sysobj verbref should preserve the reference for matching");
-    $test_utils:assert_eq("$missing_object:sit":parse_verbref(), {"$missing_object", "sit"}, "unknown object is valid reference syntax");
-    $test_utils:assert_eq("$missing_object:":parse_verbref(), false, "missing verb remains invalid syntax");
-    $test_utils:assert_eq("  $str_proto : look_self  ":parse_verbref(), {"$str_proto", "look_self"}, "trim reference components");
-    $test_utils:assert_eq("#1:look_self":parse_verbref(), {"#1", "look_self"}, "numbered verbref should preserve object string");
-    $test_utils:assert_eq("honk:look_self":parse_verbref(), {"honk", "look_self"}, "named verbref should preserve object string");
+    $test_utils:assert_true(equal("#1":parse_verbref(), false), "missing colon should fail");
+    $test_utils:assert_true(equal(":":parse_verbref(), false), "empty object and verb should fail");
+    $test_utils:assert_true(equal("$str_proto:look_self":parse_verbref(), {"$str_proto", "look_self"}), "sysobj verbref should preserve the reference for matching");
+    $test_utils:assert_true(equal("$missing_object:sit":parse_verbref(), {"$missing_object", "sit"}), "unknown object is valid reference syntax");
+    $test_utils:assert_true(equal("$missing_object:":parse_verbref(), false), "missing verb remains invalid syntax");
+    $test_utils:assert_true(equal("  $str_proto : look_self  ":parse_verbref(), {"$str_proto", "look_self"}), "trim reference components");
+    $test_utils:assert_true(equal("#1:look_self":parse_verbref(), {"#1", "look_self"}), "numbered verbref should preserve object string");
+    $test_utils:assert_true(equal("honk:look_self":parse_verbref(), {"honk", "look_self"}), "named verbref should preserve object string");
     return true;
   endmethod
 
-  method test_split_search_and_transform_helpers owner: ARCH_WIZARD
+  method test_split_search_and_transform_helpers owner: HACKER
     "Cover split/search/replace and string transforms.";
-    $test_utils:assert_eq("a,b,c":split(","), {"a", "b", "c"}, "split basic delimiter");
-    $test_utils:assert_eq("a,,c":split(","), {"a", "", "c"}, "split preserves empty parts");
-    $test_utils:assert_eq("hello":split(","), {"hello"}, "split without delimiter match");
-    $test_utils:assert_eq("a::b::c":split("::"), {"a", "b", "c"}, "split multi-character delimiter");
+    $test_utils:assert_true(equal("a,b,c":split(","), {"a", "b", "c"}), "split basic delimiter");
+    $test_utils:assert_true(equal("a,,c":split(","), {"a", "", "c"}), "split preserves empty parts");
+    $test_utils:assert_true(equal("hello":split(","), {"hello"}), "split without delimiter match");
+    $test_utils:assert_true(equal("a::b::c":split("::"), {"a", "b", "c"}), "split multi-character delimiter");
     $test_utils:assert_true("hello world":starts_with("hello"), "starts_with positive");
     $test_utils:assert_false("hello world":starts_with("world"), "starts_with negative");
     $test_utils:assert_true("hello world":ends_with("world"), "ends_with positive");
     $test_utils:assert_false("hello world":ends_with("hello"), "ends_with negative");
     $test_utils:assert_true("hello world":contains("lo wo"), "contains positive");
     $test_utils:assert_false("hello world":contains("xyz"), "contains negative");
-    $test_utils:assert_eq("hello world":replace_all("l", "x"), "hexxo worxd", "replace_all basic replacement");
-    $test_utils:assert_eq("hello":replace_all("", "x"), "hello", "replace_all empty old string");
-    $test_utils:assert_eq("hello":reverse(), "olleh", "reverse basic string");
-    $test_utils:assert_eq("ab":repeat(3), "ababab", "repeat positive count");
-    $test_utils:assert_eq("hello":repeat(0), "", "repeat zero count");
-    $test_utils:assert_eq("hello":char_count("l"), 2, "char_count repeated character");
-    $test_utils:assert_eq("hello world":substring(7, 5), "world", "substring range");
-    $test_utils:assert_eq("hello":map_chars({c0} => this:uppercase(c0)), "HELLO", "map_chars uppercase function");
-    $test_utils:assert_eq("abc123def":filter_chars({c1} => c1 in "abcdefghijklmnopqrstuvwxyz"), "abcdef", "filter_chars letters");
-    expected = task_perms()[1];
+    $test_utils:assert_true(equal("hello world":replace_all("l", "x"), "hexxo worxd"), "replace_all basic replacement");
+    $test_utils:assert_true(equal("hello":replace_all("", "x"), "hello"), "replace_all empty old string");
+    $test_utils:assert_true(equal("hello":reverse(), "olleh"), "reverse basic string");
+    $test_utils:assert_true(equal("ab":repeat(3), "ababab"), "repeat positive count");
+    $test_utils:assert_true(equal("hello":repeat(0), ""), "repeat zero count");
+    $test_utils:assert_true(equal("hello":char_count("l"), 2), "char_count repeated character");
+    $test_utils:assert_true(equal("hello world":substring(7, 5), "world"), "substring range");
+    $test_utils:assert_true(equal("hello":map_chars({c0} => this:uppercase(c0)), "HELLO"), "map_chars uppercase function");
+    $test_utils:assert_true(equal("abc123def":filter_chars({c1} => c1 in "abcdefghijklmnopqrstuvwxyz"), "abcdef"), "filter_chars letters");
+    const expected = task_perms()[1];
+    $test_utils:assert_false(expected.wizard, "Permission checks need a non-wizard caller");
     "a":map_chars({c2} => caller_perms() == expected ? c2 | "x") == "a" || raise(E_ASSERT("map_chars callback should run with caller perms"));
     "a":filter_chars({c3} => caller_perms() == expected) == "a" || raise(E_ASSERT("filter_chars callback should run with caller perms"));
     return true;
@@ -1096,71 +1066,112 @@ object STR_PROTO [
     "Cover numeric and UUID object-id matching helpers.";
     result = this:match_objid("#42");
     $test_utils:assert_true(result, "match_objid should find bare numbered object ids");
-    $test_utils:assert_eq(result['type], 'numbered, "numbered object-id type");
-    $test_utils:assert_eq(result['text], "#42", "numbered object-id text");
-    $test_utils:assert_eq(result['start], 1, "numbered object-id start");
-    $test_utils:assert_eq(result['end], 3, "numbered object-id end");
+    $test_utils:assert_true(equal(result['type], 'numbered), "numbered object-id type");
+    $test_utils:assert_true(equal(result['text], "#42"), "numbered object-id text");
+    $test_utils:assert_true(equal(result['start], 1), "numbered object-id start");
+    $test_utils:assert_true(equal(result['end], 3), "numbered object-id end");
     result = this:match_objid("Before #123 after");
     $test_utils:assert_true(result, "match_objid should find numbered object ids in text");
-    $test_utils:assert_eq(result['start], 8, "embedded object-id start");
-    $test_utils:assert_eq(result['end], 11, "embedded object-id end");
+    $test_utils:assert_true(equal(result['start], 8), "embedded object-id start");
+    $test_utils:assert_true(equal(result['end], 11), "embedded object-id end");
     result = this:match_objid("   #77   ", true);
     $test_utils:assert_true(result, "anchored match_objid should ignore surrounding whitespace");
-    $test_utils:assert_eq(result['text], "#77", "anchored object-id text");
+    $test_utils:assert_true(equal(result['text], "#77"), "anchored object-id text");
     $test_utils:assert_false(this:match_objid("x#77"), "match_objid should reject alphanumeric left boundary");
     $test_utils:assert_false(this:match_objid("#77x"), "match_objid should reject alphanumeric right boundary");
     $test_utils:assert_false(this:match_objid("#notanumber"), "match_objid should reject non-numeric numbered ids");
     uuid_str = "#00007D-99E53ABE55";
     result = this:match_objid(uuid_str);
     $test_utils:assert_true(result, "match_objid should find UUID object ids");
-    $test_utils:assert_eq(result['type], 'uuid, "UUID object-id type");
-    $test_utils:assert_eq(result['text], uuid_str, "UUID object-id text");
-    $test_utils:assert_eq(result['start], 1, "UUID object-id start");
-    $test_utils:assert_eq(result['end], 18, "UUID object-id end");
-    $test_utils:assert_eq(this:match_uuobjid_at(uuid_str, 1), {1, 18}, "match_uuobjid_at bare UUID");
+    $test_utils:assert_true(equal(result['type], 'uuid), "UUID object-id type");
+    $test_utils:assert_true(equal(result['text], uuid_str), "UUID object-id text");
+    $test_utils:assert_true(equal(result['start], 1), "UUID object-id start");
+    $test_utils:assert_true(equal(result['end], 18), "UUID object-id end");
+    $test_utils:assert_true(equal(this:match_uuobjid_at(uuid_str, 1), {1, 18}), "match_uuobjid_at bare UUID");
     $test_utils:assert_false(this:match_uuobjid_at("x" + uuid_str, 2), "match_uuobjid_at should reject alphanumeric left boundary");
     return true;
   endmethod
 
   method test_parse_name_aliases owner: HACKER
     "Cover colon and comma name/alias specifications.";
-    $test_utils:assert_eq(this:parse_name_aliases("lamp:light, lamp,shiny"), {"lamp", {"light", "shiny"}}, "colon aliases trim and dedupe");
-    $test_utils:assert_eq(this:parse_name_aliases(":alpha,beta"), {"alpha", {"beta"}}, "missing colon primary promotes first alias");
-    $test_utils:assert_eq(this:parse_name_aliases("Porcupine:\"Karl Porcupine\",\"You can pet this Porcupine, I bet!\""), {"Porcupine", {"Karl Porcupine", "You can pet this Porcupine, I bet!"}}, "quoted colon aliases");
-    $test_utils:assert_eq(this:parse_name_aliases("\"Standalone Thing\""), {"Standalone Thing", {}}, "standalone quoted name");
-    $test_utils:assert_eq(this:parse_name_aliases("test,bonk"), {"test", {"bonk"}}, "comma aliases");
-    $test_utils:assert_eq(this:parse_name_aliases("\"Quoted Thing\",alias1,alias2"), {"Quoted Thing", {"alias1", "alias2"}}, "quoted comma primary");
-    $test_utils:assert_eq(this:parse_name_aliases("  "), {"", {}}, "blank spec");
+    $test_utils:assert_true(equal(this:parse_name_aliases("lamp:light, lamp,shiny"), {"lamp", {"light", "shiny"}}), "colon aliases trim and dedupe");
+    $test_utils:assert_true(equal(this:parse_name_aliases(":alpha,beta"), {"alpha", {"beta"}}), "missing colon primary promotes first alias");
+    $test_utils:assert_true(equal(this:parse_name_aliases("Porcupine:\"Karl Porcupine\",\"You can pet this Porcupine, I bet!\""), {"Porcupine", {"Karl Porcupine", "You can pet this Porcupine, I bet!"}}), "quoted colon aliases");
+    $test_utils:assert_true(equal(this:parse_name_aliases("\"Standalone Thing\""), {"Standalone Thing", {}}), "standalone quoted name");
+    $test_utils:assert_true(equal(this:parse_name_aliases("test,bonk"), {"test", {"bonk"}}), "comma aliases");
+    $test_utils:assert_true(equal(this:parse_name_aliases("\"Quoted Thing\",alias1,alias2"), {"Quoted Thing", {"alias1", "alias2"}}), "quoted comma primary");
+    $test_utils:assert_true(equal(this:parse_name_aliases("  "), {"", {}}), "blank spec");
     return true;
   endmethod
 
   method test_time_article_and_curie_helpers owner: HACKER
     "Cover numeric, time, article, and CURIE helpers.";
     $test_utils:assert_true("  -42 ":is_numeric(), "is_numeric accepts signed integers with whitespace");
+    $test_utils:assert_type("42":is_numeric(), TYPE_BOOL, "Numeric success is boolean");
+    $test_utils:assert_type("abc":is_numeric(), TYPE_BOOL, "Numeric failure is boolean");
     $test_utils:assert_false("4.2":is_numeric(), "is_numeric rejects decimals");
     $test_utils:assert_false("abc":is_numeric(), "is_numeric rejects text");
-    $test_utils:assert_eq(this:from_seconds(59), "59 seconds", "from_seconds seconds");
-    $test_utils:assert_eq(this:from_seconds(60), "a minute", "from_seconds minute boundary");
-    $test_utils:assert_eq(this:from_seconds(120), "2 minutes", "from_seconds plural minutes");
-    $test_utils:assert_eq(this:from_seconds(3600), "an hour", "from_seconds hour boundary");
-    $test_utils:assert_eq(this:from_seconds(7200), "2 hours", "from_seconds plural hours");
-    $test_utils:assert_eq(this:from_seconds(86400), "a day", "from_seconds day boundary");
+    $test_utils:assert_true(equal(this:from_seconds(59), "59 seconds"), "from_seconds seconds");
+    $test_utils:assert_true(equal(this:from_seconds(60), "a minute"), "from_seconds minute boundary");
+    $test_utils:assert_true(equal(this:from_seconds(120), "2 minutes"), "from_seconds plural minutes");
+    $test_utils:assert_true(equal(this:from_seconds(3600), "an hour"), "from_seconds hour boundary");
+    $test_utils:assert_true(equal(this:from_seconds(7200), "2 hours"), "from_seconds plural hours");
+    $test_utils:assert_true(equal(this:from_seconds(86400), "a day"), "from_seconds day boundary");
     next_run = "00:00:00":parse_time_of_day();
     $test_utils:assert_type(next_run, TYPE_INT, "parse_time_of_day returns a timestamp");
     $test_utils:assert_true(next_run > time(), "parse_time_of_day returns a future timestamp");
     $test_utils:assert_raises(E_INVARG, "25:00:00", "parse_time_of_day", {}, "parse_time_of_day rejects invalid hours");
     $test_utils:assert_raises(E_INVARG, "12:60:00", "parse_time_of_day", {}, "parse_time_of_day rejects invalid minutes");
     $test_utils:assert_raises(E_INVARG, "12:30", "parse_time_of_day", {}, "parse_time_of_day rejects missing seconds");
-    $test_utils:assert_eq("apple":indefinite_article(), "an", "indefinite_article vowel");
-    $test_utils:assert_eq("cowbell":indefinite_article(), "a", "indefinite_article consonant");
-    $test_utils:assert_eq("apple":with_indefinite_article(), "an apple", "with_indefinite_article vowel");
-    $test_utils:assert_eq("cowbell":with_indefinite_article(), "a cowbell", "with_indefinite_article consonant");
-    $test_utils:assert_eq("oid:1":parse_curie(), #1, "parse_curie oid");
-    $test_utils:assert_eq("oid:abc":parse_curie(), false, "parse_curie rejects invalid oid");
-    $test_utils:assert_eq("sysobj:root":parse_curie(), $root, "parse_curie sysobj");
-    $test_utils:assert_eq("sysobj:nonexistent_property":parse_curie(), false, "parse_curie rejects invalid sysobj");
-    $test_utils:assert_eq("match(\"anything\")":parse_curie(#-1), false, "parse_curie rejects invalid match context");
-    $test_utils:assert_eq("invalid":parse_curie(), false, "parse_curie rejects unknown prefix");
+    $test_utils:assert_true(equal("apple":indefinite_article(), "an"), "indefinite_article vowel");
+    $test_utils:assert_true(equal("cowbell":indefinite_article(), "a"), "indefinite_article consonant");
+    $test_utils:assert_true(equal("apple":with_indefinite_article(), "an apple"), "with_indefinite_article vowel");
+    $test_utils:assert_true(equal("cowbell":with_indefinite_article(), "a cowbell"), "with_indefinite_article consonant");
+    $test_utils:assert_true(equal("oid:1":parse_curie(), #1), "parse_curie oid");
+    $test_utils:assert_true(equal("oid:abc":parse_curie(), false), "parse_curie rejects invalid oid");
+    $test_utils:assert_true(equal("sysobj:root":parse_curie(), $root), "parse_curie sysobj");
+    $test_utils:assert_true(equal("sysobj:nonexistent_property":parse_curie(), false), "parse_curie rejects invalid sysobj");
+    $test_utils:assert_true(equal("match(\"anything\")":parse_curie(#-1), false), "parse_curie rejects invalid match context");
+    $test_utils:assert_true(equal("invalid":parse_curie(), false), "parse_curie rejects unknown prefix");
+    return true;
+  endmethod
+  method test_split_boundaries owner: HACKER
+    "Splitting preserves empty fields and applies the selected case policy at every length.";
+    for example in ({{"", ",", {""}}, {"abc", "", {"abc"}}, {"", "", {""}},
+        {",a,,b,", ",", {"", "a", "", "b", ""}},
+        {"::a::::b::", "::", {"", "a", "", "b", ""}},
+        {"AxB", "X", {"AxB"}}, {"AxyB", "XY", {"AxyB"}}})
+      const {source, delimiter, expected} = example;
+      $test_utils:assert_true(equal(source:split(delimiter), expected), "Exact split");
+      $test_utils:assert_true(equal(source:to_list(delimiter, true), expected), "Exact to_list");
+    endfor
+    for delimiter in ({"X", "XY"})
+      const source = "A" + delimiter:lowercase() + "B";
+      $test_utils:assert_true(equal(source:split(delimiter, false), {"A", "B"}),
+        "Case-insensitive split");
+      $test_utils:assert_true(equal(source:to_list(delimiter), {"A", "B"}),
+        "Legacy to_list matching");
+      $test_utils:assert_true(equal(source:replace_all(delimiter, "_"), source),
+        "Exact replacement preserves unmatched case");
+      $test_utils:assert_true(equal(source:replace_all(delimiter, "_", false), "A_B"),
+        "Case-insensitive replacement");
+    endfor
+    return true;
+  endmethod
+
+  method test_padding_boundaries owner: HACKER
+    "Padding preserves fill alignment and rejects unusable fill strings.";
+    $test_utils:assert_true(equal(this:space(5, "ab"), "ababa"), "Left-aligned fill");
+    $test_utils:assert_true(equal(this:space(-5, "ab"), "babab"), "Right-aligned fill");
+    $test_utils:assert_true(equal(this:space(0, ""), ""), "Zero width needs no fill");
+    $test_utils:assert_true(equal(this:space("abc", "."), "..."), "String width");
+    $test_utils:assert_true(equal("x":center(6, "ab", "cd"), "abxdcd"),
+      "Center anchors the right fill");
+    $test_utils:assert_true(equal("long":pad_right(2, ""), "long"), "No padding required");
+    $test_utils:assert_raises(E_INVARG, this, "space", {1, ""}, "Reject empty fill");
+    $test_utils:assert_raises(E_INVARG, this, "space", {100001}, "Reject excessive width");
+    $test_utils:assert_raises(E_INVARG, "x", "pad_left", {3, ""}, "Left padding validates fill");
+    $test_utils:assert_raises(E_INVARG, "x", "pad_right", {3, ""}, "Right padding validates fill");
     return true;
   endmethod
 endobject
