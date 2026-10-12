@@ -395,7 +395,7 @@ object ROOM [
     exit_list = $format.list:mk(exit_links);
     exit_title = $format.title:mk("Ways out");
     content = $format.block:mk(exit_title, exit_list);
-    event = $event:mk_info(player, content):with_audience('utility):with_metadata('preferred_content_types, {'text_html, 'text_plain}):with_presentation_hint('inset):with_group('exits, this);
+    event = $event:mk_info(player, content):with_audience('utility):with_presentation_hint('inset):with_group('exits, this);
     player:inform_current(event);
   endverb
 

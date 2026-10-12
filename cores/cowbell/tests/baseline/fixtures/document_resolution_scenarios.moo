@@ -270,6 +270,15 @@ object DOCUMENT_RESOLUTION_SCENARIOS
       $test_utils:assert_eq(length(encoded["rows"][1]["cells"]), 2, "Punctuation cannot add a column");
       $test_utils:assert_eq(encoded["rows"][1]["cells"][1]["blocks"][1]["children"][2]["kind"],
         "hard_break", "Cell newlines retain their structure");
+      const last_event = room.captured_event;
+      let rejected = false;
+      try
+        room:_tool_present_table(["headers" -> {"Only"}, "rows" -> {{"valid"}, "invalid"}], player);
+      except (E_TYPE)
+        rejected = true;
+      endtry
+      $test_utils:assert_true(rejected, "Malformed rows cannot silently disappear");
+      $test_utils:assert_eq(room.captured_event, last_event, "Invalid table publishes no partial report");
       room:_tool_present_report(["title" -> "Report", "content" -> "*literal*\n\nSecond paragraph."], player);
       const report = room.captured_event:resolve(#90102);
       $test_utils:assert_eq(length($document:encode(report)["blocks"]), 3, "Report paragraphs remain separate");
@@ -303,6 +312,84 @@ object DOCUMENT_RESOLUTION_SCENARIOS
         recycle(room);
       endtry
     endfor
+    return true;
+  endmethod
+
+  method test_source_listing_documents owner: ARCH_WIZARD
+    "Visor ranges retain exact source and line origins; documentation display preserves explicit code blocks.";
+    const visor = create($data_visor, player, 2);
+    const target = create($thing);
+    try
+      add_verb(target, {player, "rxd", "listing_probe"}, {"this", "none", "this"});
+      $test_utils:assert_false(set_verb_code(target, "listing_probe",
+        {"\"Source *literal*.\";", "let value = 1;", "value = value + 1;", "return value;"}), "Source compiles");
+      add_verb(visor, {player, "rxd", "listing_probe"}, {"this", "none", "this"});
+      $test_utils:assert_false(set_verb_code(visor, "listing_probe",
+        {"return this:_tool_build_present_verb_code_payload(@args);"}), "Presentation probe compiles");
+      const source = verb_code(target, "listing_probe", false, true);
+      const request = ["object" -> tostr(target), "verb" -> "listing_probe", "start_line" -> 2, "end_line" -> 3];
+      const range = visor:listing_probe(request, player, true);
+      const document = $event:mk_info(player, range["content"]):resolve(player);
+      const code = $document:encode(document)["blocks"][2];
+      $test_utils:assert_eq(code["first_line"], 2, "Range numbering uses its actual start");
+      $test_utils:assert_eq(code["text"], source[2..3]:join("\n"), "Number gutters never enter source text");
+      $test_utils:assert_true(index($document:render(document, 'text_plain)['body], "2 | " + source[2]),
+        "Renderer applies the source origin");
+      const full = visor:listing_probe(request, player, false);
+      const full_code = $document:encode($event:mk_info(player, full["content"]):resolve(player))["blocks"][2];
+      $test_utils:assert_eq(full_code["text"], source:join("\n"), "Whole listing preserves source");
+      const content = $help_utils:format_documentation_display(
+        {"Source ", $format.code:inline("listing_probe")}, $format.code:mk(source, "moo", 1));
+      const documentation = $document:encode($event:mk_info(player, content):resolve(player));
+      $test_utils:assert_eq(documentation["blocks"][1]["kind"], "heading", "Documentation title has structure");
+      $test_utils:assert_eq(documentation["blocks"][2]["text"], source:join("\n"),
+        "A flyweight code block is not mistaken for missing documentation");
+    finally
+      recycle(visor);
+      recycle(target);
+    endtry
+    return true;
+  endmethod
+
+  method test_container_description_documents owner: ARCH_WIZARD
+    "Container looks preserve blocks and references, and closed containers resolve denial substitutions without revealing contents.";
+    const container = create($container);
+    const item = create($thing);
+    try
+      container.name = "document box";
+      container.description = $format.block:mk("First paragraph.", "Second paragraph.");
+      container.take_denied_msg = $sub_utils:compile("{The i} is shut.");
+      item.name = "hidden *token*";
+      move(container, player);
+      move(item, container);
+      container.open = false;
+      const closed = container:look_self():into_event():resolve(player);
+      $test_utils:assert_eq(this:_plain(closed),
+        "Document box\n\nFirst paragraph.\n\nSecond paragraph.\n\nThe document box is shut.",
+        "Closed view retains the description and resolves its own container binding");
+      container.open = true;
+      const opened = container:look_self():into_event():resolve(player);
+      $test_utils:assert_true(index(this:_plain(opened), "It contains hidden *token*."), "Visible contents are literal");
+      $test_utils:assert_eq(length($document:render(opened, 'text_html)['annotations]), 2,
+        "Container and visible contents retain references");
+    finally
+      recycle(item);
+      recycle(container);
+    endtry
+    return true;
+  endmethod
+
+  method test_generated_help_document owner: ARCH_WIZARD
+    "A HINT-generated help topic carries its command as a reference without reparsing markup.";
+    const topic = $help_utils:verb_help_from_hint($prog_features, "@doc");
+    const event = $event:mk_info(player, $format.block:mk(@topic:render_prose()));
+    const document = event:resolve(player);
+    const rendered = $document:render(document, 'text_html);
+    $test_utils:assert_true(index(rendered['body], "<code>@doc &lt;object|builtin&gt;</code>"),
+      "Usage retains its code label");
+    $test_utils:assert_true(length(rendered['annotations]) > 0, "Usage retains its command reference");
+    $test_utils:assert_eq(this:_plain(document),
+      "Display developer documentation.\n\nUsage: @doc <object|builtin>", "Plain usage has no backtick delimiters");
     return true;
   endmethod
 endobject

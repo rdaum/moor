@@ -673,10 +673,10 @@ object PROG_FEATURES [
       index(perms, "c") && (flag_parts = {@flag_parts, "c=chown"});
       flags_desc = flag_parts ? flag_parts:join(", ") | "(none)";
       description = tostr(target_obj) + "." + prop_name + " = " + toliteral(value);
-      player:inform_current($event:mk_info(player, "Added `" + description + "` with flags: " + flags_desc):as_djot():as_inset());
+      player:inform_current($event:mk_info(player, "Added ", $format.code:inline(description), " with flags: " + flags_desc):as_inset());
     except e (E_INVARG)
       if (index(tostr(e[2]), "Duplicate"))
-        return player:inform_current($event:mk_error(player, "Property `" + prop_name + "` already exists on " + tostr(target_obj) + "."):as_djot():as_inset());
+        return player:inform_current($event:mk_error(player, "Property ", $format.code:inline(prop_name), " already exists on " + tostr(target_obj) + "."):as_inset());
       endif
       raise(e[1], e[2]);
     endtry
@@ -1143,11 +1143,11 @@ object PROG_FEATURES [
     items = {{"Object", tostr(target_obj)}};
     items = {@items, {"Name", obj_name}};
     owner_str = valid(obj_owner) ? `obj_owner.name ! ANY => "???"' + " (" + tostr(obj_owner) + ")" | "???";
-    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str:replace_all("`", "")) | owner_str}};
+    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str) | owner_str}};
     parent_str = valid(obj_parent) ? `obj_parent.name ! ANY => "???"' + " (" + tostr(obj_parent) + ")" | "(none)";
-    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str:replace_all("`", "")) | parent_str}};
+    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str) | parent_str}};
     loc_str = valid(obj_location) ? `obj_location.name ! ANY => "???"' + " (" + tostr(obj_location) + ")" | "nowhere";
-    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str:replace_all("`", "")) | loc_str}};
+    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str) | loc_str}};
     deflist = $format.deflist:mk(items);
     player:inform_current($event:mk_info(player, deflist));
     "Show properties (including inherited)";
@@ -1633,7 +1633,7 @@ object PROG_FEATURES [
       try
         func_name = tosym(target_spec);
         doc_lines = function_help(func_name);
-        title = "Builtin Function: `" + target_spec + "`";
+        title = {"Builtin Function: ", $format.code:inline(target_spec)};
         doc_text = doc_lines:join("\n");
         for fn_info in (function_info())
           if (fn_info[1] == target_spec)
@@ -1645,7 +1645,7 @@ object PROG_FEATURES [
           endif
         endfor
         content = $help_utils:format_documentation_display(title, $format.code:mk(doc_text));
-        player:inform_current($event:mk_info(player, content):as_djot():as_inset());
+        player:inform_current($event:mk_info(player, content):as_inset());
         return;
       except e (E_INVARG)
         "Not a builtin function - continue to object parsing.";
@@ -1654,7 +1654,9 @@ object PROG_FEATURES [
     parsed = $prog_utils:parse_target_spec(target_spec);
     if (!parsed)
       if (!this:suggest_doc_topic('builtin, target_spec))
-        player:inform_current($event:mk_error(player, "Invalid format. Use `object`, `object:verb`, `object.property`, or `builtin_function`"):as_djot());
+        player:inform_current($event:mk_error(player, "Invalid format. Use ",
+          $format.code:inline("object"), ", ", $format.code:inline("object:verb"), ", ",
+          $format.code:inline("object.property"), ", or ", $format.code:inline("builtin_function")));
       endif
       return;
     endif
@@ -1689,34 +1691,34 @@ object PROG_FEATURES [
     if (type == 'object)
       obj_display = `target_obj:display_name() ! E_VERBNF => target_obj.name';
       doc_text = $help_utils:get_object_documentation(target_obj);
-      title = "Documentation for " + obj_display + " (`" + toliteral(target_obj) + "`)";
+      title = {"Documentation for ", $format.annotation:object(target_obj, obj_display + " (" + toliteral(target_obj) + ")")};
       content = $help_utils:format_documentation_display(title, doc_text);
-      player:inform_current($event:mk_info(player, content):as_djot():as_inset());
+      player:inform_current($event:mk_info(player, content):as_inset());
     elseif (type == 'verb)
       verb_location = target_obj:find_verb_definer(item_name);
       if (verb_location == #-1)
         if (!this:suggest_doc_topic('verb, target_spec, target_obj, item_name))
-          player:inform_current($event:mk_error(player, "Verb `" + tostr(item_name) + "` not found on `" + tostr(target_obj) + "` or its ancestors."):as_djot());
+          player:inform_current($event:mk_error(player, "Verb ", $format.code:inline(tostr(item_name)), " not found on ", $format.annotation:object(target_obj), " or its ancestors."));
         endif
         return;
       endif
       verb_obj_display = `verb_location:display_name() ! E_VERBNF => verb_location.name';
       doc_text = $help_utils:extract_verb_documentation(verb_location, item_name);
-      title = "Documentation for " + verb_obj_display + " (`" + toliteral(verb_location) + ":" + tostr(item_name) + "`)";
+      title = {"Documentation for " + verb_obj_display + " (", $format.annotation:verb(verb_location, item_name), ")"};
       content = $help_utils:format_documentation_display(title, $format.code:mk(doc_text));
-      player:inform_current($event:mk_info(player, content):as_djot():as_inset());
+      player:inform_current($event:mk_info(player, content):as_inset());
     elseif (type == 'property)
       if (!(item_name in properties(target_obj)))
         if (!this:suggest_doc_topic('property, target_spec, target_obj, item_name))
-          player:inform_current($event:mk_error(player, "Property `" + item_name + "` not found on `" + tostr(target_obj) + "`."):as_djot());
+          player:inform_current($event:mk_error(player, "Property ", $format.code:inline(item_name), " not found on ", $format.annotation:object(target_obj), "."));
         endif
         return;
       endif
       obj_display = `target_obj:display_name() ! E_VERBNF => target_obj.name';
       doc_text = $help_utils:property_documentation(target_obj, item_name);
-      title = "Documentation for " + obj_display + " (`" + toliteral(target_obj) + "." + item_name + "`)";
+      title = {"Documentation for " + obj_display + " (", $format.annotation:property(target_obj, item_name), ")"};
       content = $help_utils:format_documentation_display(title, $format.code:mk(doc_text));
-      player:inform_current($event:mk_info(player, content):as_djot():as_inset());
+      player:inform_current($event:mk_info(player, content):as_inset());
     else
       player:inform_current($event:mk_error(player, "Invalid reference type"));
     endif
@@ -1870,16 +1872,16 @@ object PROG_FEATURES [
       inherited_verb_count = inherited_verb_count + length(this:_do_get_verbs(current));
       current = this:_do_get_object_display_info(current)['parent];
     endwhile
-    "Build single deflist with all info - wrap object refs in djot backticks";
+    "Capture object labels as literal reference content";
     obj_ref = tostr(target_obj);
     items = {{"Object", $format.annotation:object(target_obj, obj_ref)}};
     items = {@items, {"Name", obj_name}};
-    owner_str = valid(obj_owner) ? `obj_owner.name ! ANY => "???"' + " (`" + tostr(obj_owner) + "`)" | "???";
-    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str:replace_all("`", "")) | owner_str}};
-    parent_str = valid(obj_parent) ? `obj_parent.name ! ANY => "???"' + " (`" + tostr(obj_parent) + "`)" | "(none)";
-    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str:replace_all("`", "")) | parent_str}};
-    loc_str = valid(obj_location) ? `obj_location.name ! ANY => "???"' + " (`" + tostr(obj_location) + "`)" | "nowhere";
-    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str:replace_all("`", "")) | loc_str}};
+    owner_str = valid(obj_owner) ? `obj_owner.name ! ANY => "???"' + " (" + tostr(obj_owner) + ")" | "???";
+    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str) | owner_str}};
+    parent_str = valid(obj_parent) ? `obj_parent.name ! ANY => "???"' + " (" + tostr(obj_parent) + ")" | "(none)";
+    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str) | parent_str}};
+    loc_str = valid(obj_location) ? `obj_location.name ! ANY => "???"' + " (" + tostr(obj_location) + ")" | "nowhere";
+    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str) | loc_str}};
     "Add counts to same deflist";
     prop_summary = tostr(local_prop_count) + " local";
     if (inherited_prop_count > 0)
@@ -1892,12 +1894,11 @@ object PROG_FEATURES [
     items = {@items, {"Properties", prop_summary}};
     items = {@items, {"Verbs", verb_summary}};
     deflist = $format.deflist:mk(items);
-    "Build concise usage hint with djot code formatting";
-    hint = "Try: `@show " + obj_ref + ".:` (local) or `" + obj_ref + "..::` (all). See `@show` for syntax.";
-    "Combine and display with djot content type";
+    hint = $format.paragraph:mk("Try: ", $format.code:inline("@show " + obj_ref + ".:"),
+      " (local) or ", $format.code:inline("@show " + obj_ref + "..::"), " (all). See ",
+      $format.code:inline("@show"), " for syntax.");
     content = $format.block:mk(deflist, hint);
     event = $event:mk_info(player, content);
-    event = event:with_metadata('preferred_content_types, {'text_djot, 'text_plain});
     player:inform_current(event);
   endmethod
 
@@ -1911,19 +1912,18 @@ object PROG_FEATURES [
     obj_owner = obj_info['owner];
     obj_parent = obj_info['parent];
     obj_location = obj_info['location];
-    "Build deflist with object info - wrap object refs in djot backticks";
+    "Capture object labels as literal reference content";
     obj_ref = tostr(target_obj);
     items = {{"Object", $format.annotation:object(target_obj, obj_ref)}};
     items = {@items, {"Name", obj_name}};
-    owner_str = valid(obj_owner) ? `obj_owner.name ! ANY => "???"' + " (`" + tostr(obj_owner) + "`)" | "???";
-    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str:replace_all("`", "")) | owner_str}};
-    parent_str = valid(obj_parent) ? `obj_parent.name ! ANY => "???"' + " (`" + tostr(obj_parent) + "`)" | "(none)";
-    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str:replace_all("`", "")) | parent_str}};
-    loc_str = valid(obj_location) ? `obj_location.name ! ANY => "???"' + " (`" + tostr(obj_location) + "`)" | "nowhere";
-    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str:replace_all("`", "")) | loc_str}};
+    owner_str = valid(obj_owner) ? `obj_owner.name ! ANY => "???"' + " (" + tostr(obj_owner) + ")" | "???";
+    items = {@items, {"Owner", valid(obj_owner) ? $format.annotation:object(obj_owner, owner_str) | owner_str}};
+    parent_str = valid(obj_parent) ? `obj_parent.name ! ANY => "???"' + " (" + tostr(obj_parent) + ")" | "(none)";
+    items = {@items, {"Parent", valid(obj_parent) ? $format.annotation:object(obj_parent, parent_str) | parent_str}};
+    loc_str = valid(obj_location) ? `obj_location.name ! ANY => "???"' + " (" + tostr(obj_location) + ")" | "nowhere";
+    items = {@items, {"Location", valid(obj_location) ? $format.annotation:object(obj_location, loc_str) | loc_str}};
     deflist = $format.deflist:mk(items);
     event = $event:mk_info(player, deflist);
-    event = event:with_metadata('preferred_content_types, {'text_djot, 'text_plain});
     player:inform_current(event);
   endmethod
 
@@ -1957,13 +1957,13 @@ object PROG_FEATURES [
     endif
     "Build error message based on failure type";
     if (failure_type == 'object)
-      error_msg = "Could not find object: `" + target_spec + "`";
+      error_msg = "Could not find object: " + target_spec;
     elseif (failure_type == 'verb)
-      error_msg = "Verb `" + item_name + "` not found on `" + obj_display + "`.";
+      error_msg = "Verb " + item_name + " not found on " + obj_display + ".";
     elseif (failure_type == 'builtin)
-      error_msg = "`" + target_spec + "` is not a recognized builtin function or object.";
+      error_msg = target_spec + " is not a recognized builtin function or object.";
     else
-      error_msg = "Property `" + item_name + "` not found on `" + obj_display + "`.";
+      error_msg = "Property " + item_name + " not found on " + obj_display + ".";
     endif
     "Send immediate placeholder with rewritable event";
     rewrite_id = uuid();
@@ -2056,12 +2056,12 @@ object PROG_FEATURES [
         prompt = prompt + "2. Format suggestions as '@doc <target>'\n";
       endif
       prompt = prompt + "3. Keep response under 60 words\n";
-      prompt = prompt + "4. Format for djot (like markdown)\n";
+      prompt = prompt + "4. Use plain text without markup\n";
       "Call LLM and rewrite the placeholder";
       try
         response = llm_client:simple_query(prompt);
         if (typeof(response) == TYPE_STR && length(response) > 0)
-          result_event = $event:mk_info(player, $format.block:mk(error_msg + "\n", response)):as_djot():as_inset();
+          result_event = $event:mk_info(player, $format.block:mk(error_msg + "\n", response)):as_inset();
           player:rewrite_event(rewrite_id, result_event, current_conn);
         else
           player:rewrite_event(rewrite_id, error_msg, current_conn);

@@ -239,7 +239,7 @@ object ADMIN_FEATURES [
     this:_append_log(["kind" -> "grant", "actor" -> player, "subject" -> target, "delegate" -> delegate, "allow" -> allowed_map[target]]);
     player:inform_current($event:mk_info(player, "Granted sudo delegation for " + target:name() + " as " + delegate:name() + "."));
     if (target != player)
-      target:tell($event:mk_info(target, player:name() + " granted you sudo access as " + delegate:name() + ". Use `@sudo <command>` with an allowlisted command."));
+      target:tell($event:mk_info(target, player:name() + " granted you sudo access as " + delegate:name() + ". Use ", $format.code:inline("@sudo <command>"), " with an allowlisted command."));
     endif
   endverb
 
@@ -288,7 +288,7 @@ object ADMIN_FEATURES [
     except e (ANY)
       set_task_perms(player);
       this:_append_log(["kind" -> "sudo", "status" -> "denied", "reason" -> "parse_failed", "subject" -> player, "delegate" -> delegate, "command" -> command, "error" -> toliteral(e[2])]);
-      player:inform_current($event:mk_error(player, "Could not parse sudo command: `" + command + "`."));
+      player:inform_current($event:mk_error(player, "Could not parse sudo command: ", $format.code:inline(command), "."));
       return false;
     endtry
     command_env = {player};
@@ -382,7 +382,7 @@ object ADMIN_FEATURES [
     set_task_perms(player);
     if (!any_match)
       this:_append_log(["kind" -> "sudo", "status" -> "denied", "reason" -> "no_match", "subject" -> player, "delegate" -> delegate, "command" -> command]);
-      player:inform_current($event:mk_error(player, "No command verb matched `" + command + "` here."));
+      player:inform_current($event:mk_error(player, "No command verb matched ", $format.code:inline(command), " here."));
       return false;
     endif
     allowed_map = this.sudo_allowed;

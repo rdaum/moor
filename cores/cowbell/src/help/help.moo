@@ -39,9 +39,11 @@ object HELP [
   endmethod
 
   method render_prose owner: ARCH_WIZARD
-    "Render this help topic as a list of lines (splat into a block).";
+    "Return authored prose or programmatic blocks, followed by related-topic references.";
     const viewer = player;
-    let lines = {this.summary, "", $help_utils:annotate_prose(this.content, viewer)};
+    const body = typeof(this.content) == TYPE_STR
+      ? $help_utils:annotate_prose(this.content, viewer) | this.content;
+    let lines = {this.summary, "", body};
     if (length(this.see_also))
       const topics = viewer:_collect_help_topics();
       let references = {};

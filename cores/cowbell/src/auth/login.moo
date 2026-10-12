@@ -508,9 +508,10 @@ object LOGIN [
     !valid(new_player) && return;
     const title = $format.title:mk(this:_apply_template("Welcome to {TITLE}!"));
     const tips_list = $format.list:mk({"Set your description: @describe me as <text>", "Set your pronouns: @pronouns they/them (or she/her, he/him, etc.)"});
-    const content = $format.block:mk(title, "", "Try entering `help` to see what kind of things you can do where you are.", "", "Next steps:", tips_list);
+    const content = $format.block:mk(title,
+      $format.paragraph:mk("Try entering ", $format.code:inline("help"), " to see what kind of things you can do where you are."),
+      $format.title:mk("Next steps", 4), tips_list);
     let event = $event:mk_info(new_player, content):with_audience('utility):with_presentation_hint('inset);
-    event = event:with_metadata('preferred_content_types, {'text_html, 'text_plain});
     new_player:inform_current(event);
     "Trigger profile setup presentation if enabled";
     if (this.post_creation_setup_enabled)

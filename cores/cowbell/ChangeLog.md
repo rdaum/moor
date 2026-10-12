@@ -21,9 +21,13 @@ Cowbell entries.
   `event:resolve(viewer)`, and `$document:render(document, format)`. Strings now represent literal
   text. Authored Djot parsing is pending, so markup in descriptions and help prose remains literal.
 - Source listings store line numbers separately from source text. Renderers add the number gutter.
+- Agent reports, private messages, and command guidance use document nodes. Output keeps its
+  structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
 ### Fixed
 
+- Closed-container looks resolve denial messages with the container binding and preserve structured
+  descriptions. Code documentation no longer appears empty when supplied as a code-block value.
 - `string:to_list("")` returns the whole input as one field instead of looping indefinitely.
 - `string:split()` and `string:replace_all()` now match case consistently for every delimiter
   length. Matching is case-sensitive by default. Pass `false` as the final argument to ignore case.

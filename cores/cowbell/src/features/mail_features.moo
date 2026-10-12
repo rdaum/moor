@@ -84,7 +84,7 @@ object MAIL_FEATURES [
     elseif (valid(dobj.addressee) && is_player(dobj.addressee))
       recipient = dobj.addressee;
     else
-      player:inform_current($event:mk_error(player, "Send the letter to whom? Use: `send <letter> to <player>`"):as_djot());
+      player:inform_current($event:mk_error(player, "Send the letter to whom? Use: ", $format.code:inline("send <letter> to <player>")));
       return;
     endif
     "Find recipient's mailbox";
@@ -111,7 +111,7 @@ object MAIL_FEATURES [
     player:inform_current($event:mk_info(player, "You send ", dobj.name, " to ", recipient.name, "."));
     "Notify recipient if online";
     if (recipient in connected_players() && recipient != player)
-      const event = $event:mk_info(recipient, "*You have new mail from ", player.name, ".*"):as_djot():as_inset();
+      const event = $event:mk_info(recipient, "You have new mail from ", $format.annotation:object(player), "."):as_inset();
       `recipient:tell(event) ! ANY';
     endif
   endverb
