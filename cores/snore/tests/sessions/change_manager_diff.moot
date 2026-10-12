@@ -31,7 +31,7 @@ true
 ; const page = $change_manager:review(2, 1); return {page["total"], length(page["rows"])};
 {110, 50}
 
-; $change_manager:discard(2, 1); set_verb_code(#9500, "local", {"return 3;"}); set_verb_code(#9500, "conflict", {"return 3;"}); set_verb_info(#9500, "blocked", {#102, "rxd", "blocked"}); let lines = #0.diff_source; let update = false; for i in [1..length(lines)] if (index(lines[i], "verb ") == 1) update = index(lines[i], "verb update") == 1 || index(lines[i], "verb conflict ") == 1 || index(lines[i], "verb blocked ") == 1; elseif (lines[i] == "return 1;" && update) lines[i] = "return 2;"; endif endfor lines = {@lines[1..length(lines) - 1], tostr("verb added (this none this) owner: ", player, " flags: \"rxd\""), "return 4;", "endverb", "endobject"}; return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> lines]})["review_id"];
+; $change_manager:discard(2, 1); set_verb_code(#9500, "local", {"return 3;"}); set_verb_code(#9500, "conflict", {"return 3;"}); set_verb_info(#9500, "blocked", {#102, "rxd", "blocked"}); let lines = #0.diff_source; let update = false; for i in [1..length(lines)] if (index(lines[i], "verb ") == 1) update = index(lines[i], "verb update") == 1 || index(lines[i], "verb conflict ") == 1 || index(lines[i], "verb blocked ") == 1; elseif (lines[i] == "return 1;" && update) lines[i] = "return 2;"; endif endfor return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> lines]})["review_id"];
 3
 
 ; const text = $string_utils:from_list($change_manager:command({"diff", "3"}), "\n"); return {index(text, "52 upstream updates; 1 local edit; 1 conflict. 56 unchanged.") != 0, index(text, "$diff_target:update1") != 0, index(text, "$diff_target:update20") != 0, index(text, "$diff_target:update21") == 0, index(text, "$diff_target:same1") == 0};
@@ -65,6 +65,16 @@ true
 
 ; return `$change_manager:command({"source", "3", "2", "999", "incoming"}) ! E_INVARG => "missing"';
 "missing"
+
+// New upstream verbs remain visible when change-group policy blocks installation.
+; $change_manager:discard(3, 2); const lines = {@#0.diff_source[1..length(#0.diff_source) - 1], tostr("verb added (this none this) owner: ", player, " flags: \"rxd\""), "return 4;", "endverb", "endobject"}; return $change_manager:stage("diff_probe", {["label" -> "probe.moo", "text" -> lines]})["review_id"];
+4
+
+; const row = $change_manager:review(4, 1, {4, 1, 111})["rows"][1]; return {row["classification"], row["eligible"], row["default"], row["blockers"], row["choices"]};
+{"incoming_only", false, "defer", {"change_group_required"}, {"defer"}}
+
+; const text = $string_utils:from_list($change_manager:command({"diff", "4"}), "\n"); return {index(text, "1 new upstream verb.") != 0, index(text, "111 | $diff_target:added | New upstream verb | Declare the required change group first | @changes source 4 1 111 live / @changes source 4 1 111 incoming") != 0, index(text, "@changes resolve 4 1 111") == 0};
+{true, true, true}
 
 @nonprogrammer
 @quiet

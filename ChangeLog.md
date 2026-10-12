@@ -339,6 +339,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Snore change reviews display and count new upstream verbs without failing to render the review
+  page.
 - Cowbell change reviews avoid duplicate whole-core comparisons during fetch and apply. Comparisons
   skip property values outside the update, and apply formats receipts only for applied changes.
   Repeating `@changes fetch` now links to the existing review or its status.

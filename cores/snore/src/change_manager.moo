@@ -843,6 +843,7 @@ object CHANGE_MANAGER [
 
 
   method _command_item owner: #2
+    "Return the display label for a review object or verb.";
     caller == this || raise(E_PERM);
     return this:_command_label(@args);
   endmethod
@@ -858,6 +859,7 @@ object CHANGE_MANAGER [
   endmethod
 
   method _command_overview owner: #2
+    "Show the active review or the default package's fetch command.";
     caller == this || raise(E_PERM);
     const package = this.packages[this.default_package];
     if (package["active"])
@@ -910,9 +912,9 @@ object CHANGE_MANAGER [
     const counts = record["report"]["counts"];
     const names = this:_command_names();
     let output = {tostr(record["package"], " · Review ", id), tostr("Generation ", generation, ".")};
-    const labels = ["upstream" -> {"upstream update", "upstream updates"}, "local" -> {"local edit", "local edits"}, "conflict" -> {"conflict", "conflicts"}, "converged" -> {"program already matches upstream", "programs already match upstream"}, "unbased" -> {"program without a baseline", "programs without a baseline"}];
+    const labels = ["upstream" -> {"upstream update", "upstream updates"}, "local" -> {"local edit", "local edits"}, "conflict" -> {"conflict", "conflicts"}, "converged" -> {"program already matches upstream", "programs already match upstream"}, "unbased" -> {"program without a baseline", "programs without a baseline"}, "incoming_only" -> {"new upstream verb", "new upstream verbs"}];
     let summary = "";
-    for classification in ({"upstream", "local", "conflict", "converged", "unbased"})
+    for classification in ({"upstream", "local", "conflict", "converged", "unbased", "incoming_only"})
       const count = `counts[classification] ! E_RANGE => 0';
       if (count)
         summary = tostr(summary, summary ? "; " | "", count, " ", labels[classification][count == 1 ? 1 | 2]);
@@ -926,9 +928,9 @@ object CHANGE_MANAGER [
     const choice_counts = this:_review_decisions(record);
     const selected = choice_counts["selected"];
     const unresolved = choice_counts["unresolved"];
-    const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged"];
+    const descriptions = ["upstream" -> "Upstream edit", "local" -> "Local edit", "conflict" -> "Conflict", "converged" -> "Already matches", "unbased" -> "No baseline", "unchanged" -> "Unchanged", "incoming_only" -> "New upstream verb"];
     const decisions = ["incoming" -> "Use upstream", "local" -> "Keep local", "edited" -> "Use edited program", "defer" -> "Skip", "unresolved" -> "Choose"];
-    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match"];
+    const reasons = ["adoption_required" -> "Adopt a baseline first", "untrusted_target_authority" -> "Ownership or permissions block upgrades", "object_identity_mismatch" -> "Object identity doesn’t match", "change_group_required" -> "Declare the required change group first"];
     for i in [1..length(rows)]
       const row = rows[i];
       const choice = `record["choices"][row["id"]] ! E_RANGE => []';
