@@ -3,6 +3,8 @@
 This changelog records relevant, user-facing changes to mooR: features, significant bug fixes,
 compatibility changes, and changes that affect upgrades or operation.
 
+See the [Cowbell changelog](cores/cowbell/ChangeLog.md) for changes to the Cowbell core.
+
 Omit routine internal maintenance, development script fixes, formatting, refactoring, and test-only
 changes unless they have a significant user-facing effect. Describe that effect when an entry is
 warranted. Not every commit needs an entry.
@@ -123,7 +125,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 `Cowbell`:
 
-- Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 - Add Git sources to `@changes`, with wizard-only fetching and saved commit provenance. Apply uses
   the reviewed source even if a branch moves. New imports configure Cowbell's upstream to the mooR
   repository, `refs/heads/main`, under `cores/cowbell/src`. Existing package settings are preserved.
@@ -339,11 +340,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   parameter. An absent value or zero uses the daemon maximum. Invalid deadlines return HTTP 400.
 
 ### Fixed
-
-- Cowbell's `list:unique()` now accepts nested lists and maps and preserves the first occurrence.
-
-- Cowbell event queues now enforce the caller's property permissions for reads and writes. Calling a
-  queue method no longer grants wizard access to another owner's queue.
 
 - Snore change reviews display and count new upstream verbs without failing to render the review
   page.
