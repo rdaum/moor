@@ -341,6 +341,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Meadow no longer adds blank lines between HTML blocks in room descriptions and other narrative
+  output. Plain text and code retain their spacing.
 - Snore change reviews display and count new upstream verbs without failing to render the review
   page.
 - Cowbell change reviews avoid duplicate whole-core comparisons during fetch and apply. Comparisons

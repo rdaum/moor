@@ -184,6 +184,25 @@ object HEADLESS_EVENT_SCENARIOS
     const djot = $document:render(list_event:resolve(player), 'text_djot);
     $test_utils:assert_eq(length(djot['annotations]), 1, "topic lists retain help references");
     $test_utils:assert_eq($document:render(list_event:resolve(player), 'text_plain)['body], "- look\n\n- inventory", "plain lists stay readable");
+    const topics = {$format.annotation:help($help_topics, "look"),
+      $format.annotation:help($help_topics, "inventory")};
+    const topic_document = $event:mk_info(player, $format.list:mk(topics)):resolve(player);
+    for format in ({'text_html, 'text_djot})
+      const rendered = $document:render(topic_document, format);
+      $test_utils:assert_true(index(rendered['body], "reference-columns"),
+        "The renderer gives topic references a compact layout");
+      $test_utils:assert_eq(length(rendered['annotations]), 2, "Columns retain both topic actions");
+      for ordinary in ({list, $format.list:mk(topics, true),
+          $format.list:mk({$format.block:mk(topics[1], "Explanation."), topics[2]}),
+          $format.list:mk({$format.paragraph:inline(topics[1], " with an explanation"), topics[2]}),
+          $format.list:mk({" "})})
+        const document = $event:mk_info(player, ordinary):resolve(player);
+        $test_utils:assert_false(index($document:render(document, format)['body], "reference-columns"),
+          "Prose, numbered lists, and multi-block items retain their normal layout");
+      endfor
+    endfor
+    $test_utils:assert_eq($document:render(topic_document, 'text_plain)['body],
+      "- look\n\n- inventory", "Plain references retain their order without layout markup");
     return true;
   endverb
   verb test_command_entries (this none this) owner: ARCH_WIZARD flags: "rxd"
@@ -219,6 +238,13 @@ object HEADLESS_EVENT_SCENARIOS
         $test_utils:assert_eq(this:_descriptor(flycontents(entry)[3])["receiver"], $url_utils:to_curie_str(target), "source keeps receiver");
         const ordinary = $obj_utils:command_entry(target, spec, #90102, "", actions);
         $test_utils:assert_eq(typeof(ordinary), TYPE_FLYWEIGHT, "nonprogrammers get only the invocation");
+        for command_entry in ({entry, ordinary})
+          const document = $event:mk_info(player, $format.list:mk({command_entry})):resolve(player);
+          for format in ({'text_html, 'text_djot})
+            $test_utils:assert_true(index($document:render(document, format)['body], "reference-columns"),
+              "Command lists use columns with or without programmer source links");
+          endfor
+        endfor
       endfor
     finally
       recycle(target);

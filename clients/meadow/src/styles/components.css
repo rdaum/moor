@@ -390,6 +390,7 @@
 /* ====== CONTENT RENDERER ====== */
 /* For HTML and Djot rendered content */
 .content-html {
+  white-space: normal;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
@@ -2166,7 +2167,7 @@
   content: ": ";
 }
 
-/* Normalize whitespace in HTML elements (but preserve whitespace in pre/code blocks and the container) */
+/* Keep prose whitespace normal while code blocks retain their source spacing. */
 .text_narrative .content-html *:not(pre):not(code) {
   white-space: normal;
   word-wrap: break-word;
