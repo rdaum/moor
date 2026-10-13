@@ -254,7 +254,7 @@ object OBJ_UTILS [
   method check_message_property_writable owner: ARCH_WIZARD
     "Check if a player can write to a message property on an object.";
     "Returns {writable, error_msg} where writable is true/false.";
-    caller == $builder_features || raise(E_PERM);
+    caller in {$builder_features, $prog_features} || raise(E_PERM);
     {target_obj, prop_name, who} = args;
     typeof(target_obj) != TYPE_OBJ && raise(E_TYPE, "target_obj must be object");
     typeof(prop_name) != TYPE_STR && raise(E_TYPE, "prop_name must be string");
@@ -280,7 +280,7 @@ object OBJ_UTILS [
   method set_compiled_message owner: ARCH_WIZARD
     "Set a compiled message property with elevated permissions.";
     "Args: {target_obj, prop_name, compiled_list, who}";
-    caller == $builder_features || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
+    caller in {$builder_features, $prog_features} || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
     {target_obj, prop_name, compiled_list, who, ?grants = {}} = args;
     prop_key = this:property_key(target_obj, tostr(prop_name));
     prop_key == E_PROPNF && raise(E_PROPNF, "Property not found: " + tostr(prop_name));
@@ -299,7 +299,7 @@ object OBJ_UTILS [
 
   method add_message_entry owner: ARCH_WIZARD
     "Append a compiled entry to a message bag property, creating the bag if needed.";
-    caller == $builder_features || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
+    caller in {$builder_features, $prog_features} || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
     {target_obj, prop_name, compiled_entry, who, ?grants = {}} = args;
     prop_name = tostr(prop_name);
     prop_key = this:property_key(target_obj, prop_name);
@@ -325,7 +325,7 @@ object OBJ_UTILS [
 
   method remove_message_entry owner: ARCH_WIZARD
     "Remove an entry from a message bag property.";
-    caller == $builder_features || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
+    caller in {$builder_features, $prog_features} || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
     {target_obj, prop_name, index, who, ?grants = {}} = args;
     prop_name = tostr(prop_name);
     prop_key = this:property_key(target_obj, prop_name);
@@ -370,7 +370,7 @@ object OBJ_UTILS [
     "Returns: list of {property_name, current_value}";
     {target_obj, ?who = caller_perms(), ?grant_reads = false} = args;
     if (who != caller_perms() || grant_reads)
-      caller == $builder_features || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
+      caller in {$builder_features, $prog_features} || caller == $agent_building_tools || isa(caller, $llm_wearable) || raise(E_PERM);
     endif
     if (!grant_reads)
       set_task_perms(who);

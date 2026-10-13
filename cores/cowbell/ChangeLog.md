@@ -93,6 +93,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Programmer message commands accept calls through the programmer feature object, including
+  `@set-message` and message bag edits. `@program` reads input from the player without requiring
+  wizard privileges.
 - Passage lookup preserves the caller's permissions. Owners and wizards can query a new area's empty
   passage relation without a permission error.
 - Henri's interaction responses now use one set of editable reactions. Refused nearby pet attempts

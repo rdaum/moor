@@ -1,0 +1,41 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.is_builder = true; #90101.authoring_features = $prog_features; add_property(#90102, "protected_msg", {"unchanged"}, {#90102, "r"}); return true;
+true
+@programmer
+% @create $thing named messagesample
+~~Created
+% @property messagesample.greeting_msg {} rc
+~~Added
+% @set-message messagesample.greeting_msg Hello.
+~~Set message template
+% @get-message messagesample.greeting_msg
+~~Hello.
+% @add-message messagesample.replies_msgs First reply.
+~~Added message
+% @add-message messagesample.replies_msgs Second reply.
+~~Added message
+% @del-message messagesample.replies_msgs 1
+~~Removed message
+; const object = $match:match_object("messagesample", player); return {length(object.replies_msgs:entries()), $sub_utils:decompile(object.replies_msgs:entries()[1])};
+{1, "Second reply."}
+% @set-message messagesample.replies_msgs Replacement.
+~~Set message template
+; const object = $match:match_object("messagesample", player); return {length(object.replies_msgs:entries()), $sub_utils:decompile(object.replies_msgs:entries()[1])};
+{1, "Replacement."}
+% @set-message #90102.protected_msg Stolen.
+~~do not have permission
+; return #90102.protected_msg;
+{"unchanged"}
+; return `$obj_utils:set_compiled_message(#90102, "protected_msg", {"forged"}, #90102) ! E_PERM => E_PERM';
+E_PERM
+@wizard
+; const probe = create($prog_features, #90101, 2); add_property(#90101, "message_feature_probe", probe, {#90101, "r"}); add_verb(probe, {#90101, "rxd", "probe"}, {"this", "none", "this"}); return set_verb_code(probe, "probe", {"return $obj_utils:set_compiled_message(#90102, \"protected_msg\", {\"forged\"}, #90102);"});
+0
+@programmer
+; return `player.message_feature_probe:probe() ! E_PERM => E_PERM';
+E_PERM
+; return #90102.protected_msg;
+{"unchanged"}
