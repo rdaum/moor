@@ -34,6 +34,8 @@ Cowbell entries.
 
 ### Changed
 
+- Ownership transfers include inherited properties with the `c` flag. A new room owner can save
+  descriptions without a wizard repairing those property permissions.
 - Relations define their own named fields. Rules and reaction steps reference a relation object or a
   reaction setting, so builders can reuse field names without sharing data. Queries can bind either
   side of a relation. Copies retain their chosen relation; change the setting to use a separate one.

@@ -129,14 +129,16 @@ object ROOT [
       'set_owner in claims["caps"] || raise(E_PERM);
     endif
     chowned_props = {};
-    for pname in (properties(target))
-      info = property_info(target, pname);
-      if (typeof(info) == TYPE_LIST && length(info) >= 2)
-        perms_string = info[2];
-        if (typeof(perms_string) == TYPE_STR && index(perms_string, "c"))
-          chowned_props = {@chowned_props, {pname, perms_string}};
+    for definer in ({target, @ancestors(target)})
+      for pname in (properties(definer))
+        info = property_info(target, pname);
+        if (typeof(info) == TYPE_LIST && length(info) >= 2)
+          perms_string = info[2];
+          if (typeof(perms_string) == TYPE_STR && index(perms_string, "c"))
+            chowned_props = {@chowned_props, {pname, perms_string}};
+          endif
         endif
-      endif
+      endfor
     endfor
     "Owner changes require wizard authority; delegated transfers cannot suspend after validation.";
     target.owner = new_owner;

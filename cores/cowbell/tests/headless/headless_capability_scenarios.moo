@@ -613,6 +613,10 @@ object HEADLESS_CAPABILITY_SCENARIOS
       this:_set_owner_with_cap_as_player(cap, $player);
       $test_utils:assert_eq(target.owner, $player, "set_owner capability should update owner");
       $test_utils:assert_eq(property_info(target, "set_owner_probe")[1], $player, "set_owner capability should retitle clobber properties");
+      $test_utils:assert_eq(property_info(target, "description_kind")[1], $player,
+        "ownership transfer includes inherited properties with the c flag");
+      $test_utils:assert_eq(property_info($root, "description_kind")[1], $hacker,
+        "ownership transfer must not change the ancestor's property owner");
       $test_utils:assert_true(original_owner != target.owner, "set_owner test fixture should actually change ownership");
       $test_utils:assert_false($player.wizard, "capability use should not make actor a wizard");
     finally
