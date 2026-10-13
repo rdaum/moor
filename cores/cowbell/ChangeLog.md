@@ -106,6 +106,7 @@ Cowbell entries.
 
 ### Fixed
 
+- Reaction commands keep the line breaks in previews, status, and help output.
 - Empty `say` and `emote` commands ask for text instead of failing in the Djot parser. Inline
   authoring also accepts empty content.
 - Messages can select verb agreement for a participant's name or pronoun explicitly, including named

@@ -2928,7 +2928,7 @@ object BUILDER_FEATURES [
     set_task_perms(player);
     try
       const lines = $builder_features:author(tosym(verb == "@reactions" ? "reaction" | verb[2..$]), argstr, player);
-      player:inform_current($event:mk_info(player, @$format:blocks(lines)));
+      player:inform_current($event:mk_info(player, @$format:literal_inline(lines:join("\n"))));
     except error (ANY)
       player:inform_current($event:mk_error(player, error[2]));
     endtry

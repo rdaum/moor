@@ -14,7 +14,11 @@ true
 % @reaction cedarbox welcome after open
 ~~disabled
 % @reaction cedarbox welcome preview-message announce "{nc} {open|opens} {the d}."
-~~Actor (Alex): You open the cedarbox.
+=Example wording only. Nothing is saved or sent.
+=Alex uses they/them; Sam uses she/her; Robin uses he/him.
+=Actor (Alex): You open the cedarbox.
+=Recipient (Sam): Alex opens the cedarbox.
+=Observer (Robin): Alex opens the cedarbox.
 @wizard
 ; const host = $match:match_object("cedarbox", #90102); return length(host.welcome_reaction.effects);
 0
@@ -26,9 +30,29 @@ true
 % @reaction cedarbox welcome then announce "The cedar smells fresh."
 ~~Saved
 % @reaction cedarbox welcome show
+~~welcome on cedarbox: disabled
+~~after open
+~~if
+~~State visits: 0
+~~Matches:
+~~Step 1: add
 ~~Step 2: announce
+~~Pending timers: none
 % @reaction cedarbox welcome preview actor=me
+~~Preview only: nothing changes.
+~~after open
+~~Condition:
+~~Current visits: 0
+~~Condition matched.
 ~~Would run step 1
+~~Would run step 2
+=Example wording only. Nothing is saved or sent.
+=Alex uses they/them; Sam uses she/her; Robin uses he/him.
+=Actor (Alex): The cedar smells fresh.
+=Recipient (Sam): The cedar smells fresh.
+=Observer (Robin): The cedar smells fresh.
+~~State changes can start other reactions
+~~No actions were attempted
 % @state cedarbox
 ~~visits: 0
 % @reaction cedarbox welcome then explode everything
@@ -49,6 +73,15 @@ true
 % @state cedarbox
 ~~visits: 1
 % @reaction cedarbox welcome trace
+~~Event: after open
+~~Inputs:
+~~If:
+~~Current visits: 0
+~~Condition: matched
+~~Selected matches: 1
+~~Step 1: add
+~~Step 1: completed
+~~Step 2: announce
 ~~Step 2: completed
 % @reaction cedarbox welcome copy to sparebox
 ~~disabled
@@ -70,10 +103,10 @@ true
 ~~Set open rule
 % @rule sparebox open show
 ~~actor is
-% @reaction help
-~~New reactions start disabled
-% @reaction actions
-~~do
+@wizard
+; const help = $builder_features:author('reaction, "help", #90102); const actions = $builder_features:author('reaction, "actions", #90102); return {index(help:join("\n"), "New reactions start disabled") != 0, index(actions:join("\n"), "do ") != 0};
+{true, true}
+@nonprogrammer
 % @reaction #90101 forbidden after open
 ~~do not own
 @wizard

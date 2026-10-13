@@ -642,6 +642,8 @@ Create the book and tell a reaction to write in it:
 
 ```moot
 % @facts rockvisitors
+~~Facts in rockvisitors
+=Fields: person:object, rock:object
 ~~person=Ada
 ```
 

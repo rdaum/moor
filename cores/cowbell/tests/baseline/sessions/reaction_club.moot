@@ -32,6 +32,8 @@ true
 % open clubbox
 ~~open
 % @facts visits
+~~Facts in visits
+~~Fields: person:object, box:object
 ~~box=clubbox
 % close clubbox
 ~~close
@@ -42,6 +44,8 @@ true
 % @rule clubbox open show
 ~~fact in members
 % @facts members
+~~Facts in members
+~~Fields: person:object, group:string
 ~~No facts yet
 @wizard
 ; return !#90102.programmer && !#90102.wizard;

@@ -46,6 +46,14 @@ true
 % @state puzzlebox
 ~~solved
 % @reaction puzzlebox arm show
+~~arm on puzzlebox: enabled
+~~after open
+~~if always
+~~State mode:
+~~Matches:
+~~Step 1: set
+~~Step 2: schedule
+~~Step 3: announce
 ~~Pending timers: none
 % @reaction puzzlebox arm step 2 schedule reset 1 set mode idle
 ~~Saved
@@ -59,6 +67,18 @@ true
 % @state puzzlebox
 ~~idle
 % @reaction puzzlebox arm trace
+~~Event: after open
+~~Inputs:
+~~If: always
+~~Current mode:
+~~Condition: matched
+~~Selected matches: 1
+~~Step 1: set
+~~Step 1: completed
+~~Step 2: schedule
+~~Step 2: completed
+~~Step 3: announce
+~~Step 3: completed
 ~~Timer reset: finished
 % close puzzlebox
 ~~close
