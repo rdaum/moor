@@ -505,7 +505,8 @@ object BUILDER_FEATURES [
       endif
       "Build alias->room map for current room exits";
       existing_from = [];
-      for p in (area:passages_from(current_room))
+      const from_passages = area:passages_from(current_room);
+      for p in (from_passages)
         side_a_room = p.side_a_room;
         side_b_room = p.side_b_room;
         if (current_room == side_a_room)
@@ -560,8 +561,9 @@ object BUILDER_FEATURES [
       endif
       "Block duplicate passage between same room pair unless explicitly allowed";
       if (!allow_parallel)
-        existing_pair = area:passage_for(current_room, target_room);
-        if (typeof(existing_pair) == TYPE_FLYWEIGHT || (typeof(existing_pair) == TYPE_OBJ && valid(existing_pair)))
+        const existing_pair = from_passages:any({passage} =>
+          passage.side_a_room == target_room || passage.side_b_room == target_room);
+        if (existing_pair)
           raise(E_INVARG, "A passage between here and " + tostr(target_room) + " already exists. Use --allow-parallel to create another.");
         endif
       endif

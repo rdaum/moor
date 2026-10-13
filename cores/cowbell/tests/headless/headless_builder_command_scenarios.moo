@@ -44,6 +44,11 @@ object HEADLESS_BUILDER_COMMAND_SCENARIOS
       dig_result = this:_dispatch_builder_any("@dig", "oneway north to builder target room", {"oneway north"}, "to", "builder target room");
       $test_utils:assert_type(dig_result, TYPE_FLYWEIGHT, "@dig should return the new passage: " + toliteral(#90102.headless_last_inform));
       $test_utils:assert_eq(test_area:passage_for(room_a, room_b), dig_result, "@dig should register passage through stored grants");
+      const duplicate_result = this:_dispatch_builder_any("@dig",
+        "oneway northeast to builder target room", {"oneway northeast"}, "to", "builder target room");
+      $test_utils:assert_false(duplicate_result, "@dig should reject another passage between the same rooms");
+      $test_utils:assert_eq(test_area:passage_for(room_a, room_b), dig_result,
+        "Rejecting a duplicate should preserve the existing passage");
       undig_result = this:_dispatch_builder_dobj("@undig", "north");
       $test_utils:assert_true(undig_result, "@undig should report successful removal");
       $test_utils:assert_false(test_area:passage_for(room_a, room_b), "@undig should remove passage through stored grants");

@@ -93,6 +93,10 @@ Cowbell entries.
 
 ### Fixed
 
+- `@dig` works with delegated building permissions in another owner's area. Its duplicate passage
+  check uses the room's passage list without requiring direct access to the area's private relation.
+- Cowbell package updates include the rules schema, condition, and facts service objects and their
+  constants.
 - Programmer message commands accept calls through the programmer feature object, including
   `@set-message` and message bag edits. `@program` reads input from the player without requiring
   wizard privileges.
