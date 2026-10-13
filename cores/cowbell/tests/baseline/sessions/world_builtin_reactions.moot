@@ -7,6 +7,18 @@ true
 @nonprogrammer
 % open #66
 ~~A waft of kibble-scented air escapes from the cupboard.
+~~swivels his ears toward the cupboard
+~~revealing Henri's kibble storage
 @wizard
 ; return $kibble_cupboard.open;
 true
+@nonprogrammer
+% close #66
+~~sealing away the kibble
+@wizard
+; move($henri, $first_room); return true;
+true
+@nonprogrammer
+% open #66
+~~A waft of kibble-scented air escapes from the cupboard.
+~~revealing Henri's kibble storage

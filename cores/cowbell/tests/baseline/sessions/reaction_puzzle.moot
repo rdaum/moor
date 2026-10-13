@@ -1,0 +1,69 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; return true;
+true
+@nonprogrammer
+% @create $container named puzzlebox
+~~Created
+% @state puzzlebox mode choice idle armed solved
+~~Declared mode
+% @reaction puzzlebox arm after open
+~~disabled
+% @reaction puzzlebox arm then set mode armed
+~~Saved
+% @reaction puzzlebox arm then schedule reset 30 set mode idle
+~~Saved
+% @reaction puzzlebox arm then announce "Close the box before its light goes out."
+~~Saved
+% @reaction puzzlebox arm trace on
+~~Saved
+% @reaction puzzlebox arm enable
+~~enabled
+% @reaction puzzlebox solve after close
+~~disabled
+% @reaction puzzlebox solve if mode is armed
+~~Saved
+% @reaction puzzlebox solve then cancel reset
+~~Saved
+% @reaction puzzlebox solve then set mode solved
+~~Saved
+% @reaction puzzlebox solve then announce "The box chimes. You solved it."
+~~Saved
+% @reaction puzzlebox solve enable
+~~enabled
+% close puzzlebox
+~~close
+% open puzzlebox
+~~Close the box
+~~open
+% @state puzzlebox
+~~armed
+% close puzzlebox
+~~You solved it
+~~close
+% @state puzzlebox
+~~solved
+% @reaction puzzlebox arm show
+~~Pending timers: none
+% @reaction puzzlebox arm step 2 schedule reset 1 set mode idle
+~~Saved
+% open puzzlebox
+~~Close the box
+~~open
+@wizard
+; suspend(2); return true;
+true
+@nonprogrammer
+% @state puzzlebox
+~~idle
+% @reaction puzzlebox arm trace
+~~Timer reset: finished
+% close puzzlebox
+~~close
+% @state puzzlebox
+~~idle
+@wizard
+; return !#90102.programmer && !#90102.wizard;
+true
