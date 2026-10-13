@@ -13,13 +13,13 @@
 //! Mock-session scenarios for Cowbell and Snore cores.
 //!
 //! Imports an objdef overlay into a temporary database, starts the kernel scheduler, and runs
-//! `.moot` scenarios with one `TestSession` per player. Commands go through the real command
+//! `.moot` scenarios or executable Markdown documents with one `TestSession` per player. Commands go through the real command
 //! parser and captured narrative output drives `=` assertions.
 //!
 //! This harness captures committed output. `tests/wire.py` separately exercises daemon and telnet I/O.
 //!
 //! usage: core-session-runner --core-dir DIR --moot FILE_OR_DIR [--wizard N] [--programmer N]
-//!                       [--nonprogrammer N]
+//!                       [--nonprogrammer N] [--moot ANOTHER_FILE_OR_DIR]
 
 mod scenario;
 mod session;
@@ -268,23 +268,7 @@ impl MootRunner for MockMootRunner {
     }
 
     fn read_line(&mut self, player: &Obj) -> Result<Option<String>> {
-        let recipient = self.session(player).connection_id().unwrap_or(*player);
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            self.harvest_all();
-            if let Some(line) = self
-                .lines
-                .get_mut(&recipient)
-                .and_then(|lines| lines.pop_front())
-            {
-                return Ok(Some(line));
-            }
-            if std::time::Instant::now() >= deadline {
-                return Ok(None);
-            }
-            self.pump_input()?;
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        self.read_line_with_timeout(player, std::time::Duration::from_secs(2))
     }
 
     fn read_eval_result(&mut self, _player: &Obj) -> Result<Option<Var>> {
@@ -330,6 +314,30 @@ fn event_matches(event: &Event, content_type: &str, audience: &str) -> bool {
 }
 
 impl SessionRunner for MockMootRunner {
+    fn read_line_with_timeout(
+        &mut self,
+        player: &Obj,
+        timeout: std::time::Duration,
+    ) -> Result<Option<String>> {
+        let recipient = self.session(player).connection_id().unwrap_or(*player);
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            self.harvest_all();
+            if let Some(line) = self
+                .lines
+                .get_mut(&recipient)
+                .and_then(|lines| lines.pop_front())
+            {
+                return Ok(Some(line));
+            }
+            if std::time::Instant::now() >= deadline {
+                return Ok(None);
+            }
+            self.pump_input()?;
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     fn select_connection(&mut self, name: &str) -> Result<Obj> {
         let (player, session) = self
             .named_sessions
@@ -529,7 +537,7 @@ fn collect_moot_files(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 
 struct Args {
     core_dir: PathBuf,
-    moot: PathBuf,
+    moot: Vec<PathBuf>,
     wizard: i32,
     programmer: i32,
     nonprogrammer: i32,
@@ -539,7 +547,7 @@ struct Args {
 fn parse_args() -> Result<Args> {
     let mut cowbell = false;
     let mut core_dir = None;
-    let mut moot = None;
+    let mut moot = Vec::new();
     let mut wizard = 2;
     let mut programmer = 102;
     let mut nonprogrammer = 101;
@@ -548,7 +556,9 @@ fn parse_args() -> Result<Args> {
         match arg.as_str() {
             "--cowbell" => cowbell = true,
             "--core-dir" => core_dir = args.next().map(PathBuf::from),
-            "--moot" => moot = args.next().map(PathBuf::from),
+            "--moot" => moot.push(PathBuf::from(
+                args.next().ok_or_else(|| eyre!("--moot needs a path"))?,
+            )),
             "--wizard" => {
                 wizard = args
                     .next()
@@ -570,9 +580,12 @@ fn parse_args() -> Result<Args> {
             other => return Err(eyre!("unexpected argument: {other}")),
         }
     }
+    if moot.is_empty() {
+        return Err(eyre!("missing --moot"));
+    }
     Ok(Args {
         core_dir: core_dir.ok_or_else(|| eyre!("missing --core-dir"))?,
-        moot: moot.ok_or_else(|| eyre!("missing --moot"))?,
+        moot,
         wizard,
         programmer,
         nonprogrammer,
@@ -588,12 +601,17 @@ fn run() -> Result<()> {
     key[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     key[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     moor_kernel::initialize_server_symmetric_key(key).map_err(|error| eyre!(error))?;
-    let moot_files = collect_moot_files(&args.moot)?;
-    if moot_files.is_empty() {
-        return Err(eyre!(
-            "no .moot scenarios found under {}",
-            args.moot.display()
-        ));
+    let mut moot_files = Vec::new();
+    for path in &args.moot {
+        let files = collect_moot_files(path)?;
+        if files.is_empty() {
+            return Err(eyre!("no .moot scenarios found under {}", path.display()));
+        }
+        for file in files {
+            if !moot_files.contains(&file) {
+                moot_files.push(file);
+            }
+        }
     }
 
     let features = Arc::new(FeaturesConfig {

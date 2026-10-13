@@ -42,21 +42,23 @@ CHECK_TARGETS = check-style test test-headless test-session test-harness roundtr
 CLEAN_EXTRA = $(HEADLESS_SRC_DIRECTORY) $(TEST_SRC_DIRECTORY) gen.empty.log gen.exception.log gen.event-control.log gen.style.log gen.style-strict.log
 CORE_HELP = 'make test-headless      Run headless methods (alias: runtime-headless).' \
             'make test-session       Run session scenarios (alias: runtime-session).' \
+            'make test-tutorial      Run the examples in the Pet Rock tutorial.' \
             'make test-wire          Run TCP and restart tests.' \
             'make test-git-worker    Run Git worker integration tests.'
 include ../make/core.mk
 
 TEST_BIN_DIR = $(MOORC_BIN_DIR)
 SESSION_RUNNER = $(TEST_BIN_DIR)/core-session-runner
+SESSION_TUTORIALS = docs/programming-with-rules-and-reactions.md
 EXPECT_FAILURE = $(PYTHON) $(CORE_MAKE_DIR)expect_failure.py
 TEST_TOOL_PACKAGES = moorc core-style-audit core-session-runner moor-server moor-daemon moor-telnet-host moor-git-worker
 
-.PHONY: build-test-tools check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-harness test-build-inventory test-wire test-git-worker
+.PHONY: build-test-tools check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-tutorial test-harness test-build-inventory test-wire test-git-worker
 # Keep one dependency feature set for every binary used by these checks.
 build-test-tools:
 	$(CARGO) build --locked --manifest-path $(MOOR_ROOT)/Cargo.toml --profile $(MOORC_PROFILE) $(foreach package,$(TEST_TOOL_PACKAGES),-p $(package)) --bins
 
-RUNTIME_CHECK_TARGETS = $(filter-out roundtrip test-headless test-session,$(CHECK_TARGETS)) runtime-headless runtime-session
+RUNTIME_CHECK_TARGETS = $(filter-out roundtrip test-headless test-session,$(CHECK_TARGETS)) runtime-headless runtime-session test-tutorial
 $(RUNTIME_CHECK_TARGETS): build-test-tools
 ifeq ($(MOORC_TYPE),cargo)
 check $(RUNTIME_CHECK_TARGETS): MOORC = $(MOORC_BIN_DIR)/moorc
@@ -112,6 +114,12 @@ runtime-headless: runtime-headless-src
 runtime-session: runtime-headless-src
 	$(SESSION_RUNNER) --cowbell \
 		--core-dir $(HEADLESS_SRC_DIRECTORY) --moot tests/baseline/sessions \
+		$(foreach tutorial,$(SESSION_TUTORIALS),--moot $(tutorial)) \
+		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER)
+
+test-tutorial: runtime-headless-src
+	$(SESSION_RUNNER) --cowbell --core-dir $(HEADLESS_SRC_DIRECTORY) \
+		$(foreach tutorial,$(SESSION_TUTORIALS),--moot $(tutorial)) \
 		--wizard $(TEST_WIZARD) --programmer $(TEST_PROGRAMMER) --nonprogrammer $(TEST_PLAYER)
 
 test-harness: runtime-headless-src

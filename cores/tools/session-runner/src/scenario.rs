@@ -17,8 +17,14 @@ use eyre::{Result, WrapErr, eyre};
 use moor_moot::MootRunner;
 use moor_var::Obj;
 use std::path::Path;
+use std::time::Duration;
+
+mod markdown;
+use markdown::parse_markdown;
 
 pub trait SessionRunner: MootRunner {
+    fn read_line_with_timeout(&mut self, player: &Obj, timeout: Duration)
+    -> Result<Option<String>>;
     fn select_connection(&mut self, _name: &str) -> Result<Obj> {
         Err(eyre!("named connections unavailable"))
     }
@@ -53,6 +59,13 @@ enum Expectation<'a> {
 
 #[derive(Debug, PartialEq)]
 enum Action<'a> {
+    Section(&'a str),
+    Program {
+        verb: &'a str,
+        body: &'a str,
+    },
+    Output(Expectation<'a>),
+    TextWithin(u64, &'a str),
     Player(&'a str),
     Attach(&'a str, &'a str),
     Detach(&'a str),
@@ -75,12 +88,16 @@ fn directive(line: &str) -> bool {
 
 /// Parse complete lines; input directives take precedence over program continuations.
 fn parse(source: &str) -> Result<Vec<(usize, Action<'_>)>> {
+    parse_at(source, 0)
+}
+
+fn parse_at(source: &str, offset: usize) -> Result<Vec<(usize, Action<'_>)>> {
     let lines: Vec<_> = source.lines().collect();
     let mut cursor = 0;
     let mut actions = Vec::new();
     while cursor < lines.len() {
         let line = lines[cursor];
-        let number = cursor + 1;
+        let number = cursor + offset + 1;
         cursor += 1;
         if line.trim().is_empty() || line.starts_with("//") {
             continue;
@@ -125,6 +142,17 @@ fn parse(source: &str) -> Result<Vec<(usize, Action<'_>)>> {
                 ));
             }
             Action::Event(words[0], words[1])
+        } else if let Some(spec) = line.strip_prefix("@text-within ") {
+            let (seconds, text) = spec
+                .split_once(' ')
+                .ok_or_else(|| eyre!("line {number}: expected @text-within SECONDS TEXT"))?;
+            let seconds: u64 = seconds
+                .parse()
+                .map_err(|_| eyre!("line {number}: timeout must be 1 through 30 seconds"))?;
+            if !(1..=30).contains(&seconds) {
+                return Err(eyre!("line {number}: timeout must be 1 through 30 seconds"));
+            }
+            Action::TextWithin(seconds, text)
         } else if let Some(text) = line.strip_prefix("@text ") {
             Action::Text(text)
         } else if line == "@noevents" {
@@ -149,7 +177,7 @@ fn parse(source: &str) -> Result<Vec<(usize, Action<'_>)>> {
             let mut expected = Vec::new();
             while cursor < lines.len() && !directive(lines[cursor]) {
                 let line = lines[cursor];
-                let number = cursor + 1;
+                let number = cursor + offset + 1;
                 cursor += 1;
                 if line.trim().is_empty() || line.starts_with("//") {
                     continue;
@@ -173,6 +201,10 @@ fn parse(source: &str) -> Result<Vec<(usize, Action<'_>)>> {
                 program,
                 expected,
             }
+        } else if let Some(text) = line.strip_prefix('=') {
+            Action::Output(Expectation::Exact(text))
+        } else if let Some(text) = line.strip_prefix("~~") {
+            Action::Output(Expectation::Contains(text))
         } else {
             return Err(eyre!(
                 "line {number}: expected a command, eval, player, input, or hook"
@@ -202,14 +234,46 @@ fn actor_object(actors: &Actors, name: &str) -> Result<Obj> {
 }
 
 fn execute<R: SessionRunner>(runner: &mut R, actors: &Actors, source: &str) -> Result<()> {
-    let mut player = actors.wizard;
     let actions = parse(source)?;
+    execute_actions(runner, actors, actions)
+}
+
+fn execute_actions<R: SessionRunner>(
+    runner: &mut R,
+    actors: &Actors,
+    actions: Vec<(usize, Action<'_>)>,
+) -> Result<()> {
+    let mut player = actors.wizard;
+    let mut section = "";
     let has_test = actions
         .iter()
-        .any(|(_, action)| matches!(action, Action::Test { .. }));
+        .any(|(_, action)| matches!(action, Action::Test { .. } | Action::Program { .. }));
     for (line, action) in actions {
         let step = || -> Result<()> {
             match action {
+                Action::Section(title) => section = title,
+                Action::Program { verb, body } => {
+                    // Commands wait for completion. Queue the exact body before starting
+                    // the line editor, including its dot-stuffing convention.
+                    for text in body.lines() {
+                        let input = if text.starts_with('.') {
+                            format!(".{text}")
+                        } else {
+                            text.to_owned()
+                        };
+                        runner.provide_input(&player, &input)?;
+                    }
+                    runner.provide_input(&player, ".")?;
+                    runner.command(&player, format!("@program {verb}"))?;
+                }
+                Action::Output(expectation) => {
+                    check_output(runner.read_line(&player)?, &expectation)?;
+                }
+                Action::TextWithin(seconds, text) => {
+                    let actual =
+                        runner.read_line_with_timeout(&player, Duration::from_secs(seconds))?;
+                    check_output(actual, &Expectation::Exact(text))?;
+                }
                 Action::Player(name) => {
                     player = runner.select_connection(name)?;
                 }
@@ -256,17 +320,10 @@ fn execute<R: SessionRunner>(runner: &mut R, actors: &Actors, source: &str) -> R
                     }
                     for (number, expectation) in expected {
                         match expectation {
-                            Expectation::Exact(text) | Expectation::Contains(text) => {
+                            Expectation::Exact(_) | Expectation::Contains(_) => {
                                 let actual = runner.read_line(&player)?;
-                                let matched = match expectation {
-                                    Expectation::Exact(_) => actual.as_deref() == Some(text),
-                                    _ => actual.as_ref().is_some_and(|line| line.contains(text)),
-                                };
-                                if !matched {
-                                    return Err(eyre!(
-                                        "line {number}: expected {expectation:?}, got {actual:?}"
-                                    ));
-                                }
+                                check_output(actual, &expectation)
+                                    .wrap_err_with(|| format!("line {number}"))?;
                             }
                             Expectation::Value(text) => {
                                 let actual = result(runner, &player, kind)?;
@@ -284,7 +341,13 @@ fn execute<R: SessionRunner>(runner: &mut R, actors: &Actors, source: &str) -> R
             }
             Ok(())
         };
-        step().wrap_err_with(|| format!("scenario line {line}"))?;
+        step().wrap_err_with(|| {
+            if section.is_empty() {
+                format!("scenario line {line}")
+            } else {
+                format!("scenario line {line} ({section})")
+            }
+        })?;
     }
     if !has_test {
         return Err(eyre!("scenario contains no command or eval steps"));
@@ -292,10 +355,27 @@ fn execute<R: SessionRunner>(runner: &mut R, actors: &Actors, source: &str) -> R
     Ok(())
 }
 
+fn check_output(actual: Option<String>, expected: &Expectation<'_>) -> Result<()> {
+    let matched = match expected {
+        Expectation::Exact(text) => actual.as_deref() == Some(*text),
+        Expectation::Contains(text) => actual.as_ref().is_some_and(|line| line.contains(text)),
+        Expectation::Value(_) => unreachable!("value expectations use task results"),
+    };
+    if !matched {
+        return Err(eyre!("expected {expected:?}, got {actual:?}"));
+    }
+    Ok(())
+}
+
 pub fn run<R: SessionRunner>(runner: &mut R, actors: &Actors, path: &Path) -> Result<()> {
     eprintln!("Test definition: {}", path.display());
     let source = std::fs::read_to_string(path).wrap_err_with(|| path.display().to_string())?;
-    execute(runner, actors, &source).wrap_err_with(|| path.display().to_string())
+    if path.extension().is_some_and(|ext| ext == "md") {
+        let actions = parse_markdown(&source).wrap_err_with(|| path.display().to_string())?;
+        execute_actions(runner, actors, actions).wrap_err_with(|| path.display().to_string())
+    } else {
+        execute(runner, actors, &source).wrap_err_with(|| path.display().to_string())
+    }
 }
 
 #[cfg(test)]
@@ -317,6 +397,36 @@ mod tests {
     }
 
     #[test]
+    fn delayed_text_has_a_bounded_timeout_and_checks_the_next_line() {
+        for spec in [
+            "@text-within 0 text",
+            "@text-within 31 text",
+            "@text-within NaN text",
+            "@text-within 5",
+        ] {
+            assert!(parse(spec).is_err(), "{spec}");
+        }
+        let mut runner = Runner {
+            output: VecDeque::from(["reminder".into()]),
+            ..Default::default()
+        };
+        execute(&mut runner, &actors(), "% command\n@text-within 5 reminder").unwrap();
+        let mut runner = Runner {
+            output: VecDeque::from(["wrong recipient".into(), "reminder".into()]),
+            ..Default::default()
+        };
+        assert!(execute(&mut runner, &actors(), "% command\n@text-within 5 reminder").is_err());
+        assert!(
+            execute(
+                &mut Runner::default(),
+                &actors(),
+                "% command\n@text-within 5 reminder"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn connection_directives_reject_incomplete_or_extra_arguments() {
         assert!(
             parse("@attach second nonprogrammer\n@detach second\n@reassign second programmer")
@@ -334,10 +444,10 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Runner {
-        calls: Vec<(Obj, String)>,
-        output: VecDeque<String>,
-        value: Option<String>,
+    pub(super) struct Runner {
+        pub(super) calls: Vec<(Obj, String)>,
+        pub(super) output: VecDeque<String>,
+        pub(super) value: Option<String>,
     }
     impl MootRunner for Runner {
         type Value = String;
@@ -379,6 +489,9 @@ mod tests {
         }
     }
     impl SessionRunner for Runner {
+        fn read_line_with_timeout(&mut self, player: &Obj, _: Duration) -> Result<Option<String>> {
+            self.read_line(player)
+        }
         fn select_connection(&mut self, name: &str) -> Result<Obj> {
             actor_object(&actors(), name)
         }
@@ -395,7 +508,7 @@ mod tests {
             Ok(())
         }
     }
-    fn actors() -> Actors {
+    pub(super) fn actors() -> Actors {
         Actors {
             wizard: Obj::mk_id(1),
             programmer: Obj::mk_id(2),
