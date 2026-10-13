@@ -37,9 +37,16 @@ use those records. They are not another implemented kind of world object. Their 
 be justified by the reuse examples and can use the existing reaction and object facilities.
 
 Container and item operations now share checked entry points. Actions have named arguments and
-explicit results. Hosts can declare typed state and named, cancelable timers. The builder authoring
-commands remain subsequent work. The proposed definition and instance records below still do not
-describe the runtime storage.
+explicit results. Hosts can declare typed state and named, cancelable timers. Builders use
+`@reaction`, `@state`, `@rule`, and `@facts`. These commands edit the existing signed reaction
+values, state properties, and relation objects. They do not create definition or instance objects.
+
+A reaction stores its parameter values and types, state types, selection mode, trace setting, and
+ordered effects. Copying it installs a disabled snapshot on another host. Declared state starts from
+its initial values on a new host. Existing compatible state on the destination is preserved.
+
+The grouped definition and instance records below remain a proposal, not runtime storage. The
+current commands reuse individual reactions and require no corresponding object hierarchy.
 
 ## Definition, instance, and authorization
 
@@ -208,7 +215,8 @@ Ordering supports scalar values, with one declared type per binding. Object orde
 identity, never the display string. `once` requires an empty order. Selection happens before the
 first effect in that reaction. Each effect still checks current authority and operation state.
 
-Reactions run in definition order. Effects run in list order. A later reaction observes preceding
+The proposed grouped record preserves definition order. Current installed reactions instead run in
+property-name order within an event. Effects run in list order. A later reaction observes preceding
 state changes. A denial or error stops the current reaction's remaining effects and ends that
 dispatch. It cannot be reported as successful execution.
 
@@ -243,6 +251,38 @@ Relations use exact value equality for tuple identity. Repeated assertion return
 Legacy reads already remove duplicates from results. The first mutation collapses duplicate storage
 and rebuilds indexes, retaining an original identity for each fact. Owners can call `repair()`
 explicitly before that first mutation. Repair does not suspend or commit partial batches.
+
+## Implemented authoring commands
+
+The builder command service is `$builder_features:author(command, text, actor)`. It authenticates
+the actor and requires builder rights and ownership. Commands and the `author_reaction` tool call
+this same service. The command grammar produces the shared condition tree and effect values. It
+never evaluates MOO code.
+
+`@reaction OBJECT NAME after EVENT` creates a disabled reaction. `if`, `then`, `step`, and
+`remove-step` edit its condition and ordered effects. `with` supplies a typed setting. `show`
+describes all steps and their arguments. `check` validates the definition. `enable`, `disable`, and
+`remove` change its installation. `copy to OBJECT` creates an independent disabled snapshot.
+
+`select once` runs once after any match without exposing selected values to steps. `select one`
+requires exactly one distinct match. `select each by NAME ...` processes all matches in an explicit
+order. Searches must complete within 256 results. Text ordering preserves case; object ordering uses
+identity. An incomplete search performs no effects.
+
+`@state` declares numbers, text, flags, object references, or named choices. `@rule` edits an
+existing operation policy with the same readable conditions. `@facts` names typed relation columns
+and records or removes complete facts. Reaction `record` and `forget` steps use those schemas and
+check write authority separately from query authority. Repeated insertion remains idempotent.
+
+Help for events, steps, actions, and facts comes from the definitions used for validation. `preview`
+uses canonical read-only world and relation queries. It rejects extension predicates and does not
+invoke actions, message recipients, state transitions, or timers. It shows resolved action arguments
+and simulates direct state changes. It does not expand reactions caused by those changes or promise
+that future action permission checks will succeed.
+
+`trace on` records the event inputs, condition result, selected values, attempted steps, and a
+failure. Only the owner or a wizard can read the report. A report from an earlier installation is
+marked as such. Reports and match sets are bounded. Tracing is optional.
 
 ## Implemented operations and timers
 

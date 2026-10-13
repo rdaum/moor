@@ -615,24 +615,6 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	target
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	target_name
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	text
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	detail
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	effects
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	effects_parts
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	effects_str
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_key
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	reaction
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	target_name
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	trigger
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	trigger_display
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	trigger_str
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	when_clause
-1	features/builder_features.moo	"@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"	implicit-local	when_str
 1	features/builder_features.moo	"@audit @owned" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	count
 1	features/builder_features.moo	"@audit @owned" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	flags
 1	features/builder_features.moo	"@audit @owned" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	footer
@@ -757,15 +739,6 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@dig @tunnel" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	to_dir
 1	features/builder_features.moo	"@dig @tunnel" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	to_room_cap
 1	features/builder_features.moo	"@dig @tunnel" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	to_room_target
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_key
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	reaction
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	target_name
-1	features/builder_features.moo	"@disable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
 1	features/builder_features.moo	"@edit" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	object_str
 1	features/builder_features.moo	"@edit" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
 1	features/builder_features.moo	"@edit" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
@@ -778,15 +751,6 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	session_id
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_key
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	reaction
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	target_name
-1	features/builder_features.moo	"@enable-reaction" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
 1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	display_value
 1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	entries
 1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	header
@@ -883,25 +847,6 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@passage @passage-info @pinfo" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	passage
 1	features/builder_features.moo	"@passage @passage-info @pinfo" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rows
 1	features/builder_features.moo	"@passage @passage-info @pinfo" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	table
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	_
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	effects_parts
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	effects_str
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	enabled_str
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	header
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	headers
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	obj_name
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	op
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	prop
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	reaction
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	reaction_props
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	rows
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	table_result
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	trigger_str
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	val
-1	features/builder_features.moo	"@reactions" (any none none) owner: HACKER flags: "rd"	implicit-local	when_str
 1	features/builder_features.moo	"@recycle @destroy" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
 1	features/builder_features.moo	"@recycle @destroy" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_id
 1	features/builder_features.moo	"@recycle @destroy" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
@@ -977,25 +922,6 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	picbin
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	result
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	_
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	effects_parts
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	effects_summary
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	enabled_str
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	op
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	p
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	reaction
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	rows
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	table
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	target_name
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	trigger_str
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	v
-1	features/builder_features.moo	"@show-reaction @showr" (any none none) owner: HACKER flags: "rd"	implicit-local	when_str
 1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	message
 1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	parsed
 1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name

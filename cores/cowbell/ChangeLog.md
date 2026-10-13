@@ -19,6 +19,16 @@ Cowbell entries.
 
 ### Changed
 
+- Builders can author reactions with `@reaction`, declare state with `@state`, set access rules with
+  `@rule`, and keep named facts with `@facts`. The commands require no programmer privileges or MOO
+  literals. Help, inspection, preview, execution reports, and copying use the same services as
+  tools.
+- New reactions start disabled. Reactions for an event run by name, and their steps run in order.
+  Match selection is explicit. Removing a reaction cancels its pending timers.
+- The `@reaction` workflow replaces the raw-list `@add-reaction` and related editing commands. The
+  `author_reaction` tool replaces the separate add and enable tools. Reinstall existing reactions
+  after upgrading their stored definitions.
+
 - Containers use the same checks and reactions for commands and actions. Taking an item directly
   also fires its container's take reaction. Viewing contents has its own `view_rule`.
 - Actions take named arguments and report success, denial, or error. Wearing and removing items now

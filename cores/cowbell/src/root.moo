@@ -9,6 +9,7 @@ object ROOT [
   readable: true
 
   property reaction_state_fields (owner: HACKER, flags: "rc") = [];
+  property reaction_reports (owner: ARCH_WIZARD, flags: "") = [];
   property reaction_timers (owner: ARCH_WIZARD, flags: "") = [];
 
   property aliases (owner: HACKER, flags: "rc") = {};

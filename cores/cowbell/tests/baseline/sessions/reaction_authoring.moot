@@ -1,0 +1,78 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; return true;
+true
+@nonprogrammer
+% @create $container named cedarbox
+~~Created
+% @create $container named sparebox
+~~Created
+% @state cedarbox visits number 0
+~~Declared visits
+% @reaction cedarbox welcome after open
+~~disabled
+% @reaction cedarbox welcome if actor is me AND visits < 2
+~~Saved
+% @reaction cedarbox welcome then add visits 1
+~~Saved
+% @reaction cedarbox welcome then announce "The cedar smells fresh."
+~~Saved
+% @reaction cedarbox welcome show
+~~Step 2: announce
+% @reaction cedarbox welcome preview actor=me
+~~Would run step 1
+% @state cedarbox
+~~visits: 0
+% @reaction cedarbox welcome then explode everything
+~~Unknown step
+% @reaction cedarbox welcome step 2 announce "A cedar scent escapes."
+~~Saved
+% @reaction cedarbox welcome trace on
+~~Saved
+% @reaction cedarbox welcome check
+~~Valid: welcome
+% @reaction cedarbox welcome enable
+~~enabled
+% close cedarbox
+~~close
+% open cedarbox
+~~A cedar scent escapes.
+~~open
+% @state cedarbox
+~~visits: 1
+% @reaction cedarbox welcome trace
+~~Step 2: completed
+% @reaction cedarbox welcome copy to sparebox
+~~disabled
+% @state sparebox
+~~visits: 0
+% @reaction cedarbox welcome disable
+~~disabled
+% close cedarbox
+~~close
+% open cedarbox
+~~open
+% @state cedarbox
+~~visits: 1
+% @reaction cedarbox welcome remove
+~~Removed welcome
+% @reaction cedarbox
+~~No reactions
+% @rule sparebox open actor is me
+~~Set open rule
+% @rule sparebox open show
+~~actor is
+% @reaction help
+~~New reactions start disabled
+% @reaction actions
+~~do
+% @reaction #90101 forbidden after open
+~~do not own
+@wizard
+; return !#90102.programmer && !#90102.wizard;
+true
+@nonprogrammer
+% help @reaction
+~~@reaction

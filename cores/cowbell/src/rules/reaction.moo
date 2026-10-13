@@ -23,7 +23,9 @@ object REACTION [
     'trigger,
     'schedule,
     'cancel,
-    'action
+    'action,
+    'record,
+    'forget
   };
   property event_triggers (owner: HACKER, flags: "rc") = {
     'on_get,
@@ -37,6 +39,8 @@ object REACTION [
     'on_enter,
     'on_exit,
     'on_pet,
+    'on_consume,
+    'on_empty,
     'on_wear,
     'on_remove,
     'on_sit,
@@ -185,6 +189,9 @@ object REACTION [
       if (effect.type == 'action)
         const schema = $reaction:action_schemas()[effect.action];
         $behavior_schema:_arguments(effect.arguments, schema['inputs], scope, "action " + tostr(effect.action), 0);
+      elseif (effect.type in {'record, 'forget})
+        $behavior_schema:_arguments(effect.arguments, $rule_engine:fact_fields(effect.name), scope,
+          "fact " + tostr(effect.name), 0);
       elseif (effect.type == 'schedule)
         $reaction:_validate_effects({effect.effect}, scope, depth + 1);
       endif
@@ -283,6 +290,10 @@ object REACTION [
       return <$reaction, .type = 'cancel, .name = name>;
     endif
     const {_, name, arguments} = spec;
+    if (kind in {'record, 'forget})
+      $behavior_schema:_fields(arguments, mapkeys($rule_engine:fact_fields(name)), {}, "fact fields");
+      return <$reaction, .type = kind, .name = name, .arguments = arguments>;
+    endif
     const schemas = $reaction:action_schemas();
     maphaskey(schemas, name) || raise(E_INVARG, "Unknown action: " + tostr(name));
     $behavior_schema:_fields(arguments, mapkeys(schemas[name]['inputs]), {}, "action arguments");
@@ -304,15 +315,47 @@ object REACTION [
       effects = {@effects, parsed};
     endfor
     const state_types = `value.state_types ! E_PROPNF => []';
+    const parameters = `value.parameters ! E_PROPNF => []';
+    const parameter_types = `value.parameter_types ! E_PROPNF => []';
+    $behavior_schema:bindings(parameters, parameter_types, "reaction settings");
+    $behavior_schema:_type(value.enabled, 'boolean, "reaction enabled");
+    $behavior_schema:_type(`value.trace ! E_PROPNF => false', 'boolean, "reaction trace");
+    const selection = `value.selection ! E_PROPNF => ['mode -> 'one, 'order -> {}, 'limit -> 256]';
+    $behavior_schema:_fields(selection, {'mode, 'order, 'limit}, {}, "selection");
+    selection['mode] in {'once, 'one, 'each} || raise(E_INVARG, "Choose once, one, or each.");
+    typeof(selection['order]) == TYPE_LIST || raise(E_TYPE);
+    (typeof(selection['limit]) == TYPE_INT && selection['limit] > 0 && selection['limit] <= 256)
+      || raise(E_INVARG, "Match limit must be between 1 and 256.");
     let scope = $rule_engine:trigger_scope(value.trigger, state_types);
+    scope['parameter] = parameter_types;
     if (value.when != 0)
-      const checked = $rule_engine:validate_rule(value.when);
+      const checked = $rule_engine:validate_rule(value.when, scope);
       checked['valid] || raise(E_INVARG, checked['warnings]:join("; "));
       scope['binding] = checked['bindings];
     endif
+    for field in (selection['order])
+      maphaskey(scope['binding], field) || raise(E_INVARG, "Unknown match name: " + tostr(field));
+      scope['binding][field] in {'object, 'integer, 'float, 'string, 'symbol, 'boolean}
+        || raise(E_INVARG, "Match ordering needs simple values.");
+    endfor
+    if (length(selection['order]) > 0)
+      length(scope['binding]) == length(selection['order])
+        || raise(E_INVARG, "Order every match name to make selection predictable.");
+      let seen = {};
+      for field in (selection['order])
+        !(field in seen) || raise(E_INVARG, "Each match name can appear only once in the order.");
+        seen = {@seen, field};
+      endfor
+    endif
+    if (selection['mode] == 'once)
+      length(selection['order]) == 0 || raise(E_INVARG, "Select once does not order or expose matches.");
+      scope['binding] = [];
+    endif
     $reaction:_validate_effects(effects, scope);
     return <$reaction, .trigger = value.trigger, .when = value.when, .effects = effects,
-      .state_types = state_types, .enabled = value.enabled, .fired_at = 0>;
+      .state_types = state_types, .parameters = parameters, .parameter_types = parameter_types,
+      .selection = selection, .trace = `value.trace ! E_PROPNF => false',
+      .enabled = value.enabled, .fired_at = 0>;
   endmethod
 
   method install owner: ARCH_WIZARD
@@ -334,6 +377,14 @@ object REACTION [
     const claims = ['kind -> "cowbell.reaction", 'installation -> encode_base64(encode_cbor(snapshot))];
     reaction.authorization = paseto_make_local(claims);
     set_task_perms(principal);
+    for state_name in (mapkeys(reaction.state_types))
+      const field_name = tostr(state_name);
+      const inherited = `is_clear_property(host, field_name) ! E_INVARG => false';
+      if (inherited && index(property_info(host, field_name)[2], "c") > 0)
+        host.(field_name) = host.reaction_state_fields[state_name]['initial];
+      endif
+    endfor
+    host.reaction_state_fields = host.reaction_state_fields;
     if ($obj_utils:property_key(host, name) == E_PROPNF)
       add_property(host, name, reaction, {principal, "r"});
     else
@@ -385,7 +436,7 @@ object REACTION [
     set_task_perms(principal);
     const field = tostr(name);
     if ($obj_utils:property_key(host, field) == E_PROPNF)
-      add_property(host, field, initial, {host.owner, "r"});
+      add_property(host, field, initial, {host.owner, "rc"});
     else
       $reaction:_check_state_value(host.(field), ['type -> type, 'choices -> choices]);
     endif
@@ -438,7 +489,7 @@ object REACTION [
     typeof(property) == TYPE_SYM || typeof(property) == TYPE_STR || raise(E_INVARG);
     const name = tostr(property);
     "Built-in identity and security properties are not behavioral state.";
-    name in {"name", "owner", "location", "contents", "programmer", "wizard", "r", "w", "f", "readable", "writable", "fertile", "reaction_state_fields", "reaction_timers"} && raise(E_PERM, "Reaction effects cannot change built-in object properties");
+    name in {"name", "owner", "location", "contents", "programmer", "wizard", "r", "w", "f", "readable", "writable", "fertile", "reaction_state_fields", "reaction_timers", "reaction_reports"} && raise(E_PERM, "Reaction effects cannot change built-in object properties");
     typeof(context) == TYPE_MAP || raise(E_INVARG);
     set_task_perms(principal);
     const old_value = host.(name);
@@ -481,7 +532,8 @@ object REACTION [
     if (!maphaskey(context, 'Location))
       context['Location] = isa(host, $room) ? host | host.location;
     endif
-    const installed = $root:_get_reactions_for(host, $arch_wizard, true);
+    const definitions = $root:_get_reactions_for(host, $arch_wizard, true);
+    const installed = sort(definitions, {tostr(entry[1]) for entry in (definitions)});
     length(installed) <= 64 || raise(E_QUOTA, "This object has more than 64 reactions.");
     for entry in (installed)
       const {property, reaction} = entry;
@@ -538,7 +590,7 @@ object REACTION [
   method _cancel_installation_timers owner: ARCH_WIZARD
     "Cancel timers belonging to the reaction being replaced or disabled.";
     const source = callers()[1];
-    source[4] == $reaction && source[2] == "install" || raise(E_PERM);
+    source[4] == $reaction && source[2] in {"install", "remove"} || raise(E_PERM);
     const {host, property} = args;
     for name in (mapkeys(host.reaction_timers))
       if (host.reaction_timers[name]['property] == tostr(property))
@@ -576,7 +628,7 @@ object REACTION [
   endmethod
 
   method _resume_timer owner: ARCH_WIZARD
-    "Consume only the current timer, recheck its owner, location, installation, and condition, then act.";
+    "Consume the current timer, recheck its installation and selected values, and report its outcome.";
     const source = callers()[1];
     source[4] == $reaction && source[2] == "_schedule" || raise(E_PERM);
     const {host, name, token} = args;
@@ -585,24 +637,44 @@ object REACTION [
     const timer = host.reaction_timers[name];
     timer['token] == token || return false;
     host.reaction_timers = mapdelete(host.reaction_timers, name);
-    (host.owner == timer['owner] && host.owner.wizard == timer['wizard]
-      && host.location == timer['location]) || return false;
-    const installation = timer['installation];
-    if (installation != 0)
-      $reaction:_authority(host, installation[2], installation[3]) == host.owner || return false;
-    endif
+    (host.owner == timer['owner] && host.owner.wizard == timer['wizard]) || return false;
     set_task_perms(host.owner);
-    let environment = timer['environment];
-    environment['state] = $reaction:state_values(host);
-    if (installation != 0 && installation[3].when != 0)
-      const result = $rule_engine:evaluate(installation[3].when, environment['input], [], environment['state]);
-      result['success] || return false;
-      environment['binding] = result['bindings];
+    const installation = timer['installation];
+    const label = "Timer " + tostr(name) + ": ";
+    if (host.location != timer['location])
+      $reaction:_timer_trace(host, timer, label + "skipped because the object moved.");
+      return false;
     endif
-    if (installation == 0)
-      return $reaction:execute_effect(timer['effect], timer['context], host, 0, environment);
+    if (installation != 0 && $reaction:_authority(host, installation[2], installation[3]) != host.owner)
+      $reaction:_timer_trace(host, timer, label + "skipped because the installation changed.");
+      return false;
     endif
-    return $reaction:_run_installed(host, installation[2], installation[3], timer['context], timer['effect], environment);
+    try
+      let environment = timer['environment];
+      environment['state] = $reaction:state_values(host);
+      if (installation != 0 && installation[3].when != 0)
+        const rows = $reaction:_select(installation[3], environment['input]);
+        let still_selected = false;
+        for row in (rows)
+          equal(row, environment['binding]) && (still_selected = true);
+        endfor
+        if (!still_selected)
+          $reaction:_timer_trace(host, timer, label + "skipped because the condition or selected objects changed.");
+          return false;
+        endif
+      endif
+      let result;
+      if (installation == 0)
+        result = $reaction:execute_effect(timer['effect], timer['context], host, 0, environment);
+      else
+        result = $reaction:_run_installed(host, installation[2], installation[3], timer['context], timer['effect], environment);
+      endif
+      $reaction:_timer_trace(host, timer, label + "finished.");
+      return result;
+    except problem (ANY)
+      $reaction:_timer_trace(host, timer, label + "failed: " + problem[2]);
+      raise(problem[1], problem[2], problem[3]);
+    endtry
   endmethod
 
   method _run_installed owner: ARCH_WIZARD
@@ -625,9 +697,9 @@ object REACTION [
     "Compare two values using one of the configured comparison operator symbols.";
     {left, op, right} = args;
     if (op == 'eq)
-      return left == right;
+      return equal(left, right);
     elseif (op == 'ne)
-      return left != right;
+      return !equal(left, right);
     elseif (op == 'gt)
       return left > right;
     elseif (op == 'lt)
@@ -649,37 +721,64 @@ object REACTION [
   endmethod
 
   method execute owner: ARCH_WIZARD
-    "Execute this reaction in the given context if its when clause succeeds.";
-    "Context is map: ['Actor -> player, 'This -> object, 'Key -> iobj, ...]";
-    "Returns false when a when clause fails, otherwise true after all effects run.";
+    "Run ordered effects for the selected matches. Trace a skip, completed steps, and a failing step.";
     set_task_perms(caller_perms());
     const {initial_context, ?installation = 0} = args;
     if (installation != 0)
       const source = callers()[1];
       source[4] == $reaction && source[2] == "_run_installed" || raise(E_PERM);
     endif
-    let context = initial_context;
-    let environment = ['input -> initial_context, 'parameter -> [],
-      'state -> $reaction:state_values(initial_context['This]), 'binding -> []];
-    "A zero when clause means the reaction is unconditional.";
-    if (this.when != 0)
-      const result = $rule_engine:evaluate(this.when, context, [], environment['state]);
-      if (!result['success])
-        return false;
+    const host = initial_context['This];
+    const recording = installation != 0 && `this.trace ! E_PROPNF => false';
+    let input_parts = {};
+    for field in (recording ? mapkeys(initial_context) | {})
+      if (!tostr(field):starts_with("_"))
+        input_parts = {@input_parts, tostr(field) + "=" + $builder_features:_author_value_text(
+          ['kind -> 'literal, 'value -> initial_context[field]])};
       endif
-      "Merge any new bindings into context";
-      if (maphaskey(result, 'bindings))
-        context = mapmerge(context, result['bindings]);
-        environment['binding] = result['bindings];
-      endif
-    endif
-    "Execute each effect";
-    const target = context['This];
-    for effect in (this.effects)
-      environment['state] = $reaction:state_values(target);
-      $reaction:execute_effect(effect, context, target, installation, environment);
     endfor
-    return true;
+    let report = {"Event: " + $builder_features:_author_trigger_text(this.trigger),
+      "Inputs: " + input_parts:join(", ")};
+    let step = 0;
+    try
+      if (recording)
+        report = {@report, "If: " + (this.when == 0 ? "always" | $builder_features:_author_condition_text(this.when.condition))};
+        const state = $reaction:state_values(host);
+        for state_name in (mapkeys(state))
+          report = {@report, "Current " + tostr(state_name) + ": " + $builder_features:_author_value_text(
+            ['kind -> 'literal, 'value -> state[state_name]])};
+        endfor
+      endif
+      const rows = $reaction:_select(this, initial_context);
+      report = {@report, "Condition: " + (length(rows) > 0 ? "matched" | "did not match"),
+        "Selected matches: " + tostr(length(rows))};
+      for row in (rows)
+        let environment = ['input -> initial_context, 'parameter -> `this.parameters ! E_PROPNF => []',
+          'state -> $reaction:state_values(host), 'binding -> row];
+        const context = mapmerge(row, initial_context);
+        for selected in (recording ? mapkeys(row) | {})
+          report = {@report, "Selected " + tostr(selected) + ": " + $builder_features:_author_value_text(
+            ['kind -> 'literal, 'value -> row[selected]])};
+        endfor
+        for i in [1..length(this.effects)]
+          step = i;
+          environment['state] = $reaction:state_values(host);
+          if (recording)
+            report = {@report, "Step " + tostr(i) + ": " + $builder_features:_author_step_text(this.effects[i], environment)};
+          endif
+          const result = $reaction:execute_effect(this.effects[i], context, host, installation, environment);
+          recording && (report = {@report, "Step " + tostr(i) + ": completed"});
+          length(report) > 80 && (report = {report[1], @report[$ - 78..$]});
+        endfor
+      endfor
+      recording && $reaction:_record_trace(host, installation[2], report, installation[3]);
+      return length(rows) > 0;
+    except error (ANY)
+      report = {@report, (step == 0 ? "Stopped before the first step: "
+        | "Stopped at step " + tostr(step) + ": ") + error[2]};
+      recording && $reaction:_record_trace(host, installation[2], report, installation[3]);
+      raise(error[1], "Reaction " + (installation == 0 ? "" | tostr(installation[2])) + ": " + error[2], error[3]);
+    endtry
   endmethod
 
   method _resolve_msg owner: ARCH_WIZARD
@@ -733,7 +832,7 @@ object REACTION [
       "Announce to actor's room - actor is the player, dobj is the reacting object";
       const msg = this:_resolve_msg(effect.msg, target);
       const event = $event:mk_info(actor, @msg):with_dobj(target);
-      const room = isa(actor, $player) ? actor.location | target.location;
+      const room = `context['Location] ! E_RANGE => target.location';
       if (valid(room) && isa(room, $room))
         room:announce(event);
       endif
@@ -741,7 +840,7 @@ object REACTION [
       "Object 'does' something - auto-prefix target name like emote command";
       const msg = this:_resolve_msg(effect.msg, target);
       const event = $event:mk_emote(target, target.name, " ", @msg):with_dobj(actor);
-      const room = isa(actor, $player) ? actor.location | target.location;
+      const room = `context['Location] ! E_RANGE => target.location';
       if (valid(room) && isa(room, $room))
         room:announce(event);
       endif
@@ -765,11 +864,14 @@ object REACTION [
       return $reaction:_schedule(target, effect.name, effect.seconds, effect.effect, context, installation, environment);
     elseif (effect.type == 'cancel)
       return $reaction:cancel_timer(target, effect.name);
-    elseif (effect.type == 'action)
+    elseif (effect.type in {'action, 'record, 'forget})
       let values = [];
       for name in (mapkeys(effect.arguments))
         values[name] = $condition:resolve(effect.arguments[name], environment);
       endfor
+      if (effect.type in {'record, 'forget})
+        return $rule_engine:change_fact(effect.name, values, effect.type);
+      endif
       const result = $reaction:perform_action(effect.action, values, context);
       if (result['status] == 'error)
         const error = result['error];
@@ -1001,5 +1103,129 @@ object REACTION [
     $test_utils:assert_raises(E_INVARG, $reaction, "mk", {'probe, 0,
       {{'action, 'unlock, mapdelete(arguments, 'key)}}}, "A missing key is an authoring error");
     return true;
+  endmethod
+  method author_scope owner: HACKER
+    "Describe the values available to this reaction's conditions and steps.";
+    const {reaction} = args;
+    let scope = $rule_engine:trigger_scope(reaction.trigger, reaction.state_types);
+    scope['parameter] = `reaction.parameter_types ! E_PROPNF => []';
+    if (reaction.when != 0)
+      scope['binding] = $rule_engine:validate_rule(reaction.when)['bindings];
+    endif
+    return scope;
+  endmethod
+
+  method _select owner: ARCH_WIZARD
+    "Evaluate a complete condition and apply an explicit, deterministic match selection.";
+    set_task_perms(caller_perms());
+    const {reaction, context, ?preview = false} = args;
+    const parameters = `reaction.parameters ! E_PROPNF => []';
+    const state = $reaction:state_values(context['This]);
+    let rows = {[]};
+    if (reaction.when != 0)
+      const result = $rule_engine:evaluate(reaction.when, context, parameters, state, preview);
+      rows = result['success] ? {result['bindings], @result['alternatives]} | {};
+    endif
+    const selection = `reaction.selection ! E_PROPNF => ['mode -> 'one, 'order -> {}, 'limit -> 256]';
+    if (selection['mode] == 'once)
+      return length(rows) > 0 ? {[]} | {};
+    endif
+    if (selection['mode] == 'one && length(rows) > 1)
+      raise(E_INVARG, "Expected one match, but found " + tostr(length(rows))
+        + ". Narrow the condition, or use select each by NAME.");
+    endif
+    if (length(rows) > 1)
+      length(selection['order]) > 0 || raise(E_INVARG, "Choose the match order with select each by NAME.");
+      rows = $reaction:_order_matches(rows, selection['order]);
+    endif
+    length(rows) <= selection['limit] || raise(E_QUOTA, "More matches than the reaction's limit. Narrow its condition.");
+    return selection['mode] == 'one && length(rows) > 0 ? {rows[1]} | rows;
+  endmethod
+
+  method _order_matches owner: HACKER
+    "Merge-sort at most 256 bindings with exact text ordering and stable scalar keys.";
+    const {rows, order} = args;
+    length(rows) <= 1 && return rows;
+    const midpoint = length(rows) / 2;
+    const left = $reaction:_order_matches(rows[1..midpoint], order);
+    const right = $reaction:_order_matches(rows[midpoint + 1..$], order);
+    let a = 1;
+    let b = 1;
+    let result = {};
+    while (a <= length(left) && b <= length(right))
+      let comparison = 0;
+      for field in (order)
+        const first = left[a][field];
+        const second = right[b][field];
+        if (!equal(first, second))
+          comparison = typeof(first) in {TYPE_STR, TYPE_SYM} ? strcmp(tostr(first), tostr(second))
+            | (first < second ? -1 | 1);
+          break;
+        endif
+      endfor
+      if (comparison <= 0)
+        result = {@result, left[a]};
+        a = a + 1;
+      else
+        result = {@result, right[b]};
+        b = b + 1;
+      endif
+    endwhile
+    return {@result, @left[a..$], @right[b..$]};
+  endmethod
+
+  method remove owner: ARCH_WIZARD
+    "Remove an owned reaction and cancel its timers before returning.";
+    const {host, property} = args;
+    const principal = caller_perms();
+    (principal == host.owner || principal.wizard) || raise(E_PERM, "You do not own that object.");
+    const name = tostr(property);
+    name:ends_with("_reaction") || raise(E_INVARG);
+    typeof(host.(name)) == TYPE_FLYWEIGHT && host.(name).delegate == $reaction || raise(E_INVARG);
+    set_task_perms(principal);
+    delete_property(host, name);
+    $reaction:_cancel_installation_timers(host, name);
+  endmethod
+
+  method _record_trace owner: ARCH_WIZARD
+    "Store the latest bounded execution report. Only the canonical executor can write it.";
+    const source = callers()[1];
+    source[4] == $reaction && source[2] in {"execute", "_timer_trace"} || raise(E_PERM);
+    const {host, property, report, definition} = args;
+    const principal = caller_perms();
+    (host.owner == principal || principal.wizard) || return false;
+    let reports = host.reaction_reports;
+    if (length(reports) >= 64 && !maphaskey(reports, property))
+      reports = [];
+    endif
+    reports[tostr(property)] = ['lines -> report, 'definition -> definition];
+    host.reaction_reports = reports;
+    return true;
+  endmethod
+
+  method report owner: ARCH_WIZARD
+    "Read one execution report as the host's owner or a wizard.";
+    const {host, property} = args;
+    const principal = caller_perms();
+    (host.owner == principal || principal.wizard) || raise(E_PERM, "Only the owner can read execution reports.");
+    const record = `host.reaction_reports[tostr(property)] ! E_RANGE => 0';
+    record == 0 && return {};
+    const current = `host.(tostr(property)) ! E_PROPNF => 0';
+    return equal(current, record['definition]) ? record['lines]
+      | {"This report is from an earlier version of the reaction.", @record['lines]};
+  endmethod
+  method _timer_trace owner: ARCH_WIZARD
+    "Append a timer outcome to its installed reaction's report without exposing another owner's data.";
+    const source = callers()[1];
+    source[4] == $reaction && source[2] == "_resume_timer" || raise(E_PERM);
+    const {host, timer, line} = args;
+    const installation = timer['installation];
+    installation == 0 && return;
+    `installation[3].trace ! E_PROPNF => false' || return;
+    host.owner == timer['owner] || return;
+    const old = `host.reaction_reports[tostr(installation[2])] ! E_RANGE => 0';
+    const lines = old != 0 && equal(old['definition], installation[3]) ? old['lines] | {};
+    set_task_perms(host.owner);
+    $reaction:_record_trace(host, installation[2], {@lines[max(1, length(lines) - 78)..$], line}, installation[3]);
   endmethod
 endobject
