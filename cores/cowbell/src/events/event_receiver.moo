@@ -316,9 +316,12 @@ object EVENT_RECEIVER [
     this.location == room || return;
     const view = typeof(captured) == TYPE_MAP ? captured | this:_capture_room(room);
     view['viewer] == this && view['room_ref] == room || raise(E_INVARG, "Room view mismatch");
+    view['exit_revision] == room.exit_revision || return false;
     const snapshot = $look:panel(view);
     this.location == room || return;
+    view['exit_revision] == room.exit_revision || return false;
     emit_data(this, 'state, 'room_snapshot, snapshot);
+    return true;
   endmethod
 
   method test_can_inform_as_checks_explicit_authority owner: HACKER

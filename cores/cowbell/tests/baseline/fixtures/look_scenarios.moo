@@ -107,6 +107,7 @@ object LOOK_SCENARIOS
       item.integrated_description = "A bell hangs here";
       move(item, room);
       let input = room:look_self();
+      input.exit_options = {['label -> "east", 'caption -> "east", 'descriptor -> [], 'ambient -> true]};
       input.ambient_passages = {{"an east door", 'fragment, "east"}, {"Light shines.", 'sentence}};
       input.actions = {{"ring bell", "Ring *bell*"}};
       const view = input:capture(#90102);

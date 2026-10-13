@@ -905,9 +905,6 @@ object PASSAGE [
       context['Direction] = room == passage.side_a_room ? passage.side_a_label | passage.side_b_label;
       $reaction:_dispatch(room, tosym("on_passage_" + tostr(operation)), context);
     endfor
-    for room in ({from_room, destination})
-      $room:refresh_snapshots(room);
-    endfor
     set_task_perms(principal);
     const custom = updated.(tostr(operation) + "_msg");
     let parts = typeof(custom) == TYPE_LIST ? custom | (typeof(custom) == TYPE_FLYWEIGHT

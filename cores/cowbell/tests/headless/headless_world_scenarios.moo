@@ -511,6 +511,7 @@ object HEADLESS_WORLD_SCENARIOS
       move(source, area);
       move(destination, area);
       let passage = $passage:mk(source, "east", {"e"}, "", false, destination, "west", {"w"}, "", false);
+      passage.is_door = true;
       passage = area:set_passage(source, destination, passage);
       const descriptor = source:exit_annotation("east");
       $test_utils:assert_eq(descriptor["command"], "go east", "Cowbell supplies the precise normal command");
@@ -520,7 +521,8 @@ object HEADLESS_WORLD_SCENARIOS
       const snapshot = source:room_snapshot(player);
       $test_utils:assert_eq(mapvalues(snapshot["annotations"])[1], descriptor, "pinned room uses the same command descriptor");
       area:update_passage(source, destination, passage:with_open(false));
-      $test_utils:assert_eq(source:exit_annotation("east"), descriptor, "door state does not change identity");
+      $test_utils:assert_eq(source:exit_annotation("east")["exit"], descriptor["exit"], "door state does not change identity");
+      $test_utils:assert_eq(source:exit_annotation("east")["command"], "open east", "closed doors offer opening");
       passage = area:set_passage(source, destination, passage);
       $test_utils:assert_true(source:exit_annotation("east")["exit"]["passage"] != descriptor["exit"]["passage"], "replacement has a new semantic identity");
     finally

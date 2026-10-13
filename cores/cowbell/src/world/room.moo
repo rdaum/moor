@@ -15,6 +15,7 @@ object ROOM [
   property acoustic_neighbors (owner: HACKER, flags: "rc") = [];
   property engagements (owner: HACKER, flags: "rc") = [];
   property passage_areas (owner: ARCH_WIZARD, flags: "r") = {};
+  property exit_revision (owner: ARCH_WIZARD, flags: "r") = 0;
 
   override description (owner: HACKER, flags: "rc") = "Parent prototype for all rooms in the system, defining room behavior and event broadcasting.";
 
@@ -377,13 +378,12 @@ object ROOM [
   method look_self owner: ARCH_WIZARD
     "Collect authored room content, passages, and actions from one contents list.";
     set_task_perms(caller_perms());
+    const revision = this.exit_revision;
     let look = pass(@args);
-    const area = this.location;
-    if (valid(area) && respond_to(area, 'get_exit_info))
-      const {exits, ambient} = area:get_exit_info(this);
-      look.exits = exits;
-      look.ambient_passages = ambient;
-    endif
+    look.exit_revision = revision;
+    look.exit_options = $room:exit_options(this, player);
+    look.ambient_passages = {{option['description], option['prose_style],
+      option['label], option['destination]} for option in (look.exit_options) if (option['ambient])};
     let actions = {};
     for item in (flycontents(look))
       const available = `item:available_actions() ! E_VERBNF => {}';
@@ -392,6 +392,51 @@ object ROOM [
     endfor
     look.actions = actions;
     return look;
+  endmethod
+
+  method exit_options owner: ARCH_WIZARD
+    "List visible connections, including closed doors, independently of the containing area.";
+    "Returns maps with identity, label, caption, state, descriptor, description, and destination.";
+    "An open state permits a travel attempt; the passage still checks access when used.";
+    set_task_perms(caller_perms());
+    const {room, viewer} = args;
+    let options = {};
+    for passage in ($room:passages(room))
+      if (!$passage:allows_direction(passage, room))
+        continue;
+      endif
+      const prefix = passage.side_a_room == room ? "side_a_" | "side_b_";
+      const label = passage.(prefix + "label");
+      if (label == "")
+        continue;
+      endif
+      let state = passage.is_open ? 'open | 'closed;
+      passage.is_locked && (state = 'locked);
+      const caption = label + (state == 'open ? "" | " (" + tostr(state) + ")");
+      const description = $passage:description_content(passage, room);
+      const ambient = passage.(prefix + "ambient") && length(description) > 0;
+      options = {@options, ['identity -> passage.connection_id, 'label -> label, 'caption -> caption,
+        'state -> state, 'destination -> passage.(prefix == "side_a_" ? "side_b_room" | "side_a_room"),
+        'passage -> passage, 'descriptor -> $room:_passage_annotation(room, passage, label),
+        'description -> description, 'ambient -> ambient, 'prose_style -> passage.(prefix + "prose_style")]};
+    endfor
+    return options;
+  endmethod
+
+  method _passage_annotation owner: ARCH_WIZARD
+    "Build the action for a captured passage value. Closed doors offer an opening attempt.";
+    set_task_perms(caller_perms());
+    const {room, passage, direction} = args;
+    const destination = passage.side_a_room == room ? passage.side_b_room | passage.side_a_room;
+    valid(destination) && passage.connection_id != "" || return [];
+    const door = passage.is_door || typeof(passage.unlock_rule) == TYPE_FLYWEIGHT;
+    !passage.is_open && !door && return [];
+    const operation = passage.is_open ? "go" | "open";
+    const action = operation == "go" ? $player:command_action("go", direction)
+      | $room:command_action("open", direction);
+    return ["kind" -> "command", "command" -> operation + " " + direction, "action" -> action,
+      "exit" -> ["source" -> $url_utils:to_curie_str(room),
+        "destination" -> $url_utils:to_curie_str(destination), "passage" -> passage.connection_id]];
   endmethod
 
   method check_can_dig_from owner: ARCH_WIZARD
@@ -411,63 +456,30 @@ object ROOM [
   endmethod
 
   verb "exits ways" (none none none) owner: ARCH_WIZARD flags: "rd"
-    "List the ways out of this room.";
-    "Note: removed set_task_perms(caller_perms()) - it breaks respond_to when caller_perms is #-1";
-    "Get exits from our area";
-    area = this.location;
-    if (!valid(area) || !respond_to(area, 'get_exit_info))
-      player:inform_current($event:mk_error(player, "You don't see any obvious ways out."):with_audience('utility));
-      return;
+    "List the visible ways out, including closed doors and their current actions.";
+    caller == player || raise(E_PERM);
+    set_task_perms(player);
+    const options = $room:exit_options(this, player);
+    if (!length(options))
+      return player:inform_current($event:mk_info(player,
+        "You don't see any obvious ways out."):with_audience('utility));
     endif
-    {exit_lines, ambient_passages} = area:get_exit_info(this);
-    "Collect all exit directions - both regular exits and ambient passage labels";
-    all_exits = {@exit_lines};
-    for ap in (ambient_passages)
-      "ambient_passages format: {description, prose_style, label}";
-      if (typeof(ap) == TYPE_LIST && length(ap) >= 3)
-        label = ap[3];
-        if (label && typeof(label) == TYPE_STR)
-          all_exits = {@all_exits, label};
-        endif
-      endif
-    endfor
-    "Normalize, dedupe, and sort for readability.";
-    normalized = {};
-    for candidate_dir in (all_exits)
-      if (typeof(candidate_dir) != TYPE_STR)
-        continue;
-      endif
-      if (length(candidate_dir) == 0)
-        continue;
-      endif
-      if (!(candidate_dir in normalized))
-        normalized = {@normalized, candidate_dir};
-      endif
-    endfor
-    all_exits = `sort(normalized) ! ANY => normalized';
-    if (length(all_exits) == 0)
-      player:inform_current($event:mk_error(player, "You don't see any obvious ways out."):with_audience('utility));
-      return;
-    endif
-    "Format exits with their room and passage identity.";
-    exit_links = { $format.annotation:exit(this, listed_dir) for listed_dir in (all_exits) };
-    exit_list = $format.list:mk(exit_links);
-    exit_title = $format.title:mk("Ways out");
-    content = $format.block:mk(exit_title, exit_list);
-    event = $event:mk_info(player, content):with_audience('utility):with_presentation_hint('inset):with_group('exits, this);
+    const links = {length(option['descriptor])
+      ? $format.annotation:mk(option['caption], option['descriptor]) | option['caption]
+      for option in (options)};
+    const content = $format.block:mk($format.title:mk("Ways out"), $format.list:mk(links));
+    const event = $event:mk_info(player, content):with_audience('utility)
+      :with_presentation_hint('inset):with_group('exits, this);
     player:inform_current(event);
   endverb
 
-  method exit_annotation owner: HACKER
-    "Describe a registered passage and its ordinary command invocation.";
+  method exit_annotation owner: ARCH_WIZARD
+    "Describe the current action for a registered passage.";
+    set_task_perms(caller_perms());
     const {direction} = args;
     const passage = $room:find_passage(this, direction);
     typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT} || return [];
-    const destination = passage:other_room(this);
-    valid(destination) || return [];
-    const identity = passage.connection_id;
-    identity != "" || return [];
-    return ["kind" -> "command", "command" -> "go " + direction, "action" -> $player:command_action("go", direction), "exit" -> ["source" -> $url_utils:to_curie_str(this), "destination" -> $url_utils:to_curie_str(destination), "passage" -> identity]];
+    return $room:_passage_annotation(this, passage, direction);
   endmethod
 
   method action_go owner: ARCH_WIZARD
@@ -616,11 +628,32 @@ object ROOM [
     "Publish current room state after an authorized connection change.";
     caller_perms().wizard || raise(E_PERM);
     const {room} = args;
+    valid(room) || return;
     for viewer in (room.contents)
       if (is_player(viewer))
         viewer:emit_room_snapshot_state(viewer, room);
       endif
     endfor
+  endmethod
+
+  method connections_changed owner: ARCH_WIZARD
+    "Invalidate older exit captures in this transaction, then refresh occupied room panels.";
+    caller_perms().wizard || raise(E_PERM);
+    const {rooms} = args;
+    for room in (rooms)
+      if (valid(room))
+        room.exit_revision = room.exit_revision + 1;
+      endif
+    endfor
+    const occupied = {candidate for candidate in (rooms) if (valid(candidate)
+      && length({who for who in (connected_players()) if (who.location == candidate)}))};
+    if (length(occupied))
+      fork (0)
+        for changed_room in (occupied)
+          $room:refresh_snapshots(changed_room);
+        endfor
+      endfork
+    endif
   endmethod
 
   method engage_actor owner: ARCH_WIZARD

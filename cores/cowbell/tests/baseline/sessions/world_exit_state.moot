@@ -1,0 +1,25 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); let p = $passage:mk(#90103, "east", {}, "A brass door stands here.", true, #90110, "west", {}, "", true, false); p.is_door = true; #90108:create_passage(#90103, #90110, p); player.runtime_probe = #90103:look_self():capture(#90102); return true;
+true
+@nonprogrammer
+% exits
+~~Ways out
+=
+~~east (closed)
+@event text/plain utility
+% open east
+=You open the east door.
+@event data:state room_snapshot
+@wizard
+; return #90102:emit_room_snapshot_state(#90102, #90103, player.runtime_probe);
+false
+; const view = #90103:look_self():capture(#90102); return {view['exits][1]['label], #90102:emit_room_snapshot_state(#90102, #90103, view)};
+{"east", true}
+@nonprogrammer
+% close east
+=You close the east door.
+@wizard
+; const view = #90103:look_self():capture(#90102); #90108:remove_passage(#90103, #90110); return #90102:emit_room_snapshot_state(#90102, #90103, view);
+false

@@ -12,7 +12,7 @@ object LOOK [
     set_task_perms(caller_perms());
     const {what, @contents} = args;
     return <this, .what = what, .title = what:name(), .description = what:description(),
-      .exits = {}, .ambient_passages = {}, .actions = {}, contents>;
+      .exit_options = {}, .exit_revision = 0, .ambient_passages = {}, .actions = {}, contents>;
   endmethod
 
   method actor_idle_status owner: HACKER
@@ -69,22 +69,14 @@ object LOOK [
         things = {@things, entry};
       endif
     endfor
-    const directions = `this.exits ! E_PROPNF => {}';
     const ambient = `this.ambient_passages ! E_PROPNF => {}';
-    let all_directions = directions;
-    for passage in (ambient)
-      if (typeof(passage) == TYPE_LIST && length(passage) >= 3
-          && !(passage[3] in all_directions))
-        all_directions = {@all_directions, passage[3]};
-      endif
-    endfor
     let exits = {};
     let exit_descriptors = [];
-    for direction in (all_directions)
-      const descriptor = this.what:exit_annotation(direction);
-      exit_descriptors[direction] = descriptor;
-      let entry = $look:_entry(direction, descriptor);
-      entry['ambient] = !(direction in directions);
+    for option in (`this.exit_options ! E_PROPNF => {}')
+      const descriptor = option['descriptor];
+      exit_descriptors[option['label]] = descriptor;
+      let entry = $look:_entry(option['caption], descriptor);
+      entry['ambient] = option['ambient];
       exits = {@exits, entry};
     endfor
     description = {@description, @$look:_ambient(ambient, exit_descriptors, event, viewer)};
@@ -102,7 +94,8 @@ object LOOK [
     return ['room_ref -> this.what, 'title -> title,
       'title_text -> this.title, 'description -> resolved, 'exits -> exits,
       'actors -> actors, 'things -> things, 'actions -> actions, 'event -> event,
-      'viewer -> viewer, 'thumbnail -> thumbnail];
+      'viewer -> viewer, 'thumbnail -> thumbnail,
+      'exit_revision -> `this.exit_revision ! E_PROPNF => 0'];
   endmethod
 
   method _entry owner: HACKER

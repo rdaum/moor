@@ -318,8 +318,9 @@ object AREA [
         endif
         passage.connection_id != existing.connection_id
           || raise(E_INVARG, "That connection identity is already installed.");
-        for alias in (names)
-          !existing:matches_command(room, alias)
+        const existing_names = $passage:expand_direction_aliases($passage:command_names(existing, room));
+        for alias in ($passage:expand_direction_aliases(names))
+          !(alias in existing_names)
             || raise(E_INVARG, "Exit name '" + alias + "' is already used at " + tostr(room) + ".");
         endfor
       endfor
@@ -333,6 +334,7 @@ object AREA [
     for room in ({room_a, room_b})
       room.passage_areas = setadd(room.passage_areas, this);
     endfor
+    $room:connections_changed({room_a, room_b});
     return passage;
   endmethod
 
@@ -404,6 +406,7 @@ object AREA [
         room.passage_areas = setremove(room.passage_areas, this);
       endif
     endfor
+    $room:connections_changed({room_a, room_b});
     return true;
   endmethod
 
@@ -424,37 +427,15 @@ object AREA [
     return $room:find_passage(@args);
   endmethod
 
-  method get_exit_info owner: HACKER
-    "Get exit labels and ambient passage descriptions for a room. Returns {exits, ambient_passages}.";
-    "ambient_passages is a list of {description, prose_style, label} tuples where prose_style is 'sentence or 'fragment.";
-    {room} = args;
-    typeof(room) == TYPE_OBJ || raise(E_TYPE);
-    passages = this:passages_from(room);
-    exits = {};
-    ambient_passages = {};
-    for passage in (passages)
-      is_open = passage.is_open;
-      if (!is_open)
-        continue;
-      endif
-      info = passage:side_info_for(room);
-      if (length(info) == 0)
-        continue;
-      endif
-      {label, description, ambient, ?prose_style = 'fragment} = info;
-      if (label)
-        if (ambient && (typeof(description) == TYPE_FLYWEIGHT || length(description) > 0))
-          "Ambient passages with descriptions integrate into room description";
-          "Include label so it can be linkified";
-          ambient_passages = {@ambient_passages, {$passage:description_content(passage, room),
-            prose_style, label, passage:other_room(room)}};
-        else
-          "Non-ambient or description-less passages show as simple exits";
-          exits = {@exits, label};
-        endif
-      endif
-    endfor
-    return {exits, ambient_passages};
+  method get_exit_info owner: ARCH_WIZARD
+    "Return {plain labels, ambient tuples} from the room's common exit query.";
+    "Ambient tuples contain {inline description, prose style, label, destination}.";
+    set_task_perms(caller_perms());
+    const {room, ?viewer = player} = args;
+    const options = $room:exit_options(room, viewer);
+    return {{option['label] for option in (options) if (!option['ambient])},
+      {{ambient['description], ambient['prose_style], ambient['label], ambient['destination]}
+        for ambient in (options) if (ambient['ambient])}};
   endmethod
 
   method test_connectivity owner: HACKER
@@ -705,6 +686,7 @@ object AREA [
         room.passage_areas = setadd(room.passage_areas, this);
       endfor
     endfor
+    $room:connections_changed(mapkeys(names));
     return previous_relation;
   endmethod
 endobject

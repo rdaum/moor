@@ -220,6 +220,65 @@ object HEADLESS_PASSAGE_SCENARIOS
     return true;
   endmethod
 
+  method test_closed_doors_remain_visible_at_both_endpoints owner: ARCH_WIZARD
+    "Closed cross-area doors retain their descriptions and offer opening from either side.";
+    const first_area = create($area, #90100, 2);
+    const second_area = create($area, #90100, 2);
+    const source = create($room, #90100, 2);
+    const destination = create($room, #90100, 2);
+    try
+      move(source, first_area);
+      move(destination, second_area);
+      let door = $passage:mk(source, "east", {}, "A brass door stands here.", true,
+        destination, "west", {}, "A brass door leads back.", true, false);
+      door.is_door = true;
+      door = first_area:create_passage(source, destination, door);
+      const near = this:_as_programmer($room, "exit_options", source, #90101)[1];
+      const far = this:_as_programmer($room, "exit_options", destination, #90101)[1];
+      $test_utils:assert_eq({near['caption], far['caption]}, {"east (closed)", "west (closed)"},
+        "Both sides show the closed door even though only one area stores it");
+      $test_utils:assert_eq({near['descriptor]["command"], far['descriptor]["command"]},
+        {"open east", "open west"}, "Both sides offer their local opening command");
+      $test_utils:assert_eq(near['identity], far['identity], "Both sides identify one connection");
+      const view = source:look_self():capture(#90102);
+      for format in ({'text_plain, 'text_html, 'text_djot})
+        const panel = $look:panel(view, format);
+        const narrative = $document:render($look:narrative(view):resolve(#90102), format);
+        const state_text = format == 'text_djot ? "east \\(closed\\)" | "east (closed)";
+        for body in ({panel["content"], narrative['body]})
+          $test_utils:assert_true(index(body, state_text) > 0,
+            tostr("Exit state survives ", format, ": ", body));
+          $test_utils:assert_true(index(body, "A brass door stands here") > 0,
+            "Closing a door does not remove its authored description");
+        endfor
+      endfor
+      const revisions = {source.exit_revision, destination.exit_revision};
+      door = first_area:update_passage(source, destination, door:with_open(true));
+      $test_utils:assert_true(source.exit_revision > revisions[1]
+        && destination.exit_revision > revisions[2], "Changing shared state invalidates both captures");
+      $test_utils:assert_eq($room:exit_options(source, #90102)[1]['caption], "east",
+        "Fresh discovery sees the open door");
+      $test_utils:assert_true(index($look:panel(view, 'text_plain)["content"], "east (closed)") > 0,
+        "Historical content retains its captured state");
+      door = first_area:update_passage(source, destination, door:with_open(false):with_locked(true));
+      $test_utils:assert_eq($room:exit_options(destination, #90102)[1]['caption], "west (locked)",
+        "Locked state remains discoverable at the far endpoint");
+      door.side_b_enabled = false;
+      first_area:update_passage(source, destination, door);
+      $test_utils:assert_eq($room:exit_options(destination, #90102), {},
+        "A disabled return direction is not advertised as an exit");
+      move(source, #-1);
+      $test_utils:assert_eq($room:exit_options(source, #90102)[1]['identity], door.connection_id,
+        "Discovery does not require a containing area");
+    finally
+      recycle(source);
+      recycle(destination);
+      first_area:destroy();
+      second_area:destroy();
+    endtry
+    return true;
+  endmethod
+
   method test_parallel_passages_have_independent_state_and_identity owner: ARCH_WIZARD
     "Two connections between the same rooms can be edited and removed separately.";
     const area = create($area, #90100, 2);

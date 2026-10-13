@@ -135,6 +135,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Closed and locked passages remain visible in room descriptions, `exits`, and room panels. Door
+  links offer an opening command. Both endpoints show connections stored in another area. Connection
+  changes refresh occupied room panels and prevent older exit captures from replacing the new state.
 - Passage configuration cannot modify the shared prototype through an ordinary caller. Configuring a
   persistent passage requires its owner or a wizard; flyweight configuration remains a value
   operation.
