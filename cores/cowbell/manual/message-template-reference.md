@@ -36,8 +36,21 @@ missing standard participant produces a placeholder such as `<no-dobj>`.
 Add `c` before a role suffix: `{sc_dobj}`, `{pc_iobj}`. When the referenced object is the viewer,
 the forms are `you`, `you`, `your`, `yours`, and `yourself`.
 
-There are no corresponding pronoun tokens for `this_obj`, `location`, or arbitrary named bindings.
-There is no general first-person “I/me” mode.
+`{pronoun BINDING FORM}` selects a pronoun for any object binding, including `this`, `location`, or
+a named participant such as `recipient`. The producer must supply the participant.
+
+| Form        | Example                                    | Result for someone using they/them |
+| ----------- | ------------------------------------------ | ---------------------------------- |
+| `subject`   | `{pronoun recipient subject}`              | they                               |
+| `object`    | `{pronoun recipient object}`               | them                               |
+| `pos_adj`   | `{pronoun recipient pos_adj} coat`         | their coat                         |
+| `pos_noun`  | `the coat is {pronoun recipient pos_noun}` | the coat is theirs                 |
+| `reflexive` | `{pronoun recipient reflexive}`            | themselves                         |
+
+Use `{cap {pronoun recipient subject}}` at the start of a sentence. Pair it with
+`{agree recipient pronoun:are|is}` for “They are” or “You are.” The MOO constructor is
+`$sub:pronoun('recipient, 'subject)`. Text and content bindings cannot supply pronouns. There is no
+general first-person “I/me” mode.
 
 ## Verbs and word choices
 

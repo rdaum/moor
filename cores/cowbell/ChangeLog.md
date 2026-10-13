@@ -8,6 +8,8 @@ Cowbell entries.
 
 ### Added
 
+- Message templates can select pronouns for any named participant with `{pronoun BINDING FORM}`. The
+  participant sees “you” and “your”; other readers see that participant's chosen pronouns.
 - Add a [builder's guide](manual/reactions.md) with command examples for reactions, membership
   rules, and a timed puzzle. These workflows require builder privileges, with no MOO programming.
 - Add MOO parsing for an explicit Djot authoring profile, with source-location errors for

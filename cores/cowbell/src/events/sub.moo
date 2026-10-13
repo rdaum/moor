@@ -41,6 +41,8 @@ object SUB [
     "s, o, p, q, and r select subject, object, possessive adjective, possessive noun, and reflexive forms.",
     "They use the actor's chosen pronouns. Add c to capitalize, and _dobj or _iobj to select another role.",
     "Examples: sc(), p_dobj(), qc_iobj(). Pronouns become you/you/your/yours/yourself for the viewer.",
+    "pronoun('recipient, 'subject) selects pronouns for any named object binding or standard role.",
+    "Forms are 'subject, 'object, 'pos_adj, 'pos_noun, and 'reflexive. capitalize() works on these too.",
     "",
     "## Agreement and alternatives",
     "",
@@ -164,14 +166,19 @@ object SUB [
     let subject = 'actor;
     let form = kind;
     const name = tostr(kind);
-    if (index(name, "dobj_", 1) == 1)
+    if (kind == 'pronoun)
+      subject = this.binding_name;
+      form = this.form;
+    elseif (index(name, "dobj_", 1) == 1)
       subject = 'dobj;
       form = tosym(name[6..$]);
     elseif (index(name, "iobj_", 1) == 1)
       subject = 'iobj;
       form = tosym(name[6..$]);
     endif
-    const target = facts[subject];
+    const binding = $document_resolver:binding(context, subject);
+    binding['kind] == 'object || raise(E_INVARG, "Pronouns require an object binding.");
+    const target = binding['value];
     if (typeof(target) != TYPE_OBJ || !valid(target))
       return $format:literal_inline("<no-" + tostr(subject) + ">");
     endif
@@ -193,6 +200,15 @@ object SUB [
       endif
     endif
     return $format:literal_inline(capitalize ? text:capitalize() | text);
+  endmethod
+
+  method pronoun owner: HACKER
+    "Select one pronoun form for any object role or named object binding.";
+    const {binding_name, form} = args;
+    (typeof(binding_name) == TYPE_SYM && typeof(form) == TYPE_SYM) || raise(E_TYPE);
+    form in {'subject, 'object, 'pos_adj, 'pos_noun, 'reflexive}
+      || raise(E_INVARG, "Pronoun form must be subject, object, pos_adj, pos_noun, or reflexive.");
+    return <$sub, .type = 'pronoun, .binding_name = binding_name, .form = form>;
   endmethod
 
   method agree owner: HACKER
@@ -645,6 +661,43 @@ object SUB [
         "Boots are / is", "name number differs from it/its for " + tostr(role));
       $test_utils:assert_eq($document:render(event:resolve(boots), 'text_plain)['body],
         "You are / are", "agreement follows subject viewer for " + tostr(role));
+    endfor
+    return true;
+  endmethod
+
+  method test_named_pronouns owner: HACKER
+    "Named participants use their own pronouns and the reader's perspective after editing.";
+    const actor = $thing:create(true);
+    actor.pronouns = $pronouns.he_him;
+    const recipient = $thing:create(true);
+    recipient.pronouns = $pronouns:mk("ze", "zir", "zir", "zirs", "zirself");
+    for role in ({'recipient, 'this, 'location, 'dobj, 'iobj})
+      let content = {};
+      for form in ({'subject, 'object, 'pos_adj, 'pos_noun, 'reflexive})
+        content = {@content, this:pronoun(role, form), " / "};
+      endfor
+      content = {this:capitalize(content[1..$ - 1])};
+      for version in ({content, $sub_utils:compile($sub_utils:decompile(content))})
+        const event = $event:mk_test(actor, @version):with_object_binding('recipient, recipient)
+          :with_this(recipient):with_location(recipient):with_dobj(recipient):with_iobj(recipient);
+        for viewer in ({actor, recipient, player})
+          const expected = viewer == recipient ? "You / you / your / yours / yourself"
+            | "Ze / zir / zir / zirs / zirself";
+          const document = event:resolve(viewer);
+          $test_utils:assert_true(equal($document:render(document, 'text_plain)['body], expected),
+            "named pronouns: " + tostr(role));
+          $test_utils:assert_true(equal($document:render(document, 'text_html)['body],
+            "<p>" + expected + "</p>"), "HTML uses the same resolved pronouns");
+        endfor
+      endfor
+    endfor
+    const missing = $event:mk_test(actor, this:pronoun('missing, 'subject));
+    $test_utils:assert_raises(E_INVARG, missing, "resolve", {actor}, "missing named participant");
+    const text = missing:with_text_binding('missing, "Alex");
+    $test_utils:assert_raises(E_INVARG, text, "resolve", {actor}, "text has no pronouns");
+    for template in ({"{pronoun recipient}", "{pronoun recipient invalid}",
+      "{pronoun recipient subject extra}"})
+      $test_utils:assert_raises(E_INVARG, $sub_utils, "compile", {template}, template);
     endfor
     return true;
   endmethod

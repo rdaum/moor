@@ -182,6 +182,10 @@ produces:
 `{i}` becomes “you” when the indirect object reads the message. Actor pronouns still refer to Alex.
 To use Sam's pronouns, use tokens with `_iobj`, such as `{p_iobj}`.
 
+Some interactions supply a participant by name, such as `recipient`. For these messages,
+`{pronoun recipient pos_adj} coat` means “their coat” to others and “your coat” to the recipient.
+The name must come from the interaction; writing `recipient` does not select someone automatically.
+
 The [reference](message-template-reference.md#which-roles-does-a-message-supply) lists the roles
 supplied by common interactions and reaction effects.
 

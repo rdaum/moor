@@ -240,6 +240,10 @@ object SUB_UTILS [
       return $sub:binding(this:_binding_name(token[6..$]:trim()));
     elseif (index(token, "content ", 1) == 1)
       return $sub:content_binding(this:_binding_name(token[9..$]:trim()));
+    elseif (index(token, "pronoun ", 1) == 1)
+      const words = token:words();
+      length(words) == 3 || raise(E_INVARG, "Use {pronoun BINDING FORM}.");
+      return $sub:pronoun(this:_binding_name(words[2]), tosym(words[3]));
     endif
     if (maphaskey(this.token_map, token))
       const {method, method_args} = this.token_map[token];
@@ -331,6 +335,10 @@ object SUB_UTILS [
           || raise(E_INVARG, "Unsupported capitalized article binding.");
       endif
       return "{" + (capitalize ? prefix:capitalize() | prefix) + " " + name + suffix + "}";
+    elseif (kind == 'pronoun)
+      const name = tostr(fw.binding_name);
+      this:_binding_name(name);
+      token = "{pronoun " + name + " " + tostr(fw.form) + "}";
     elseif (kind == 'agree)
       const name = tostr(fw.binding_name);
       this:_binding_name(name);
