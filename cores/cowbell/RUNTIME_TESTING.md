@@ -6,21 +6,21 @@ Run the same check as CI from the repository root:
 make -C cores/cowbell check
 ```
 
-The check builds all required Rust binaries together, then runs them directly.
-The test tools use the main workspace and lockfile. CI caches Rust dependencies between runs.
-The check runs the style audit, method tests, headless scenarios, session scenarios, harness checks,
-export roundtrip, real telnet/restart checks, Git worker checks, and source inventory checks.
-Targets run in order because they share generated directories.
-Style details stay in `gen.style.log` and `gen.style-strict.log`; a failed audit prints its log.
+The check builds all required Rust binaries together, then runs them directly. The test tools use
+the main workspace and lockfile. CI caches Rust dependencies between runs. The check runs the style
+audit, method tests, headless scenarios, session scenarios, harness checks, export roundtrip, real
+telnet/restart checks, Git worker checks, and source inventory checks. Targets run in order because
+they share generated directories. Style details stay in `gen.style.log` and `gen.style-strict.log`;
+a failed audit prints its log.
 
-`make -C cores/cowbell test-git-worker` checks Git access through the daemon, telnet host, and Git worker.
-It uses a temporary local HTTP repository and requires the Git CLI for the fixture.
-It checks binary contents, symlinks, tree metadata, worker errors, and reads pinned to a commit after a branch moves.
-It also stages and applies Git `@changes` reviews, checks saved source after a branch moves, and
-tests discard, changed settings, and wizard revocation during a fetch.
-The full Cowbell subtree update is disabled by default because debug builds can exceed the runtime task budget.
-To run that scenario manually, add `--full-core` to `tests/git_worker.py`.
-The method suite also checks wizard-only dispatch, forged descriptors, local lookup, and malformed responses.
+`make -C cores/cowbell test-git-worker` checks Git access through the daemon, telnet host, and Git
+worker. It uses a temporary local HTTP repository and requires the Git CLI for the fixture. It
+checks binary contents, symlinks, tree metadata, worker errors, and reads pinned to a commit after a
+branch moves. It also stages and applies Git `@changes` reviews, checks saved source after a branch
+moves, and tests discard, changed settings, and wizard revocation during a fetch. The full Cowbell
+subtree update is disabled by default because debug builds can exceed the runtime task budget. To
+run that scenario manually, add `--full-core` to `tests/git_worker.py`. The method suite also checks
+wizard-only dispatch, forged descriptors, local lookup, and malformed responses.
 
 `make -C cores/cowbell` exports the shipped core. `make rebuild` first checks export stability, then
 copies the exported sources into `src/`. Export removes source comments. Use this target only when
@@ -73,28 +73,28 @@ and validation before description and note edits. It also parses and resolves al
 articles. Each article has its own execution slice; the sweep does not combine their costs into one
 command quota. The parser and renderer cases check all three output formats.
 
-Fixture `#90125` checks delivery: one encoding per viewer, shared renderings for equivalent
-options, matching live and historical documents, utility connection scope, complete rewrites,
-public welcome output, literal banner substitutions, and contextual help authoring.
-Meadow checks document transport through FlatBuffers and encrypted history, plus rewrite ownership,
-expiry, complete content replacement, and rejection without consuming the target.
+Fixture `#90125` checks delivery: one encoding per viewer, shared renderings for equivalent options,
+matching live and historical documents, utility connection scope, complete rewrites, public welcome
+output, literal banner substitutions, and contextual help authoring. Meadow checks document
+transport through FlatBuffers and encrypted history, plus rewrite ownership, expiry, complete
+content replacement, and rejection without consuming the target.
 
 Fixture `#90124` checks room capture: shared description resolution, literal labels, retained
-references after object recycling, caller permissions, and ambient and integrated content.
-Meadow tests verify rendered panel ingestion and separation from historical narrative.
+references after object recycling, caller permissions, and ambient and integrated content. Meadow
+tests verify rendered panel ingestion and separation from historical narrative.
 
 Fixture `#90122` checks event resolution: captured locations, actor and observer wording, literal
-bindings, selected alternatives, caller permissions, producer hooks, and bounded expansion.
-It also exercises private-message paragraphs, agent reports, malformed table rows, source-range
-numbering, generated help, code documentation, and structured room/container descriptions.
-Headless event scenarios also check MIME negotiation and reuse across connections.
+bindings, selected alternatives, caller permissions, producer hooks, and bounded expansion. It also
+exercises private-message paragraphs, agent reports, malformed table rows, source-range numbering,
+generated help, code documentation, and structured room/container descriptions. Headless event
+scenarios also check MIME negotiation and reuse across connections.
 
 ## Commands and committed events
 
-`runtime-session` uses the shared runner in `cores/tools/session-runner` with `--cowbell`. This option enables
-Cowbell's flyweights and rich notifications. The runner compiles the core once per invocation.
-Each `.moot` file gets a fresh database loaded from those compiled definitions, plus a separate scheduler and output queues.
-Commands pass through the kernel command parser and scheduler.
+`runtime-session` uses the shared runner in `cores/tools/session-runner` with `--cowbell`. This
+option enables Cowbell's flyweights and rich notifications. The runner compiles the core once per
+invocation. Each `.moot` file gets a fresh database loaded from those compiled definitions, plus a
+separate scheduler and output queues. Commands pass through the kernel command parser and scheduler.
 
 ```sh
 make -C cores/cowbell runtime-session
@@ -129,20 +129,70 @@ namespace and kind. The match can select a later queued event with the requested
 Assertions report the endpoint and retained events when no event matches. Recipient isolation is
 part of the assertion.
 
-`@event present:text/html tools` matches a committed presentation for the selected endpoint.
-Its MIME type and presentation target must match exactly.
-`@event history:text_plain authority-own-history` consumes a committed mock `Session::log_event` record.
-The selected endpoint's player, record type, and string value must match exactly.
-This history assertion does not prove durable event-log storage.
+`@event present:text/html tools` matches a committed presentation for the selected endpoint. Its
+MIME type and presentation target must match exactly.
+`@event history:text_plain authority-own-history` consumes a committed mock `Session::log_event`
+record. The selected endpoint's player, record type, and string value must match exactly. This
+history assertion does not prove durable event-log storage.
 
 `@quiet` checks that the selected endpoint has no pending output. `@noevents` checks its current
 committed event queue. This assertion is a snapshot. It does not prove that a delayed task can never
 publish an event. A delayed case must wait for its dispatch or use an explicit completion marker
 before the final absence assertion.
 
+`@text-within SECONDS TEXT` waits for the selected endpoint's next output line and checks it
+exactly. The timeout must be from 1 through 30 seconds. Use this for a timer response, instead of a
+fixed sleep. An unexpected line fails immediately. The runner does not search past it for a match.
+
 The runner invokes the actual kernel parser and task scheduler without a daemon or network host.
 Named endpoints exercise multiple in-process connections. The separate `test-wire` target exercises
 real sockets and server restart.
+
+## Executable tutorials
+
+The [Pet Rock tutorial](docs/programming-with-rules-and-reactions.md) is also a session test. The
+default session suite runs its Markdown source alongside the `.moot` scenarios. The runner compiles
+the core once, then gives each scenario or document a fresh database. All runnable blocks in one
+document share its database and selected participant.
+
+To run only the tutorial:
+
+```sh
+make -C cores/cowbell test-tutorial
+```
+
+For an already prepared fixture overlay and built runner:
+
+```sh
+target/debug/core-session-runner --cowbell \
+  --core-dir cores/cowbell/.runtime-headless-src \
+  --moot cores/cowbell/docs/programming-with-rules-and-reactions.md \
+  --wizard 90100 --programmer 90101 --nonprogrammer 90102
+```
+
+Repeat `--moot` to include several files or directories in one invocation. Directories discover
+`.moot` files. Markdown documents must be named explicitly, so other documentation does not become a
+test by accident.
+
+Executable documents use top-level code fences that start in column one:
+
+| Fence information      | Meaning                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `moot`                 | Run the existing session commands and assertions.                                  |
+| `moo verb=OBJECT:VERB` | Submit this exact body through `@program OBJECT:VERB` as the selected participant. |
+| `LANG example`         | Show an illustrative fragment without running it.                                  |
+
+Backtick and tilde fences are supported. Prose and headings remain ordinary Markdown. Unknown fence
+information, unclosed fences, and documents without any commands fail the test. Errors report the
+document path, original line number, and current heading.
+
+After a verb block, check the programming prompt and compilation confirmation in a `moot` block.
+Standalone `=` and `~~` lines check queued output, including these editor responses. Keep assertions
+beside the examples they describe. Do not maintain a second copy of the tutorial code in a fixture.
+
+Test setup can supply participants, privileges, and a room. Keep it in a labelled section of the
+document. Run the actual lesson with the reader's permissions. Setup must not install or repair the
+objects that the lesson teaches readers to create.
 
 ## Harness and export checks
 
@@ -161,9 +211,9 @@ trees. Both exports must contain objdef files. Fixture object IDs must be absent
 export.
 
 `test-build-inventory` copies the core Makefile and shared rules into a temporary directory with a
-small source fixture. It adds, edits, and deletes a nested object source, rebuilding after each step.
-It checks the exported object and constants after deletion. The roundtrip check covers the complete
-shipped core.
+small source fixture. It adds, edits, and deletes a nested object source, rebuilding after each
+step. It checks the exported object and constants after deletion. The roundtrip check covers the
+complete shipped core.
 
 ```sh
 make -C cores/cowbell test-harness
@@ -176,21 +226,26 @@ Cowbell-generated exports, overlays, and harness logs.
 
 ## Native scheduled work
 
-Cowbell uses the runtime `schedule_*` builtins directly. It has no core scheduler object or polling loop.
-Housekeeping creates one recurring schedule. Henri creates six adaptive recurring schedules and chooses a fresh delay after each firing.
+Cowbell uses the runtime `schedule_*` builtins directly. It has no core scheduler object or polling
+loop. Housekeeping creates one recurring schedule. Henri creates six adaptive recurring schedules
+and chooses a fresh delay after each firing.
 
-Schedule creation and cancellation commit with the calling transaction. Stored IDs and their schedule requests therefore commit together.
-`pass_elapsed` is false for these callbacks. Housekeeping disables adaptive returns so its swept-player count cannot change the interval.
-Henri enables adaptive returns. Each positive return adjusts the next native deadline; the native cadence uses scheduled deadlines, rather than callback completion times.
-Callback faults retain the base retry interval. The runtime default retires a schedule after 50 consecutive faults.
+Schedule creation and cancellation commit with the calling transaction. Stored IDs and their
+schedule requests therefore commit together. `pass_elapsed` is false for these callbacks.
+Housekeeping disables adaptive returns so its swept-player count cannot change the interval. Henri
+enables adaptive returns. Each positive return adjusts the next native deadline; the native cadence
+uses scheduled deadlines, rather than callback completion times. Callback faults retain the base
+retry interval. The runtime default retires a schedule after 50 consecutive faults.
 
-Native schedules persist in the runtime task database. An objdef export contains object properties, including stored IDs, but does not export the schedule store.
-Fresh objdef imports therefore contain no schedules. Housekeeping and Henri replace invalid stored IDs when started.
-No startup resume hook or legacy schedule-property conversion is required.
+Native schedules persist in the runtime task database. An objdef export contains object properties,
+including stored IDs, but does not export the schedule store. Fresh objdef imports therefore contain
+no schedules. Housekeeping and Henri replace invalid stored IDs when started. No startup resume hook
+or legacy schedule-property conversion is required.
 
-Headless scenario `#90001` tests actual housekeeping and Henri startup, duplicate starts, stale IDs, callback execution, adaptive delay ranges, cancellation, and caller controls.
-Its recording player captures command events without changing the production output interface.
-It also tests a two-player housekeeping sweep and one grouped room announcement.
+Headless scenario `#90001` tests actual housekeeping and Henri startup, duplicate starts, stale IDs,
+callback execution, adaptive delay ranges, cancellation, and caller controls. Its recording player
+captures command events without changing the production output interface. It also tests a two-player
+housekeeping sweep and one grouped room announcement.
 
 ## Real connections and restart
 
@@ -198,9 +253,9 @@ It also tests a two-player housekeeping sweep and one grouped room announcement.
 make -C cores/cowbell test-wire
 ```
 
-This target builds the server and runs `tests/wire.py` against an isolated temporary database.
-The script opens two real telnet connections for the same player. It checks committed world state
-and actual housekeeping schedule callbacks across server restart. It also checks committed schedule
+This target builds the server and runs `tests/wire.py` against an isolated temporary database. The
+script opens two real telnet connections for the same player. It checks committed world state and
+actual housekeeping schedule callbacks across server restart. It also checks committed schedule
 cancellation and checkpoint export. Schedule persistence uses the runtime task database. An objdef
 export remains a separate representation of world objects.
 
@@ -288,4 +343,5 @@ for scenario in change_manager_preservation change_manager_results change_tools 
 done
 ```
 
-These fixtures use temporary worlds. They do not use the development database or require a live GitHub connection.
+These fixtures use temporary worlds. They do not use the development database or require a live
+GitHub connection.
