@@ -138,6 +138,8 @@ define RULE = #63;
 define RULE_TEST = #64;
 define REACTION = #69;
 define BEHAVIOR_SCHEMA = #3010;
+define CONDITION = #3011;
+define WORLD_FACTS = #3012;
 
 // types
 define STR_PROTO = #13;

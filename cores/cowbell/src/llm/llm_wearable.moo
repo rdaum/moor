@@ -793,7 +793,7 @@ object LLM_WEARABLE [
     "Register rule tools";
     const list_rules_tool = $llm_agent_tool:mk("list_rules", "List all rule properties (*_rule) on an object and their current expressions. Rules control access to object operations like locking containers. Equivalent to @rules.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (e.g., '#10', '$container', 'chest')"]], "required" -> {"object"}], this, "_tool_list_rules");
     agent:add_tool("list_rules", list_rules_tool);
-    const set_rule_tool = $llm_agent_tool:mk("set_rule", "Set an access control rule on an object property. Rules are logical expressions like 'Key is(\"golden key\")?' or 'NOT This is_locked()?'. See $rule_engine docs for syntax. Equivalent to @set-rule.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule, e.g., 'lock_rule')"], "expression" -> ["type" -> "string", "description" -> "Rule expression using Datalog syntax (see $rule_engine docs)"]], "required" -> {"object", "property", "expression"}], this, "_tool_set_rule");
+    const set_rule_tool = $llm_agent_tool:mk("set_rule", "Set an access control rule on an object property. Rules are logical expressions like 'input.Key == #123' or 'NOT is_locked(object: input.This)'. See $rule_engine docs for syntax. Equivalent to @set-rule.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule, e.g., 'lock_rule')"], "expression" -> ["type" -> "string", "description" -> "Condition with AND, OR, NOT, comparisons, and named predicate arguments"]], "required" -> {"object", "property", "expression"}], this, "_tool_set_rule");
     agent:add_tool("set_rule", set_rule_tool);
     const show_rule_tool = $llm_agent_tool:mk("show_rule", "Display the current expression for a specific rule property. Equivalent to @show-rule.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule)"]], "required" -> {"object", "property"}], this, "_tool_show_rule");
     agent:add_tool("show_rule", show_rule_tool);
@@ -1040,12 +1040,12 @@ object LLM_WEARABLE [
       return "Cleared rule on " + tostr(target_obj) + "." + prop_name + " (always passes)";
     endif
     if (expression == "false" || expression == "never" || expression == "locked")
-      "Create an always-false rule using a fact that can never match";
-      rule = $rule_engine:parse_expression("This is(\"__never_matches__\")?", tosym(prop_name), wearer);
+      "Store an explicit condition that never matches.";
+      rule = $rule_engine:parse_expression("FALSE", tosym(prop_name));
       target_obj.(prop_name) = rule;
       return "Set " + tostr(target_obj) + "." + prop_name + " to always fail (locked)";
     endif
-    rule = $rule_engine:parse_expression(expression, tosym(prop_name), wearer);
+    rule = $rule_engine:parse_expression(expression, tosym(prop_name), $rule_engine:policy_scope(prop_name));
     const validation = $rule_engine:validate_rule(rule);
     validation['valid] || raise(E_INVARG, "Rule validation failed: " + validation['warnings]:join("; "));
     target_obj.(prop_name) = rule;

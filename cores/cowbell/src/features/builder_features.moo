@@ -1544,7 +1544,7 @@ object BUILDER_FEATURES [
         raise(E_PERM, "You don't own " + tostr(target) + ".");
       endif
       "Parse and validate rule";
-      const rule = $rule_engine:parse_expression(rule_expr, tosym(prop_name));
+      const rule = $rule_engine:parse_expression(rule_expr, tosym(prop_name), $rule_engine:policy_scope(prop_name));
       "Validate for bounded negation violations without evaluating";
       const validation = $rule_engine:validate_rule(rule);
       if (length(validation['warnings]) > 0)

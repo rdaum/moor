@@ -123,7 +123,7 @@ object HEADLESS_MESSAGING_SCENARIOS
         "public look preserves writing hint");
       const raw = `this:property_as_programmer(note, "text") ! E_PERM => E_PERM';
       $test_utils:assert_eq(raw, E_PERM, "raw storage requires owner");
-      note.read_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'private_note);
+      note.read_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'private_note, $rule_engine:policy_scope('read_rule));
       const denied = `this:call_as_programmer(note, "text") ! E_PERM => E_PERM';
       $test_utils:assert_eq(denied, E_PERM, "restricted getter denied");
       const restricted_look = this:call_as_programmer(note, "look_self");

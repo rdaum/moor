@@ -7,6 +7,35 @@ object HEADLESS_LLM_SCENARIOS
   override import_export_hierarchy = {"tests", "headless"};
   override import_export_id = "headless_llm_scenarios";
 
+  method test_rule_tool_uses_supplied_inputs_and_actor owner: ARCH_WIZARD
+    "Rule tools preserve literal text, report invalid conditions, and cannot read private facts.";
+    const target = create($thing, #90100, 2);
+    try
+      add_property(target, "private_rule_fact", 1, {#90100, ""});
+      const result = $agent_building_tools:tool_test_rule([
+        "expression" -> "input.Actor == #90102 AND input.Word == \"Actor\"",
+        "bindings" -> ["Actor" -> "#90102", "Word" -> "Actor"]], #90102);
+      $test_utils:assert_true(index(result, "Condition matched"),
+        "An explicit reference is resolved while ordinary text remains text");
+      for sample in ({
+        {["expression" -> "TRUE ignored", "bindings" -> []], E_INVARG},
+        {["expression" -> "NOT property_is(object: input.Target, field: 'private_rule_fact, value: 1)",
+          "bindings" -> ["Target" -> tostr(target)]], E_PERM}})
+        const {values, expected} = sample;
+        let failure = 0;
+        try
+          $agent_building_tools:tool_test_rule(values, #90102);
+        except error (E_INVARG, E_PERM)
+          failure = error[1];
+        endtry
+        $test_utils:assert_eq(failure, expected, "Tool errors retain their cause and actor");
+      endfor
+    finally
+      recycle(target);
+    endtry
+    return true;
+  endmethod
+
   method test_headless_wearable_token_usage owner: ARCH_WIZARD
     "Token displays accept integer limits and float thresholds for fresh and used contexts.";
     const wearer = create($player, $hacker, 2);

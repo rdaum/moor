@@ -1,21 +1,44 @@
-# Behavior model
+# Rule and reaction data
 
-A behavior describes how an object responds to world operations. Its conditions read facts. Its
-effects request actions or change declared local state. A builder combines these parts without
-writing MOO verbs.
+A rule checks a condition, such as whether a visitor can open a cupboard. A reaction responds to
+something that happened, such as a cupboard opening. It checks its condition and performs its
+actions. Relations store facts that conditions can query, such as the members of a club.
 
-This chapter defines the data contract for Cowbell's behavior implementation. It is intended for
-core programmers and authors of tools. The builder manual will introduce the corresponding text
-commands through examples.
+For example: when the cupboard opens, if the cat is nearby, make the cat stand and announce a
+message. The opening supplies the cupboard, the person who opened it, and the location. The
+condition checks where the cat is. The actions request the stand operation and send the message.
+
+This is a reference for core programmers. It describes the stored values and checks used by the
+implementation. These records are not the builder authoring interface. The builder commands and
+manual must explain tasks through object names, available events, conditions, and actions.
+
+## Why describe these parts as data?
+
+A condition tree preserves grouping such as `A AND (B OR C)`. Parsing, checking, evaluation, and
+printing use the same tree. This prevents displaying a rule from changing its meaning.
+
+Argument declarations describe what an operation needs and what a query returns. For example,
+`occupants` needs a location and returns objects. Those declarations let tools explain available
+choices and reject missing or incompatible arguments before saving a rule.
+
+Values can have different sources. The opening event supplies its actor. A reusable reaction can
+have a chosen cat as a setting. A counter records progress, and a query can find a matching visitor.
+The internal names for these sources are input, parameter, state, and binding. The authoring
+commands must explain the corresponding values where the builder uses them.
 
 ## Implementation status
 
-`$behavior_schema` validates the definitions and instances described here. Validation is pure: it
-does not run predicates, resolve object names, install authorization, or execute effects.
+Rules and reaction conditions use the condition tree described here. The condition parser, checker,
+evaluator, and printer share that representation. World predicates have named inputs and outputs.
 
-The existing rule parser and reaction dispatcher still use their previous representations. They will
-move to this contract in the condition, query, operation, and authoring stages. Runtime rules in
-this chapter specify that target implementation. They are not claims about the old dispatcher.
+The definition and instance records below describe a proposed way to group reusable reactions and
+keep their settings and counters separate. Their validator has tests, but the dispatcher does not
+use those records. They are not another implemented kind of world object. Their final storage must
+be justified by the reuse examples and can use the existing reaction and object facilities.
+
+Named actions, declared state transitions, cancelable timers, and the builder authoring commands
+remain subsequent work. The execution rules below describe their required outcomes, not current
+runtime guarantees.
 
 ## Definition, instance, and authorization
 
@@ -236,7 +259,7 @@ explicit installation on each host. A child does not inherit another host's inst
 mutable state. An update replaces an instance with a new revision and requires authorization. The
 update must supply values for its declared state, making preservation or reset explicit.
 
-## Worked cupboard definition
+## Cupboard example in the proposed record format
 
 The behavior counts openings and asks a nearby cat to stand. The operation supplies the opener and
 location. Installation supplies the cat. The following example assumes the `opened`, `nearby`,

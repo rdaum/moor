@@ -13,7 +13,9 @@ object COUCH [
   override aliases (owner: HACKER, flags: "rc") = {"couch", "sofa", "ratty couch"};
   override description (owner: HACKER, flags: "rc") = "A well-worn brown couch that's seen better days. The cushions are slightly lumpy and there's a suspicious amount of black cat hair embedded in the fabric. Despite its shabby appearance, it looks comfortable enough for a quick rest - or for a grouchy cat to claim as his territory.";
   override get_denied_msg (owner: HACKER, flags: "rc") = {"The couch is far too heavy to pick up."};
-  override get_rule (owner: HACKER, flags: "rc") = <RULE, .name = 'is_portable, .body = {{'is_portable, {'var, 'This}}}, .variables = {'This}, .head = 'is_portable>;
+  override get_rule (owner: HACKER, flags: "rc") = <RULE,
+    .name = 'is_portable, .condition = ['kind -> 'any, 'children -> {}],
+    .scope = ['input -> [], 'parameter -> [], 'state -> [], 'binding -> []]>;
   override integrated_description (owner: HACKER, flags: "rc") = "A ratty brown couch, thoroughly colonized by cat hair, sits against one wall.";
   override seats (owner: HACKER, flags: "r") = 3;
   override sit_msg (owner: HACKER, flags: "rc") = {
@@ -58,9 +60,9 @@ object COUCH [
     principal == this.owner || principal.wizard || raise(E_PERM);
     set_task_perms(principal);
     pass(@args);
-    $reaction:install(this, "henri_disturbed_reaction", <$reaction, .enabled = true, .trigger = 'on_sit, .when = <$rule, .name = 'henri_sitting, .body = {
-        {'is_sitting, {'var, 'This}, $henri},
-        {'not_is, {'var, 'This}, {'var, 'Actor}, $henri}
-      }, .variables = {'This, 'Actor}, .head = 'henri_sitting>, .effects = {{'trigger, $henri, 'on_couch_intruder}}, .fired_at = 0>);
+    const condition = "sitting(actor: " + tostr($henri) + ", seat: input.This)"
+      + " AND input.Actor != " + tostr($henri);
+    $reaction:install(this, "henri_disturbed_reaction",
+      $reaction:mk('on_sit, condition, {{'trigger, $henri, 'on_couch_intruder}}));
   endmethod
 endobject

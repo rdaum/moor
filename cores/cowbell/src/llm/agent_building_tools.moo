@@ -7,7 +7,7 @@ object AGENT_BUILDING_TOOLS [
   owner: ARCH_WIZARD
   readable: true
 
-  property guide (owner: ARCH_WIZARD, flags: "rc") = "SPATIAL CONCEPTS:\n\n1) AREAS are organizational containers (like buildings or zones) that group related rooms together. Areas have object IDs like #38.\n\n2) ROOMS are individual locations within an area. Rooms have object IDs like #12 or #50.\n\n3) The hierarchy is: AREA contains ROOMS, not the other way around.\n\n4) When a user says 'build rooms in the hotel lobby area', they mean build rooms in the SAME AREA that contains the hotel lobby room, NOT inside the lobby room itself.\n\n5) ALWAYS use object numbers (like #38 or #50) when referencing specific objects to avoid ambiguity. NEVER use names alone.\n\nOBJECT PROTOTYPES:\n\nThe system provides prototype objects that serve as templates for creating new objects. Use the 'list_prototypes' tool to see available prototypes like $room (rooms), $thing (generic objects), $wearable (items that can be worn), and $area (organizational containers). When creating objects, choose the appropriate prototype as the parent - for example, use $wearable for items like hats or tools, $thing for furniture or decorations, and $room for new locations.\n\nMOVING OBJECTS:\n\nUse the 'move_object' tool to relocate objects between locations. You can move objects to rooms, players, or containers. This is useful for placing furniture in rooms, giving items to players, or organizing objects. You must own the object or be a wizard to move it.\n\nRULE ENGINE FOR OBJECT BEHAVIOR:\n\nThe system provides a Datalog-style rule engine that lets builders configure object behavior WITHOUT writing MOO code. Rules are declarative logic expressions used for locks, puzzles, quest triggers, and conditional behaviors.\n\nExample: 'Key is(\"golden key\")?' finds an object matching \"golden key\" and binds it to variable Key.\n\nRules can chain relationships transitively: 'Child parent(Parent)? AND Parent parent(Grandparent)?' walks up a family tree.\n\nVariables (capitalized like Key, Item, Accessor) unify with values returned by fact predicates. The engine supports AND, OR, and bounded NOT operators.\n\nCommon use cases: container lock_rule/unlock_rule for key-based locks, puzzle objects with solution_rule checking conditions, doors with can_pass rules, quest items with requirements.\n\nUse list_rules to see existing rules on objects, set_rule to configure behavior, and doc_lookup(\"$rule_engine\") to read comprehensive documentation.\n\nCONSTRUCTION DEFAULTS:\n\nWhen building rooms, if no area is specified, rooms are created in the user's current area automatically - you do NOT need to specify an area unless the user wants rooms in a different area. The 'area' parameter for build_room is optional and defaults to the user's current area.\n\nSUBSTITUTION TEMPLATES:\n\nUse $sub/$sub_utils syntax for dynamic messages: {n/nc} actor, {d/dc} dobj, {i}, {t}, {l}; articles {a d}/{an d}/{the d} render article + noun; pronouns {s/o/p/q/r} with _dobj/_iobj variants; self alternation {you|they} auto-picks perspective; verbs conjugate with be/have/look.\n\nALWAYS use self-alternation for verbs that differ by person (e.g., {set|sets}, {place|places}) so the actor sees second-person grammar.\n\nBefore crafting templates, use doc_lookup(\"$sub_utils\") to recall article rules and binding variants.";
+  property guide (owner: ARCH_WIZARD, flags: "rc") = "SPATIAL CONCEPTS:\n\n1) AREAS are organizational containers (like buildings or zones) that group related rooms together. Areas have object IDs like #38.\n\n2) ROOMS are individual locations within an area. Rooms have object IDs like #12 or #50.\n\n3) The hierarchy is: AREA contains ROOMS, not the other way around.\n\n4) When a user says 'build rooms in the hotel lobby area', they mean build rooms in the SAME AREA that contains the hotel lobby room, NOT inside the lobby room itself.\n\n5) ALWAYS use object numbers (like #38 or #50) when referencing specific objects to avoid ambiguity. NEVER use names alone.\n\nOBJECT PROTOTYPES:\n\nThe system provides prototype objects that serve as templates for creating new objects. Use the 'list_prototypes' tool to see available prototypes like $room (rooms), $thing (generic objects), $wearable (items that can be worn), and $area (organizational containers). When creating objects, choose the appropriate prototype as the parent - for example, use $wearable for items like hats or tools, $thing for furniture or decorations, and $room for new locations.\n\nMOVING OBJECTS:\n\nUse the 'move_object' tool to relocate objects between locations. You can move objects to rooms, players, or containers. This is useful for placing furniture in rooms, giving items to players, or organizing objects. You must own the object or be a wizard to move it.\n\nRULES AND REACTIONS:\n\nRules check whether an operation is allowed. Reactions respond to an event with a condition and actions.\n\nUse list_rules and show_rule to inspect object policies. Use set_rule to edit them. A condition such as 'input.Key == #123' compares the supplied key with one specific object. Quoted text remains text.\n\nConditions support AND, OR, NOT, and parentheses. Predicates take named arguments, for example 'owner_is(object: input.This, owner: input.Accessor)'. The operation determines which inputs are available. Unknown inputs or predicates are errors.\n\nA query can select values for later conditions: 'occupants(location: input.Location) -> (object: Visitor) AND binding.Visitor != input.Actor'. Use doc_lookup(\"$rule_engine\") for the condition syntax.\n\nCONSTRUCTION DEFAULTS:\n\nWhen building rooms, if no area is specified, rooms are created in the user's current area automatically - you do NOT need to specify an area unless the user wants rooms in a different area. The 'area' parameter for build_room is optional and defaults to the user's current area.\n\nSUBSTITUTION TEMPLATES:\n\nUse $sub/$sub_utils syntax for dynamic messages: {n/nc} actor, {d/dc} dobj, {i}, {t}, {l}; articles {a d}/{an d}/{the d} render article + noun; pronouns {s/o/p/q/r} with _dobj/_iobj variants; self alternation {you|they} auto-picks perspective; verbs conjugate with be/have/look.\n\nALWAYS use self-alternation for verbs that differ by person (e.g., {set|sets}, {place|places}) so the actor sees second-person grammar.\n\nBefore crafting templates, use doc_lookup(\"$sub_utils\") to recall article rules and binding variants.";
 
   override description (owner: ARCH_WIZARD, flags: "rc") = "Shared tool definitions and handlers for AI agents that build and manipulate the world. Used by both in-world wearables (like $architects_compass) and external MCP agents.";
 
@@ -48,9 +48,9 @@ object AGENT_BUILDING_TOOLS [
     tools = {@tools, $llm_agent_tool:mk("inspect_object", "Examine an object to see detailed information including name, description, parent, owner, location, and properties.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (name or object number)"]], "required" -> {"object"}], target_obj, "inspect_object")};
     "Rule tools";
     tools = {@tools, $llm_agent_tool:mk("list_rules", "List all rule properties (*_rule) on an object and their current expressions.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (e.g., '#10', '$container', 'chest')"]], "required" -> {"object"}], target_obj, "list_rules")};
-    tools = {@tools, $llm_agent_tool:mk("set_rule", "Set an access control rule on an object property. Rules are logical expressions like 'Key is(\"golden key\")?' or 'NOT This is_locked()?'.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule, e.g., 'lock_rule')"], "expression" -> ["type" -> "string", "description" -> "Rule expression using Datalog syntax"]], "required" -> {"object", "property", "expression"}], target_obj, "set_rule")};
+    tools = {@tools, $llm_agent_tool:mk("set_rule", "Set an access control rule on an object property. Rules are logical expressions like 'input.Key == #123' or 'NOT is_locked(object: input.This)'.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule, e.g., 'lock_rule')"], "expression" -> ["type" -> "string", "description" -> "Rule expression using Datalog syntax"]], "required" -> {"object", "property", "expression"}], target_obj, "set_rule")};
     tools = {@tools, $llm_agent_tool:mk("show_rule", "Display the current expression for a specific rule property.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule)"]], "required" -> {"object", "property"}], target_obj, "show_rule")};
-    tools = {@tools, $llm_agent_tool:mk("test_rule", "Test a rule expression with specific variable bindings to see if it evaluates successfully.", ["type" -> "object", "properties" -> ["expression" -> ["type" -> "string", "description" -> "Rule expression to test (e.g., 'Key is(\"golden key\")?')"], "bindings" -> ["type" -> "object", "description" -> "Variable bindings as key-value pairs (e.g., {\"This\": \"#123\", \"Accessor\": \"#5\", \"Key\": \"#456\"})"]], "required" -> {"expression", "bindings"}], target_obj, "tool_test_rule")};
+    tools = {@tools, $llm_agent_tool:mk("test_rule", "Test a rule expression with specific variable bindings to see if it evaluates successfully.", ["type" -> "object", "properties" -> ["expression" -> ["type" -> "string", "description" -> "Rule expression to test (e.g., 'input.Key == #123')"], "bindings" -> ["type" -> "object", "description" -> "Variable bindings as key-value pairs (e.g., {\"This\": \"#123\", \"Accessor\": \"#5\", \"Key\": \"#456\"})"]], "required" -> {"expression", "bindings"}], target_obj, "tool_test_rule")};
     "Reaction tools";
     tools = {@tools, $llm_agent_tool:mk("list_reactions", "List all reactions on an object with detailed information including triggers, conditions, effects, and enabled status.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (e.g., '#12', 'here', 'cupboard')"]], "required" -> {"object"}], target_obj, "list_reactions")};
     tools = {@tools, $llm_agent_tool:mk("add_reaction", "Add a reaction to an object. Example: trigger=on_open, when=0, effects={{'announce, \"Door opens!\"}}", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Target object (name or #id)"], "property_name" -> ["type" -> "string", "description" -> "Must end with _reaction (e.g., on_open_reaction)"], "trigger" -> ["type" -> "string", "description" -> "Event name WITHOUT quotes: on_open, on_close, on_take, on_drop, on_pet, on_touch, on_use"], "when" -> ["type" -> "string", "description" -> "Use 0 for always. Or rule like: This is(\"locked\")?"], "effects" -> ["type" -> "string", "description" -> "List: {{'announce, \"msg\"}} or {{'set, 'prop, value}, {'announce, \"msg\"}}"]], "required" -> {"object", "property_name", "trigger", "when", "effects"}], target_obj, "add_reaction")};
@@ -638,7 +638,7 @@ object AGENT_BUILDING_TOOLS [
     const prop_key = $obj_utils:property_key(target_obj, prop_name);
     const prop_exists = prop_key != E_PROPNF;
     set_task_perms(actor);
-    const compiled = $rule_engine:parse_expression(expression, prop_name, actor);
+    const compiled = $rule_engine:parse_expression(expression, prop_name, $rule_engine:policy_scope(prop_name));
     const validation = $rule_engine:validate_rule(compiled);
     !validation['valid] && raise(E_INVARG, "Rule validation failed: " + validation['warnings]:join("; "));
     if (prop_exists)
@@ -676,31 +676,33 @@ object AGENT_BUILDING_TOOLS [
   endmethod
 
   method tool_test_rule owner: ARCH_WIZARD
-    "Tool: Test a rule expression with specific variable bindings";
-    let bindings = 0;
-    let expression = 0;
+    "Evaluate a condition using supplied inputs. Preserve literal text and query errors.";
     const {args_map, actor} = args;
     $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
-    {expression, bindings} = {args_map["expression"], args_map["bindings"]};
+    const expression = args_map["expression"];
+    const bindings = args_map["bindings"];
     typeof(expression) == TYPE_STR || raise(E_TYPE, "expression must be string");
     typeof(bindings) == TYPE_MAP || raise(E_TYPE, "bindings must be object/map");
-    set_task_perms(actor);
-    const compiled = `$rule_engine:parse_expression(expression, 'test_rule, actor) ! ANY => E_INVARG';
-    compiled == E_INVARG && return "ERROR: Rule parsing failed. Check syntax. Expression: " + expression;
-    const validation = $rule_engine:validate_rule(compiled);
-    !validation['valid] && return "ERROR: Rule validation failed: " + validation['warnings]:join("; ") + ". Expression: " + expression;
-    "Convert bindings map keys from strings to symbols";
     let converted_bindings = [];
+    let input_types = [];
     for key in (mapkeys(bindings))
-      converted_bindings[tosym(key)] = `$match:match_object(bindings[key], actor) ! ANY => bindings[key]';
+      let value = bindings[key];
+      if (typeof(value) == TYPE_STR && value:starts_with("#"))
+        value = fromliteral(value);
+        typeof(value) == TYPE_OBJ || raise(E_INVARG, "Expected an object reference for " + key);
+      endif
+      const name = tosym(key);
+      converted_bindings[name] = value;
+      input_types[name] = $behavior_schema:type_of(value);
     endfor
+    const compiled = $rule_engine:parse_expression(expression, 'test_rule,
+      $rule_engine:scope(input_types));
     const result = $rule_engine:evaluate(compiled, converted_bindings);
     if (result['success])
-      return "SUCCESS: Rule evaluated to true. Bindings: " + toliteral(converted_bindings);
+      return "Condition matched. Selected values: " + toliteral(result['bindings]);
     endif
-    const reason = maphaskey(result, 'reason) ? typeof(result['reason]) == TYPE_STR ? result['reason] | toliteral(result['reason]) | "rule did not match";
-    return "FAILED: Rule evaluated to false. Reason: " + reason + ". Bindings: " + toliteral(converted_bindings);
+    return "Condition did not match the supplied inputs.";
   endmethod
 
   method list_reactions owner: ARCH_WIZARD
