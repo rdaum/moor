@@ -19,9 +19,10 @@ object FORMAT_DJOT [
   endmethod
 
   method inline owner: HACKER
-    "Parse one inline sequence. Paragraph boundaries and block markers are invalid here.";
+    "Parse one inline sequence. A blank line returns no nodes; blocks and paragraph breaks fail.";
     const {source} = args;
     const lines = $format.djot:_source(source);
+    (length(lines) == 1 && !length(lines[1][1]:trim())) && return {};
     for line in (lines)
       if (length(lines) > 1 && !length(line[1]:trim()))
         $format.djot:_error(line, 1, "inline input cannot contain a paragraph boundary");

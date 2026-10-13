@@ -104,6 +104,8 @@ Cowbell entries.
 
 ### Fixed
 
+- Empty `say` and `emote` commands ask for text instead of failing in the Djot parser. Inline
+  authoring also accepts empty content.
 - Messages can select verb agreement for a participant's name or pronoun explicitly, including named
   object bindings. Use `{agree actor name:are|is}` for “Alex is” and `{agree actor pronoun:are|is}`
   for “They are.” Privilege announcements, furniture messages, and container refusals now agree with

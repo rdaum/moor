@@ -3,6 +3,10 @@
 // It is distributed without any warranty. See <https://www.gnu.org/licenses/>.
 
 @nonprogrammer
+% say
+=Say what?
+% emote
+=Emote what?
 % say Cowbell session greeting
 ~~Cowbell session greeting
 @programmer

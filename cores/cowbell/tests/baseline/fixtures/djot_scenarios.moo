@@ -53,6 +53,19 @@ object DJOT_SCENARIOS
     return true;
   endmethod
 
+  method test_empty_inline_speech owner: HACKER
+    "Empty inline content is valid for speech, emotes, and other inline producers.";
+    for source in ({"", " ", "\t"})
+      $test_utils:assert_eq($format.djot:inline(source), {}, "blank inline content has no nodes");
+      for event in ({player:mk_say_event(source), player:mk_emote_event(source)})
+        const document = event:resolve(player);
+        $test_utils:assert_true(length($document:render(document, 'text_plain)['body]),
+          "attribution remains renderable without message content");
+      endfor
+    endfor
+    return true;
+  endmethod
+
   method test_djot_block_structure owner: HACKER
     "Headings, paragraphs, quotes, fences, nested lists, tasks, and definitions retain structure.";
     const blocks = this:_parse("## Heading\n## continued\n\nFirst.\n\nSecond.\n\n> Quoted.\n>\n> - Item\n\n---\n\n```moo\nreturn `x';\n```\n");

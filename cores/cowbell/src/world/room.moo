@@ -26,10 +26,20 @@ object ROOM [
   endmethod
 
   verb emote (any any any) owner: HACKER flags: "rxd"
+    "Usage: emote <action>. Announce an action to the room.";
+    if (!length(argstr:trim()))
+      player:inform_current($event:mk_error(player, "Emote what?"));
+      return;
+    endif
     this:announce(player:mk_emote_event(argstr));
   endverb
 
   verb say (any any any) owner: HACKER flags: "rxd"
+    "Usage: say <message>. Speak to everyone in the room.";
+    if (!length(argstr:trim()))
+      player:inform_current($event:mk_error(player, "Say what?"));
+      return;
+    endif
     this:announce(player:mk_say_event(argstr));
   endverb
 
