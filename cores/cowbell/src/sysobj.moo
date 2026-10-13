@@ -7,6 +7,7 @@ object SYSOBJ [
   readable: true
 
   property startup_hooks (owner: ARCH_WIZARD, flags: "r") = {FIRST_ROOM};
+  property behavior_schema (owner: HACKER, flags: "r") = BEHAVIOR_SCHEMA;
 
   property actor (owner: HACKER, flags: "r") = ACTOR;
   property admin_features (owner: ARCH_WIZARD, flags: "rc") = ADMIN_FEATURES;
