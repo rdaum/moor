@@ -696,9 +696,18 @@ object STR_PROTO [
       return "";
     endif
     let result = "";
-    for i in [1..count]
-      result = result + string;
-    endfor
+    let chunk = string;
+    let remaining = count;
+    "Double chunks to avoid copying the growing result once per repetition.";
+    while (remaining > 0)
+      if (remaining % 2)
+        result = result + chunk;
+      endif
+      remaining = remaining / 2;
+      if (remaining > 0)
+        chunk = chunk + chunk;
+      endif
+    endwhile
     return result;
   endmethod
 
@@ -991,8 +1000,6 @@ object STR_PROTO [
     $test_utils:assert_true(equal("hello":replace_all("", "x"), "hello"),
       "replace_all empty old string");
     $test_utils:assert_true(equal("hello":reverse(), "olleh"), "reverse basic string");
-    $test_utils:assert_true(equal("ab":repeat(3), "ababab"), "repeat positive count");
-    $test_utils:assert_true(equal("hello":repeat(0), ""), "repeat zero count");
     $test_utils:assert_true(equal("hello":char_count("l"), 2), "char_count repeated character");
     $test_utils:assert_true(equal("hello world":substring(7, 5), "world"), "substring range");
     $test_utils:assert_true(equal("hello":map_chars({c0} => this:uppercase(c0)), "HELLO"),
@@ -1006,6 +1013,18 @@ object STR_PROTO [
       || raise(E_ASSERT, "map_chars callback should run with caller perms");
     "a":filter_chars({c3} => caller_perms() == expected) == "a"
       || raise(E_ASSERT, "filter_chars callback should run with caller perms");
+    return true;
+  endmethod
+
+  method test_repeat owner: HACKER
+    "Repeating preserves the complete string, including case and Unicode.";
+    for example in ({{"Ab", -1, ""}, {"Ab", 0, ""}, {"Ab", 1, "Ab"},
+      {"Ab", 3, "AbAbAb"}, {"Ab", 4, "AbAbAbAb"}, {"é🐄", 3, "é🐄é🐄é🐄"},
+      {"", 9, ""}})
+      const {text, count, expected} = example;
+      $test_utils:assert_eq(strcmp(text:repeat(count), expected), 0,
+        "repeat " + toliteral(text) + " " + tostr(count) + " times");
+    endfor
     return true;
   endmethod
 
