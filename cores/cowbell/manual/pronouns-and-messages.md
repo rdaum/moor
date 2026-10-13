@@ -7,7 +7,8 @@ Cowbell calls this a **message template**. A template contains ordinary text and
 such as `{nc}`. Each token supplies a name, a pronoun, or a choice of words.
 
 The [template reference](message-template-reference.md) lists the tokens and explains the
-programming interface.
+programming interface. In the world, use `help pronouns` to choose your pronouns or `help messages`
+for a short authoring tutorial.
 
 ## Choose your own pronouns
 

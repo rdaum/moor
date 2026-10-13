@@ -1,7 +1,8 @@
 # Message template reference
 
 This reference describes Cowbell's current message templates. For a worked example, start with
-[Write messages that fit the reader](pronouns-and-messages.md).
+[Write messages that fit the reader](pronouns-and-messages.md). The in-world `help messages` topic
+has a shorter tutorial. Use `help pronouns` for personal pronoun settings.
 
 ## Names and roles
 

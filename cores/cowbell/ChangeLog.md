@@ -8,6 +8,8 @@ Cowbell entries.
 
 ### Added
 
+- `help pronouns` and `help messages` explain pronoun settings and message authoring, with command
+  examples and sentences for each reader.
 - Players can enter custom pronouns with `@pronouns custom` or Meadow's account and profile editors.
   Sentence examples explain each form, and a preview precedes confirmation. Both interfaces use the
   same validated setter; cancellation keeps the previous pronouns.

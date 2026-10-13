@@ -191,6 +191,22 @@ object HELP_TOPICS [
     "basics",
     {"close", "lock", "unlock", "doors"}
   };
+  property topic_messages (owner: ARCH_WIZARD, flags: "rc") = {
+    "messages",
+    "Write and preview messages",
+    "When Alex picks up a pebble, Alex sees \"You pick up the pebble.\" Other people see \"Alex picks up the pebble.\"\n\nA *message template* produces these different sentences from one piece of text. Tokens in braces supply names, pronouns, or a choice of words.\n\n## Try a pickup message\n\nYou need builder privileges. Create a pebble that belongs to you:\n\n```\n@create $thing named pebble\n```\n\nThe pebble starts in your inventory. Preview a message before saving it:\n\n```\n@preview-message pebble.get_msg {nc} {pick|picks} up {the d}.\n```\n\nThe preview uses three example readers. Alex picks up the pebble; Sam and Robin watch.\n\n- Alex sees: You pick up the pebble.\n- Sam sees: Alex picks up the pebble.\n- Robin sees: Alex picks up the pebble.\n\nThe preview saves nothing and sends no pickup event.\n\nThe tokens mean:\n\n- `{nc}`: the person's name, or \"You\" for that person.\n- `{pick|picks}`: \"pick\" for that person, \"picks\" for others.\n- `{the d}`: \"the\" and the item's name.\n\nSave the message, then try it:\n\n```\n@set-message pebble.get_msg {nc} {pick|picks} up {the d}.\ndrop pebble\nget pebble\n```\n\nUse `@get-message pebble.get_msg` to read the stored template.\n\n## Find the available names\n\nEach interaction supplies its own participants. To see them for the pickup message, enter:\n\n```\n@message-bindings pebble.get_msg\n```\n\nHere, `actor` means the person picking up the item. `dobj` means the item. These supplied names are called *bindings*.\n\nThe editor rejects unavailable names before saving. A mistake such as `{dobbj}` reports its position and suggests `{dobj}`.\n\n## Use someone's pronouns\n\nThe template `{sc} {have} {p} coat.` uses the actor's pronouns. For Alex using they/them:\n\n- Alex sees: You have your coat.\n- Sam sees: They have their coat.\n- Robin sees: They have their coat.\n\nWith she/her, Sam and Robin see \"She has her coat.\"\n\nAfter a name, use name agreement: `{nc} {agree actor name:have|has} a coat.` This gives \"You have a coat\" or \"Alex has a coat\".\n\nSome messages supply other named people. When `recipient` is available, `{pronoun recipient pos_adj} coat` gives \"your coat\" to that person. Others see their chosen word, such as \"her coat\".\n\n## Preview a reaction message\n\nFor an existing reaction called `welcome` on your `cedarbox`, try:\n\n```\n@reaction cedarbox welcome preview-message announce \"{nc} {open|opens} {the d}.\"\n```\n\nAlex sees \"You open the cedarbox.\" Sam and Robin see \"Alex opens the cedarbox.\"\n\nThis command does not add or run a step. The normal reaction `preview` also shows example sentences for its saved message steps. Read `help @reaction` to create a reaction.\n\nMessage templates and Djot descriptions use different syntax. A template does not turn asterisks into emphasis. A description does not expand message tokens.",
+    {"message templates", "substitutions"},
+    "building",
+    {"pronouns", "@reaction"}
+  };
+  property topic_pronouns (owner: ARCH_WIZARD, flags: "rc") = {
+    "pronouns",
+    "Choose the words messages use for you",
+    "Pronouns are words such as \"she\", \"them\", and \"their\". Cowbell uses your choice when a message refers to you.\n\n## Choose a preset\n\nEnter `@pronouns` to see your current choice and the available presets. To choose one, enter:\n\n```\n@pronouns they/them\n```\n\nThe presets are `he/him`, `she/her`, `they/them`, `it/its`, and `e/em`.\n\nFor Alex using they/them, a message can show Alex \"You have your coat.\" Other people see \"They have their coat.\"\n\nThis setting affects message templates. It does not rewrite what people say or words written directly into a message.\n\n## Enter your own words\n\nEnter `@pronouns custom`. You need no builder or programmer privileges.\n\nAnswer each prompt with the word that fits its blank. For example:\n\n- ___ is ready. Answer: `ze`.\n- I met ___. Answer: `zir`.\n- This is ___ coat. Answer: `zir`.\n- The coat is ___. Answer: `zirs`.\n- Ze did it ___. Answer: `zirself`.\n\nThen choose `is` or `are` to match your subject word. This also selects \"has\" or \"have\".\n\nRead the completed sentences before answering the final question. Answer `yes` to save, or `no` to keep your current pronouns. Enter `@abort` at a word prompt to cancel.\n\n## In Meadow\n\nOpen your account settings and choose *Enter custom pronouns*. Fill the blanks, choose the verb form, and select *Preview sentences*. Select *Use these pronouns* to save.\n\nThe same editor appears during profile setup. Finish the profile to save your choice there.\n\nFor writing messages that use these words, read `help messages`.",
+    {"@pronouns"},
+    "social",
+    {"messages"}
+  };
   property topic_order (owner: ARCH_WIZARD, flags: "rc") = {
     'topic_basics,
     'topic_bite,
@@ -213,9 +229,11 @@ object HELP_TOPICS [
     'topic_listgag,
     'topic_lock,
     'topic_look,
+    'topic_messages,
     'topic_movement,
     'topic_open,
     'topic_privacy,
+    'topic_pronouns,
     'topic_quit,
     'topic_refill,
     'topic_say,

@@ -12,3 +12,25 @@
 @wizard
 ; const document = #90101.captured_help:resolve(#90101); const html = $document:render(document, 'text_html)['body]; const djot = $document:render(document, 'text_djot)['body]; return {index(html, "<h4>Things you can do</h4>\n<ul class=\"reference-columns\">") != 0, index(djot, "#### Things you can do\n\n{.reference-columns}") != 0};
 {true, true}
+
+// Personal settings and authoring help are readable without programmer privileges.
+; add_property(#90102, "captured_help", false, {#90102, "r"}); add_verb(#90102, {#90102, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90102, "inform_current", {"this.captured_help = args[1];"});
+0
+@nonprogrammer
+% help pronouns
+@quiet
+@wizard
+; const doc = #90102.captured_help:resolve(#90102); const text = $document:render(doc, 'text_plain)['body]; const html = $document:render(doc, 'text_html)['body]; return {index(text, "@pronouns custom") != 0, index(text, "@abort") != 0, index(html, "Choose a preset</h2>") != 0};
+{true, true, true}
+@nonprogrammer
+% help @pronouns
+@quiet
+@wizard
+; return index($document:render(#90102.captured_help:resolve(#90102), 'text_plain)['body], "@pronouns custom") != 0;
+true
+@nonprogrammer
+% help messages
+@quiet
+@wizard
+; const doc = #90102.captured_help:resolve(#90102); const text = $document:render(doc, 'text_plain)['body]; const html = $document:render(doc, 'text_html)['body]; return {index(text, "@preview-message pebble.get_msg") != 0, index(text, "Alex sees: You pick up the pebble.") != 0, index(text, "Sam sees: Alex picks up the pebble.") != 0, index(text, "Robin sees: Alex picks up the pebble.") != 0, index(html, "{pronoun recipient pos_adj}") != 0};
+{true, true, true, true, true}
