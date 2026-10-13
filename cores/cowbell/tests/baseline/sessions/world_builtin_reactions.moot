@@ -1,0 +1,12 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #0:server_started(); move($kibble_cupboard, #90103); move($henri, #90103); $kibble_cupboard.locked = false; $kibble_cupboard.open = false; return true;
+true
+@nonprogrammer
+% open #66
+~~A waft of kibble-scented air escapes from the cupboard.
+@wizard
+; return $kibble_cupboard.open;
+true

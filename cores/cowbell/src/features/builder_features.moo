@@ -1502,10 +1502,11 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
-  verb "@set-r*ule" (any any any) owner: HACKER flags: "rd"
+  verb "@set-r*ule" (any any any) owner: ARCH_WIZARD flags: "rd"
     "Set a rule property on an object. Usage: @set-rule <object>.<rule-property> <expression>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr)
       raise(E_INVARG, "Usage: @set-rule OBJECT.RULE_PROPERTY EXPRESSION");
     endif
@@ -1514,17 +1515,19 @@ object BUILDER_FEATURES [
     endif
     try
       "args[1] is the object.property part, rest of argstr is the rule expression";
-      prop_spec = args[1];
-      rule_expr = argstr[length(prop_spec) + 1..$]:trim();
+      const prop_spec = args[1];
+      const rule_expr = argstr[length(prop_spec) + 1..$]:trim();
       if (!rule_expr || rule_expr == "")
         raise(E_INVARG, "Usage: @set-rule OBJECT.RULE_PROPERTY EXPRESSION");
       endif
-      parsed = $prog_utils:parse_target_spec(prop_spec);
+      const parsed = $prog_utils:parse_target_spec(prop_spec);
+      let target_name;
+      let prop_name;
       if (parsed && parsed['type] == 'property)
         target_name = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         sel['kind] == 'property || raise(E_INVARG, "Property must be object.property");
         target_name = parsed['object_str];
         prop_name = sel['item_name];
@@ -1532,7 +1535,7 @@ object BUILDER_FEATURES [
         raise(E_INVARG, "Property must be object.property");
       endif
       "Match object";
-      target = $match:match_object(target_name, player);
+      const target = $match:match_object(target_name, player);
       valid(target) || raise(E_INVARG, "Object not found");
       "Property must end with _rule to prevent accidents";
       prop_name:ends_with("_rule") || raise(E_INVARG, "Rule properties must end with '_rule'");
@@ -1541,9 +1544,9 @@ object BUILDER_FEATURES [
         raise(E_PERM, "You don't own " + tostr(target) + ".");
       endif
       "Parse and validate rule";
-      rule = $rule_engine:parse_expression(rule_expr, tosym(prop_name));
+      const rule = $rule_engine:parse_expression(rule_expr, tosym(prop_name));
       "Validate for bounded negation violations without evaluating";
-      validation = $rule_engine:validate_rule(rule);
+      const validation = $rule_engine:validate_rule(rule);
       if (length(validation['warnings]) > 0)
         for warning in (validation['warnings])
           player:inform_current($event:mk_error(player, "Warning: " + warning));
@@ -1553,31 +1556,34 @@ object BUILDER_FEATURES [
         endif
       endif
       target.(prop_name) = rule;
-      message = "Set rule on " + tostr(target) + "." + prop_name + ": \"" + rule_expr + "\"";
+      const message = "Set rule on " + tostr(target) + "." + prop_name + ": \"" + rule_expr + "\"";
       player:inform_current($event:mk_info(player, message));
       return rule;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const error_message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      player:inform_current($event:mk_error(player, error_message));
       return 0;
     endtry
   endverb
 
-  verb "@clear-rule" (any none none) owner: HACKER flags: "rd"
+  verb "@clear-rule" (any none none) owner: ARCH_WIZARD flags: "rd"
     "Clear a rule property. Usage: @clear-rule <object>.<rule-property>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr)
       raise(E_INVARG, "Usage: @clear-rule OBJECT.RULE_PROPERTY");
     endif
     try
-      prop_spec = argstr:trim();
-      parsed = $prog_utils:parse_target_spec(prop_spec);
+      const prop_spec = argstr:trim();
+      const parsed = $prog_utils:parse_target_spec(prop_spec);
+      let target_name;
+      let prop_name;
       if (parsed && parsed['type] == 'property)
         target_name = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         sel['kind] == 'property || raise(E_INVARG, "Property must be object.property");
         target_name = parsed['object_str];
         prop_name = sel['item_name];
@@ -1585,7 +1591,7 @@ object BUILDER_FEATURES [
         raise(E_INVARG, "Property must be object.property");
       endif
       "Match object";
-      target = $match:match_object(target_name, player);
+      const target = $match:match_object(target_name, player);
       valid(target) || raise(E_INVARG, "Object not found");
       "Property must end with _rule";
       prop_name:ends_with("_rule") || raise(E_INVARG, "Rule properties must end with '_rule'");
@@ -1595,12 +1601,12 @@ object BUILDER_FEATURES [
       endif
       "Clear the rule";
       target.(prop_name) = 0;
-      message = "Cleared rule on " + tostr(target) + "." + prop_name;
+      const message = "Cleared rule on " + tostr(target) + "." + prop_name;
       player:inform_current($event:mk_info(player, message));
       return true;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const error_message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      player:inform_current($event:mk_error(player, error_message));
       return 0;
     endtry
   endverb
@@ -1807,21 +1813,24 @@ object BUILDER_FEATURES [
     return length(reaction_props);
   endverb
 
-  verb "@add-reaction @set-reaction" (any any any) owner: HACKER flags: "rd"
+  verb "@add-reaction @set-reaction" (any any any) owner: ARCH_WIZARD flags: "rd"
     "Add a reaction to an object. Usage: @add-reaction <object>.<name>_reaction <trigger> <when> <effects>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr || length(args) < 4)
       raise(E_INVARG, "Usage: @add-reaction OBJECT.NAME_reaction TRIGGER WHEN EFFECTS");
     endif
     try
-      prop_spec = args[1];
-      parsed = $prog_utils:parse_target_spec(prop_spec);
+      const prop_spec = args[1];
+      const parsed = $prog_utils:parse_target_spec(prop_spec);
+      let target_name;
+      let prop_name;
       if (parsed && parsed['type] == 'property)
         target_name = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         sel['kind] == 'property || raise(E_INVARG, "Property must be object.property_reaction");
         target_name = parsed['object_str];
         prop_name = sel['item_name];
@@ -1829,7 +1838,7 @@ object BUILDER_FEATURES [
         raise(E_INVARG, "Property must be object.property_reaction");
       endif
       "Match object";
-      target_obj = $match:match_object(target_name, player);
+      const target_obj = $match:match_object(target_name, player);
       valid(target_obj) || raise(E_INVARG, "Object not found");
       "Property must end with _reaction";
       prop_name:ends_with("_reaction") || raise(E_INVARG, "Reaction properties must end with '_reaction'");
@@ -1838,60 +1847,58 @@ object BUILDER_FEATURES [
         raise(E_PERM, "You don't own " + tostr(target_obj) + ".");
       endif
       "Parse trigger literal";
-      trigger_str = args[2];
+      const trigger_str = args[2];
+      let trigger;
       try
         trigger = fromliteral(trigger_str);
       except e (E_INVARG, E_TYPE)
-        detail = length(e) >= 2 ? e[2] | toliteral(e);
-        raise(E_INVARG, "Invalid trigger expression: " + detail);
+        const trigger_detail = length(e) >= 2 ? e[2] | toliteral(e);
+        raise(E_INVARG, "Invalid trigger expression: " + trigger_detail);
       endtry
       "Parse when clause";
-      when_str = args[3];
-      when_clause = when_str == "0" ? 0 | when_str;
+      const when_str = args[3];
+      const when_clause = when_str == "0" ? 0 | when_str;
       "Parse effects literal";
-      effects_parts = args[4..length(args)];
-      effects_str = $list_proto:join(effects_parts, " ");
+      const effects_parts = args[4..length(args)];
+      const effects_str = $list_proto:join(effects_parts, " ");
+      let effects;
       try
         effects = fromliteral(effects_str);
       except e (E_INVARG, E_TYPE)
-        detail = length(e) >= 2 ? e[2] | toliteral(e);
-        raise(E_INVARG, "Invalid effects expression: " + detail);
+        const effects_detail = length(e) >= 2 ? e[2] | toliteral(e);
+        raise(E_INVARG, "Invalid effects expression: " + effects_detail);
       endtry
       typeof(effects) != TYPE_LIST && raise(E_INVARG, "Effects must evaluate to a list.");
-      reaction = $reaction:mk(trigger, when_clause, effects);
-      "Add or update property";
-      prop_key = $obj_utils:property_key(target_obj, prop_name);
-      if (prop_key != E_PROPNF)
-        target_obj.(prop_key) = reaction;
-      else
-        add_property(target_obj, prop_name, reaction, {player, "r"});
-      endif
-      trigger_display = typeof(trigger) == TYPE_SYM ? tostr(trigger) | "threshold";
-      message = "Set " + tostr(target_obj) + "." + prop_name + ": trigger=" + trigger_display + ", effects=" + tostr(length(effects));
+      const reaction = $reaction:install(target_obj, prop_name, $reaction:mk(trigger, when_clause, effects));
+      const trigger_display = typeof(trigger) == TYPE_SYM ? tostr(trigger) | "threshold";
+      const message = "Set " + tostr(target_obj) + "." + prop_name + ": trigger=" + trigger_display + ", effects=" + tostr(length(effects));
       player:inform_current($event:mk_info(player, message));
       return reaction;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const error_message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      player:inform_current($event:mk_error(player, error_message));
       return 0;
     endtry
   endverb
 
-  verb "@enable-reaction" (any none none) owner: HACKER flags: "rd"
+  verb "@enable-reaction" (any none none) owner: ARCH_WIZARD flags: "rd"
     "Enable a reaction. Usage: @enable-reaction <object>.<property_reaction>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr)
       raise(E_INVARG, "Usage: @enable-reaction OBJECT.PROPERTY_reaction");
     endif
     try
-      prop_spec = argstr:trim();
-      parsed = $prog_utils:parse_target_spec(prop_spec);
+      const prop_spec = argstr:trim();
+      const parsed = $prog_utils:parse_target_spec(prop_spec);
+      let target_name;
+      let prop_name;
       if (parsed && parsed['type] == 'property)
         target_name = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         sel['kind] == 'property || raise(E_INVARG, "Property must be object.property_reaction");
         target_name = parsed['object_str];
         prop_name = sel['item_name];
@@ -1899,7 +1906,7 @@ object BUILDER_FEATURES [
         raise(E_INVARG, "Property must be object.property_reaction");
       endif
       "Match object";
-      target_obj = $match:match_object(target_name, player);
+      const target_obj = $match:match_object(target_name, player);
       valid(target_obj) || raise(E_INVARG, "Object not found");
       "Property must end with _reaction";
       prop_name:ends_with("_reaction") || raise(E_INVARG, "Reaction properties must end with '_reaction'");
@@ -1908,37 +1915,40 @@ object BUILDER_FEATURES [
         raise(E_PERM, "You don't own " + tostr(target_obj) + ".");
       endif
       "Check property exists and is a reaction";
-      prop_key = $obj_utils:property_key(target_obj, prop_name);
+      const prop_key = $obj_utils:property_key(target_obj, prop_name);
       prop_key == E_PROPNF && raise(E_INVARG, "Property not found: " + prop_name);
-      reaction = target_obj.(prop_key);
+      let reaction = target_obj.(prop_key);
       typeof(reaction) == TYPE_FLYWEIGHT && reaction.delegate == $reaction || raise(E_INVARG, prop_name + " is not a reaction");
       "Enable the reaction";
       reaction.enabled = true;
-      target_obj.(prop_key) = reaction;
+      $reaction:install(target_obj, prop_name, reaction);
       player:inform_current($event:mk_info(player, "Enabled " + tostr(target_obj) + "." + prop_name));
       return 1;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const error_message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      player:inform_current($event:mk_error(player, error_message));
       return 0;
     endtry
   endverb
 
-  verb "@disable-reaction" (any none none) owner: HACKER flags: "rd"
+  verb "@disable-reaction" (any none none) owner: ARCH_WIZARD flags: "rd"
     "Disable a reaction. Usage: @disable-reaction <object>.<property_reaction>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr)
       raise(E_INVARG, "Usage: @disable-reaction OBJECT.PROPERTY_reaction");
     endif
     try
-      prop_spec = argstr:trim();
-      parsed = $prog_utils:parse_target_spec(prop_spec);
+      const prop_spec = argstr:trim();
+      const parsed = $prog_utils:parse_target_spec(prop_spec);
+      let target_name;
+      let prop_name;
       if (parsed && parsed['type] == 'property)
         target_name = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         sel['kind] == 'property || raise(E_INVARG, "Property must be object.property_reaction");
         target_name = parsed['object_str];
         prop_name = sel['item_name];
@@ -1946,7 +1956,7 @@ object BUILDER_FEATURES [
         raise(E_INVARG, "Property must be object.property_reaction");
       endif
       "Match object";
-      target_obj = $match:match_object(target_name, player);
+      const target_obj = $match:match_object(target_name, player);
       valid(target_obj) || raise(E_INVARG, "Object not found");
       "Property must end with _reaction";
       prop_name:ends_with("_reaction") || raise(E_INVARG, "Reaction properties must end with '_reaction'");
@@ -1955,18 +1965,18 @@ object BUILDER_FEATURES [
         raise(E_PERM, "You don't own " + tostr(target_obj) + ".");
       endif
       "Check property exists and is a reaction";
-      prop_key = $obj_utils:property_key(target_obj, prop_name);
+      const prop_key = $obj_utils:property_key(target_obj, prop_name);
       prop_key == E_PROPNF && raise(E_INVARG, "Property not found: " + prop_name);
-      reaction = target_obj.(prop_key);
+      let reaction = target_obj.(prop_key);
       typeof(reaction) == TYPE_FLYWEIGHT && reaction.delegate == $reaction || raise(E_INVARG, prop_name + " is not a reaction");
       "Disable the reaction";
       reaction.enabled = false;
-      target_obj.(prop_key) = reaction;
+      $reaction:install(target_obj, prop_name, reaction);
       player:inform_current($event:mk_info(player, "Disabled " + tostr(target_obj) + "." + prop_name));
       return 1;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const error_message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      player:inform_current($event:mk_error(player, error_message));
       return 0;
     endtry
   endverb

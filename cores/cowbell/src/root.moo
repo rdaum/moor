@@ -966,7 +966,7 @@ object ROOT [
 
   method _get_reactions_for owner: ARCH_WIZARD
     "Read canonical reaction properties on a fixed host under the supplied caller authority.";
-    const {host, actor} = args;
+    const {host, actor, ?include_names = false} = args;
     actor == caller_perms() || caller_perms().wizard || raise(E_PERM);
     set_task_perms(actor);
     typeof(host) == TYPE_OBJ && valid(host) || raise(E_INVARG);
@@ -986,7 +986,7 @@ object ROOT [
       try
         const reaction = host.(name);
         if (typeof(reaction) == TYPE_FLYWEIGHT && reaction.delegate == $reaction)
-          result = {@result, reaction};
+          result = {@result, include_names ? {name, reaction} | reaction};
         endif
       except (E_PROPNF, E_PERM)
         continue;
@@ -996,63 +996,43 @@ object ROOT [
   endmethod
 
   method fire_trigger owner: ARCH_WIZARD
-    "Fire a trigger on this object, executing all matching reactions.";
-    "Configured effects run under this host owner; context supplies event bindings.";
+    "Request a trigger as the host owner, a wizard, or a verified movement callback.";
     const {trigger_name, ?initial_context = []} = args;
     typeof(this) == TYPE_OBJ && valid(this) || raise(E_INVARG);
-    set_task_perms(this.owner);
-    let context = initial_context;
-    "Add standard context";
-    context['This] = this;
-    context['Location] = this.location;
-    "Find and execute matching reactions";
-    for reaction in ($root:_get_reactions_for(this, this.owner))
-      if (reaction.enabled && reaction.trigger == trigger_name)
-        reaction:execute(context);
-      endif
-    endfor
+    typeof(trigger_name) == TYPE_SYM && typeof(initial_context) == TYPE_MAP || raise(E_INVARG);
+    const principal = caller_perms();
+    const source = callers()[1];
+    const movement = source[1] == this && source[4] == $root && source[2] in {"enterfunc", "exitfunc"};
+    principal == this.owner || principal.wizard || movement || raise(E_PERM, "Only the host owner can request a reaction trigger");
+    return $reaction:_dispatch(this, trigger_name, initial_context);
   endmethod
 
-  method _check_thresholds owner: ARCH_WIZARD
-    "Check if any threshold reactions should fire after a property change.";
-    "Called after mutation effects; installed threshold effects run under this host owner.";
-    const {prop, old_value, new_value, initial_context} = args;
-    typeof(this) == TYPE_OBJ && valid(this) || raise(E_INVARG);
-    set_task_perms(this.owner);
-    let context = initial_context;
-    "Add standard context";
-    context['This] = this;
-    context['Location] = this.location;
-    for reaction in ($root:_get_reactions_for(this, this.owner))
-      if (!reaction.enabled)
+  method _is_movement_callback owner: HACKER
+    "Recognize native move/recycle callbacks through canonical room/root pass frames.";
+    const {host, callback} = args;
+    for frame in (callers())
+      if (frame[1] == host && frame[2] == callback && frame[4] in {$root, $room})
         continue;
       endif
-      const trigger = reaction.trigger;
-      "Skip non-threshold triggers";
-      if (typeof(trigger) != TYPE_LIST || length(trigger) < 4 || trigger[1] != 'when)
+      if (frame[4] == #-1 && frame[2] == "pass")
         continue;
       endif
-      const {_, trigger_prop, op, threshold} = trigger;
-      "Skip if different property";
-      if (trigger_prop != prop)
-        continue;
-      endif
-      "Check if threshold was crossed";
-      if ($reaction:threshold_crossed(old_value, new_value, op, threshold))
-        reaction:execute(context);
-      endif
+      return frame[4] == #-1 && frame[2] in {"move", "recycle"};
     endfor
+    return false;
   endmethod
 
   method enterfunc owner: HACKER
-    "Called when something enters this object. Fire 'on_enter trigger.";
-    {who} = args;
+    "Publish entry only for an actual movement callback.";
+    const {who} = args;
+    $root:_is_movement_callback(this, "enterfunc") || return;
     this:fire_trigger('on_enter, ['Who -> who]);
   endmethod
 
   method exitfunc owner: HACKER
-    "Called when something exits this object. Fire 'on_exit trigger.";
-    {who} = args;
+    "Publish departure only for an actual movement callback.";
+    const {who} = args;
+    $root:_is_movement_callback(this, "exitfunc") || return;
     this:fire_trigger('on_exit, ['Who -> who]);
   endmethod
 

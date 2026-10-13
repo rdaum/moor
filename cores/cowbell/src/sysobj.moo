@@ -6,6 +6,8 @@ object SYSOBJ [
   owner: ARCH_WIZARD
   readable: true
 
+  property startup_hooks (owner: ARCH_WIZARD, flags: "r") = {FIRST_ROOM};
+
   property actor (owner: HACKER, flags: "r") = ACTOR;
   property admin_features (owner: ARCH_WIZARD, flags: "rc") = ADMIN_FEATURES;
   property agent_building_tools (owner: HACKER, flags: "r") = AGENT_BUILDING_TOOLS;
@@ -418,6 +420,9 @@ object SYSOBJ [
     "...This code should only be run as a server task, but we'll let wizards poke at it...";
     callers() && !caller_perms().wizard && return E_PERM;
     server_log("Core starting...");
+    for object in (this.startup_hooks)
+      object:initialize();
+    endfor
     "Issue capability for $login to create players";
     player_class = $login.default_player_class;
     $login.player_setup_capability = $player:issue_capability(player_class, {'create_child, 'make_player}, 0, $arch_wizard);

@@ -193,7 +193,7 @@ object RULE_ENGINE [
     length(substituted_args) == 0 && raise(E_INVARG, "goal needs at least one argument (the object)");
     const target_obj = substituted_args[1];
     typeof(target_obj) == TYPE_OBJ || raise(E_TYPE, "first goal argument must be object");
-    let fact_results = `target_obj:("fact_" + tostr(predicate_name))(@substituted_args) ! E_VERBNF => false';
+    let fact_results = target_obj:("fact_" + tostr(predicate_name))(@substituted_args);
     "Check for failure (false, 0, empty string, empty list - but NOT valid objects)";
     if (fact_results == false || fact_results == 0 || fact_results == "" || fact_results == {})
       return {};
@@ -477,6 +477,9 @@ object RULE_ENGINE [
     {tokens, match_perspective} = args;
     "Parse starting from position 1, return (branches, next_position)";
     result = this:_parse_or_expression(tokens, 1, match_perspective);
+    if (result[2] <= length(tokens))
+      raise(E_INVARG, "Unexpected token at position " + tostr(result[2]) + ": " + tokens[result[2]]);
+    endif
     branches = result[1];
     "If only one branch, unwrap it to maintain backward compatibility";
     if (length(branches) == 1)
@@ -1055,7 +1058,9 @@ object RULE_ENGINE [
       expression = "Player has_key? OR Player has_lockpick?";
       rule = this:parse_expression(expression, 'key_or_pick);
       test_obj = #64:create(false);
-      "Define fact_has_lockpick on test_obj (has_key will fail)";
+      "Define a false key predicate and a true lockpick predicate.";
+      add_verb(test_obj, {#2, "rxd", "fact_has_key"}, {"this", "none", "none"});
+      set_verb_code(test_obj, "fact_has_key", {"return false;"});
       add_verb(test_obj, {#2, "rxd", "fact_has_lockpick"}, {"this", "none", "none"});
       set_verb_code(test_obj, "fact_has_lockpick", {"return true;"});
       "Evaluate rule with Player=test_obj";
@@ -1079,7 +1084,9 @@ object RULE_ENGINE [
       branch1 = {{'has_key, test_obj}};
       "Branch 2: Player has_lockpick (will succeed)";
       branch2 = {{'has_lockpick, test_obj}};
-      "Define fact_has_lockpick on test_obj";
+      "Define a false key predicate and a true lockpick predicate.";
+      add_verb(test_obj, {#2, "rxd", "fact_has_key"}, {"this", "none", "none"});
+      set_verb_code(test_obj, "fact_has_key", {"return false;"});
       add_verb(test_obj, {#2, "rxd", "fact_has_lockpick"}, {"this", "none", "none"});
       set_verb_code(test_obj, "fact_has_lockpick", {"return true;"});
       "Prove alternatives: branch1 OR branch2";

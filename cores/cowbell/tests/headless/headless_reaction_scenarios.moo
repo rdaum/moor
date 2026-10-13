@@ -28,8 +28,8 @@ object HEADLESS_REACTION_SCENARIOS
       enabled = $reaction:mk('on_ping, 0, {{'increment, 'headless_count, 2}, {'set, 'headless_state, "awake"}});
       disabled = $reaction:mk('on_ping, 0, {{'increment, 'headless_count, 100}});
       disabled.enabled = false;
-      add_property(target, "enabled_ping_reaction", enabled, {this.owner, "r"});
-      add_property(target, "disabled_ping_reaction", disabled, {this.owner, "r"});
+      $reaction:install(target, "enabled_ping_reaction", enabled);
+      $reaction:install(target, "disabled_ping_reaction", disabled);
       target:fire_trigger('on_ping, ['Actor -> actor]);
       $test_utils:assert_eq(target.headless_count, 2, "enabled reaction should mutate numeric fixture state");
       $test_utils:assert_eq(target.headless_state, "awake", "enabled reaction should mutate symbolic fixture state");
@@ -51,8 +51,8 @@ object HEADLESS_REACTION_SCENARIOS
       add_property(target, "threshold_seen", false, {this.owner, "r"});
       threshold = $reaction:mk({'when, 'score, 'ge, 5}, 0, {{'set, 'threshold_seen, true}});
       scorer = $reaction:mk('on_score, 0, {{'increment, 'score, 4}, {'decrement, 'score, 1}});
-      add_property(target, "score_threshold_reaction", threshold, {this.owner, "r"});
-      add_property(target, "score_event_reaction", scorer, {this.owner, "r"});
+      $reaction:install(target, "score_threshold_reaction", threshold);
+      $reaction:install(target, "score_event_reaction", scorer);
       target:fire_trigger('on_score, ['Actor -> actor]);
       $test_utils:assert_eq(target.score, 4, "mutation effects should continue after threshold reactions run");
       $test_utils:assert_true(target.threshold_seen, "threshold reaction should fire at the crossing point");
@@ -79,8 +79,8 @@ object HEADLESS_REACTION_SCENARIOS
       add_property(receiver, "chain_this", #-1, {this.owner, "r"});
       add_verb(handler, {this.owner, "rxd", "action_record_context"}, {"this", "none", "this"});
       set_verb_code(handler, "action_record_context", {"{target, context} = args;", "target.chain_actor = context['Actor];", "target.chain_this = context['This];", "return true;"});
-      add_property(source, "source_trigger_reaction", $reaction:mk('on_first, 0, {{'trigger, receiver, 'on_second}}), {this.owner, "r"});
-      add_property(receiver, "receiver_trigger_reaction", $reaction:mk('on_second, 0, {{'increment, 'chain_count, 1}, {'action, 'record_context, handler}}), {this.owner, "r"});
+      $reaction:install(source, "source_trigger_reaction", $reaction:mk('on_first, 0, {{'trigger, receiver, 'on_second}}));
+      $reaction:install(receiver, "receiver_trigger_reaction", $reaction:mk('on_second, 0, {{'increment, 'chain_count, 1}, {'action, 'record_context, handler}}));
       source:fire_trigger('on_first, ['Actor -> actor]);
       $test_utils:assert_eq(receiver.chain_count, 1, "trigger effect should execute the receiver reaction");
       $test_utils:assert_eq(receiver.chain_actor, actor, "chained trigger should preserve actor context");

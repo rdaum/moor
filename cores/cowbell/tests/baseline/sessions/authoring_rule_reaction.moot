@@ -1,0 +1,34 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; add_property(#90102, "counter", 0, {#90102, "r"}); add_property(#90102, "audit_rule", 0, {#90102, "r"}); return true;
+true
+@nonprogrammer
+% @add-reaction me.counter_reaction 'probe 0 {{'increment, 'counter}}
+~~Set
+% @set-rule me.audit_rule #90102 is(#90102)?
+~~Set rule
+@wizard
+; #90102:fire_trigger('probe); return #90102.counter == 1 && $rule_engine:evaluate(#90102.audit_rule)['success];
+true
+@nonprogrammer
+% @disable-reaction me.counter_reaction
+~~Disabled
+@wizard
+; #90102:fire_trigger('probe); return #90102.counter == 1;
+true
+@nonprogrammer
+% @enable-reaction me.counter_reaction
+~~Enabled
+% @clear-rule me.audit_rule
+~~Cleared rule
+@wizard
+; #90102:fire_trigger('probe); return #90102.counter == 2 && #90102.audit_rule == 0;
+true
+@nonprogrammer
+% @add-reaction #90101.foreign_reaction 'probe 0 {{'set, 'name, "forged"}}
+~~don't own
+@wizard
+; return `#90101.foreign_reaction ! E_PROPNF => E_PROPNF' == E_PROPNF;
+true

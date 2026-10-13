@@ -8,10 +8,7 @@ object COUCH [
   owner: HACKER
   readable: true
 
-  property henri_disturbed_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_sit, .when = <RULE, .name = 'henri_sitting, .body = {
-        {'is_sitting, {'var, 'This}, HENRI},
-        {'not_is, {'var, 'This}, {'var, 'Actor}, HENRI}
-      }, .variables = {'This, 'Actor}, .head = 'henri_sitting>, .effects = {{'trigger, HENRI, 'on_couch_intruder}}, .fired_at = 0>;
+  property henri_disturbed_reaction (owner: HACKER, flags: "r") = 0;
 
   override aliases (owner: HACKER, flags: "rc") = {"couch", "sofa", "ratty couch"};
   override description (owner: HACKER, flags: "rc") = "A well-worn brown couch that's seen better days. The cushions are slightly lumpy and there's a suspicious amount of black cat hair embedded in the fabric. Despite its shabby appearance, it looks comfortable enough for a quick rest - or for a grouchy cat to claim as his territory.";
@@ -53,5 +50,17 @@ object COUCH [
     "Rule predicate: Are two values not equal? First arg is this (for rule dispatch).";
     {_, a, b} = args;
     return a != b;
+  endmethod
+
+  method initialize owner: ARCH_WIZARD
+    "Install this object's reactions through the same owner-authorized API used by builders.";
+    const principal = caller_perms();
+    principal == this.owner || principal.wizard || raise(E_PERM);
+    set_task_perms(principal);
+    pass(@args);
+    $reaction:install(this, "henri_disturbed_reaction", <$reaction, .enabled = true, .trigger = 'on_sit, .when = <$rule, .name = 'henri_sitting, .body = {
+        {'is_sitting, {'var, 'This}, $henri},
+        {'not_is, {'var, 'This}, {'var, 'Actor}, $henri}
+      }, .variables = {'This, 'Actor}, .head = 'henri_sitting>, .effects = {{'trigger, $henri, 'on_couch_intruder}}, .fired_at = 0>);
   endmethod
 endobject

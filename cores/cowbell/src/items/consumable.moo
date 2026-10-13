@@ -139,14 +139,13 @@ object CONSUMABLE [
     "Only callable by this object itself";
     caller != this && raise(E_PERM, "do_consume must be called by this object");
     {who, amount, ?silent = false} = args;
+    const principal = caller_perms();
+    principal == who || principal == who.owner || principal.wizard || raise(E_PERM);
     "Clamp amount to available portions";
     amount = min(amount, this.portions);
     amount <= 0 && return false;
     "Decrement portions";
-    old_portions = this.portions;
-    this.portions = this.portions - amount;
-    "Check thresholds for reactions";
-    this:_check_thresholds('portions, old_portions, this.portions, ['Actor -> who, 'Amount -> amount]);
+    $reaction:change(this, 'portions, 'decrement, amount, ['Actor -> who, 'Amount -> amount]);
     "Fire on_consume trigger";
     this:fire_trigger('on_consume, ['Actor -> who, 'Amount -> amount]);
     "Announce consumption";
@@ -174,8 +173,10 @@ object CONSUMABLE [
 
   method action_consume owner: ARCH_WIZARD
     "Action handler for reactions: make actor consume this item.";
-    set_task_perms(this.owner);
+    const principal = caller_perms();
     {who, context, ?amount = 1} = args;
+    principal == who || principal == who.owner || principal.wizard || raise(E_PERM);
+    set_task_perms(principal);
     "Must be holding the item or it must be in same room";
     if (this.location != who && this.location != who.location)
       return false;
@@ -188,7 +189,8 @@ object CONSUMABLE [
   endmethod
 
   method consume_for_test owner: ARCH_WIZARD
-    "Test verb for consumption - bypasses caller check for testing.";
+    "Test helper for the owner or a wizard.";
+    caller_perms() == this.owner || caller_perms().wizard || raise(E_PERM);
     {who, amount} = args;
     "Check first";
     check = this:can_consume(who);
@@ -197,8 +199,7 @@ object CONSUMABLE [
     endif
     "Manually do what do_consume does, without caller check";
     old_portions = this.portions;
-    this.portions = max(0, this.portions - amount);
-    this:_check_thresholds('portions, old_portions, this.portions, ['Actor -> who, 'Amount -> amount]);
+    $reaction:change(this, 'portions, 'set, max(0, this.portions - amount), ['Actor -> who, 'Amount -> amount]);
     this:fire_trigger('on_consume, ['Actor -> who, 'Amount -> amount]);
     if (this.portions <= 0)
       this:fire_trigger('on_empty, ['Actor -> who]);

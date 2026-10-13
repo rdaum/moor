@@ -32,4 +32,29 @@ object HEADLESS_BOOT_SCENARIOS
     this:_assert_valid_global("test_utils", #127);
     return true;
   endverb
+  method test_shipped_reactions_use_normal_installation owner: ARCH_WIZARD
+    "World initialization installs ordinary grants and a restart preserves later edits.";
+    #0:server_started();
+    let count = 0;
+    for host in ({$couch, $henri, $kibble_cupboard})
+      for entry in ($root:_get_reactions_for(host, $arch_wizard, true))
+        const {property, reaction} = entry;
+        $test_utils:assert_type(reaction.authorization, TYPE_STR, "Shipped reactions need ordinary installation grants");
+        $test_utils:assert_eq($reaction:_authority(host, property, reaction), host.owner, "Shipped reactions use the normal installation principal");
+        count = count + 1;
+      endfor
+    endfor
+    $test_utils:assert_eq(count, 9, "Every shipped reaction must be installed");
+    const original = $henri.cupboard_open_reaction;
+    try
+      let disabled = original;
+      disabled.enabled = false;
+      const installed = $reaction:install($henri, "cupboard_open_reaction", disabled);
+      #0:server_started();
+      $test_utils:assert_true(equal($henri.cupboard_open_reaction, installed), "A restart must not replace or reauthorize edited reactions");
+    finally
+      $henri.cupboard_open_reaction = original;
+    endtry
+    return true;
+  endmethod
 endobject
