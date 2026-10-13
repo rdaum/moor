@@ -208,14 +208,16 @@ object SUB_UTILS [
   };
 
   method compile owner: HACKER
-    "Parse template string into list of strings and $sub flyweights.";
-    {template} = args;
+    "Parse a bounded template into strings and substitution tokens.";
+    const {template} = args;
     typeof(template) != TYPE_STR && raise(E_TYPE, "template must be string");
-    content = {};
-    pos = 1;
-    len = length(template);
+    const len = length(template);
+    len > 65536 && raise(E_INVARG, "Template exceeds 65536 characters.");
+    let content = {};
+    let pos = 1;
+    let tokens = 0;
     while (pos <= len)
-      token_start = index(template, "{", 0, pos - 1);
+      const token_start = index(template, "{", 0, pos - 1);
       if (!token_start)
         content = {@content, template[pos..$]};
         break;
@@ -223,17 +225,22 @@ object SUB_UTILS [
       if (token_start > pos)
         content = {@content, template[pos..token_start - 1]};
       endif
-      depth = 1;
-      scan_pos = token_start + 1;
-      token_end = 0;
+      let depth = 1;
+      let scan_pos = token_start + 1;
+      let token_end = 0;
+      tokens = tokens + 1;
+      tokens > 2048 && raise(E_INVARG, "Template exceeds 2048 tokens.");
       while (scan_pos <= len)
-        next_open = index(template, "{", 0, scan_pos - 1);
-        next_close = index(template, "}", 0, scan_pos - 1);
+        const next_open = index(template, "{", 0, scan_pos - 1);
+        const next_close = index(template, "}", 0, scan_pos - 1);
         if (!next_close)
-          raise(E_INVARG, "Unclosed brace in template at position " + tostr(token_start));
+          break;
         endif
         if (next_open && next_open < next_close)
           depth = depth + 1;
+          depth > 16 && raise(E_INVARG, "Template nesting exceeds 16 levels.");
+          tokens = tokens + 1;
+          tokens > 2048 && raise(E_INVARG, "Template exceeds 2048 tokens.");
           scan_pos = next_open + 1;
         else
           depth = depth - 1;
@@ -244,8 +251,12 @@ object SUB_UTILS [
           scan_pos = next_close + 1;
         endif
       endwhile
-      fw = this:_parse_token(template[token_start + 1..token_end - 1]);
-      typeof(fw) == TYPE_FLYWEIGHT && (content = {@content, fw});
+      if (!token_end)
+        raise(E_INVARG, "Unclosed brace in template at position " + tostr(token_start));
+      endif
+      const token = template[token_start + 1..token_end - 1]:trim();
+      !token && raise(E_INVARG, "Empty substitution token.");
+      content = {@content, this:_parse_token(token)};
       pos = token_end + 1;
     endwhile
     return content;
@@ -431,6 +442,19 @@ object SUB_UTILS [
     $test_utils:assert_raises(E_INVARG, this, "compile", {"Broken {template"}, "compile should reject unclosed braces");
     $test_utils:assert_raises(E_TYPE, this, "decompile", {"not a list"}, "decompile should reject non-list content");
     $test_utils:assert_raises(E_INVARG, this, "_parse_token", {"a|b|c"}, "self alternation should have exactly two parts");
+    return true;
+  endmethod
+
+  method test_compile_bounds owner: HACKER
+    "Malformed and oversized messages fail without exhausting a task.";
+    for template in ({"{", "hello{", "x {", "{{", "{}", "{   }"})
+      $test_utils:assert_raises(E_INVARG, this, "compile", {template}, template);
+    endfor
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"x":repeat(65537)}, "source limit");
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"{n}":repeat(2049)}, "token limit");
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"{":repeat(17) + "n" + "}":repeat(17)}, "nesting limit");
+    $test_utils:assert_eq(this:compile(""), {}, "empty messages are valid");
+    $test_utils:assert_eq(this:compile("plain text"), {"plain text"}, "literal messages are valid");
     return true;
   endmethod
 

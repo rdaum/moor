@@ -93,6 +93,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Message templates reject unfinished braces and empty tokens immediately. Compilation has limits on
+  source length, token count, and nesting depth.
+
 - `@dig` works with delegated building permissions in another owner's area. Its duplicate passage
   check uses the room's passage list without requiring direct access to the area's private relation.
 - Cowbell package updates include the rules schema, condition, and facts service objects and their
