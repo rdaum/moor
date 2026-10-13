@@ -2503,7 +2503,7 @@ object PROG_FEATURES [
     lines = {};
     try
       while (1)
-        line = read();
+        line = read(player);
         if (line == ".")
           break;
         elseif (line == "@abort")
