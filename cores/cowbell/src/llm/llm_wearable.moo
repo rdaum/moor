@@ -90,10 +90,15 @@ object LLM_WEARABLE [
     return true;
   endmethod
 
-  method do_wear owner: HACKER
-    "Override parent to enforce owner-only usage";
-    this:_check_for_owner("wear");
-    pass(@args);
+  method do_wear owner: ARCH_WIZARD
+    "Require the actual wearer to own this device, then keep the invoking principal through pass.";
+    const {who, @rest} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    (who == this.owner || principal.wizard)
+      || raise(E_PERM, "That device belongs to someone else.");
+    set_task_perms(principal);
+    return pass(@args);
   endmethod
 
   method _check_for_owner owner: HACKER

@@ -190,27 +190,17 @@ object THING [
   endmethod
 
   method can_get owner: ARCH_WIZARD
-    "Check if actor can pick up this object. Returns true/false.";
-    {?who = player} = args;
-    "Not portable means never allowed";
-    !this.portable && return false;
-    "No rule means always allowed";
-    this.get_rule == 0 && return true;
-    "Evaluate rule with context";
-    context = ['Actor -> who, 'This -> this];
-    result = $rule_engine:evaluate(this.get_rule, context);
-    return result['success];
+    "Check the item's get policy with the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {?who = player} = args;
+    return $thing:_policy(this, 'get, who);
   endmethod
 
   method can_drop owner: ARCH_WIZARD
-    "Check if actor can drop this object. Returns true/false.";
-    {?who = player} = args;
-    "No rule means always allowed";
-    this.drop_rule == 0 && return true;
-    "Evaluate rule with context";
-    context = ['Actor -> who, 'This -> this];
-    result = $rule_engine:evaluate(this.drop_rule, context);
-    return result['success];
+    "Check the item's drop policy with the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {?who = player} = args;
+    return $thing:_policy(this, 'drop, who);
   endmethod
 
   method take_reachable owner: ARCH_WIZARD
@@ -224,100 +214,118 @@ object THING [
     return source.open && (source.location == who || source.location == who.location);
   endmethod
 
+  method _policy owner: ARCH_WIZARD
+    "Check an item's take or drop policy with the caller's permissions.";
+    set_task_perms(caller_perms());
+    const {item, operation, who} = args;
+    operation in {'get, 'drop} || raise(E_INVARG);
+    operation == 'get && !item.portable && return false;
+    if (isa(item, $wearable) && isa(item.location, $actor))
+      item in item.location.wearing && return false;
+    endif
+    const rule = item.(tostr(operation) + "_rule");
+    rule == 0 && return true;
+    return $rule_engine:evaluate(rule, ['This -> item, 'Actor -> who, 'Accessor -> who])['success];
+  endmethod
+
+  method _check_transfer owner: ARCH_WIZARD
+    "Check item rules and destination acceptance under the initiating principal.";
+    const {item, operation, who, destination, principal} = args;
+    const source = callers()[1];
+    source[4] == $thing && source[2] == "transfer" || raise(E_PERM);
+    set_task_perms(principal);
+    $thing:_policy(item, operation, who) || return item.(tostr(operation) + "_denied_msg");
+    destination:acceptable(item) || return {"That item cannot be placed there."};
+    return {};
+  endmethod
+
+  method transfer owner: ARCH_WIZARD
+    "Take or drop an item through one checked path. Container takes use the container operation.";
+    const {item, operation, who, ?silent = false, ?reaction_context = []} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    isa(item, $thing) || raise(E_INVARG, "That object is not an item.");
+    operation in {'get, 'drop} || raise(E_INVARG);
+    const denied = {reason} => ['status -> 'denied, 'reason -> reason];
+    const source = item.location;
+    if (operation == 'get && source != who.location && isa(source, $container))
+      set_task_perms(principal);
+      return $container:_operate(source, 'take, who, ['item -> item], silent, reaction_context);
+    endif
+    const destination = operation == 'get ? who | who.location;
+    valid(destination) || return denied({"There is nowhere to put that here."});
+    if (operation == 'get)
+      source == who.location || return denied({"That is no longer within reach."});
+    else
+      source == who || return denied({"You are no longer carrying that item."});
+    endif
+    const before = {item.owner, item.location, item.portable, item.get_rule, item.drop_rule,
+      who.owner, who.location, who.wearing, destination.owner};
+    const reason = $thing:_check_transfer(item, operation, who, destination, principal);
+    length(reason) == 0 || return denied(reason);
+    $root:check_actor(who, principal);
+    equal(before, {item.owner, item.location, item.portable, item.get_rule, item.drop_rule,
+      who.owner, who.location, who.wearing, destination.owner})
+      || return denied({"The item or its rules changed. Try again."});
+    const location = who.location;
+    move(item, destination);
+    item.location == destination || raise(E_INVARG, "The item did not reach its destination.");
+    $reaction:_dispatch(item, tosym("on_" + tostr(operation)),
+      ['Actor -> who, 'Item -> item, 'Location -> location,
+        '_reaction_chain -> `reaction_context['_reaction_chain] ! E_RANGE => {}']);
+    set_task_perms(principal);
+    if (!silent && valid(location))
+      const event = $event:mk_moved(who, @item.(tostr(operation) + "_msg"))
+        :with_dobj(item):with_iobj(who);
+      location:announce(event);
+    endif
+    return ['status -> 'applied, 'reason -> {}];
+  endmethod
+
   method do_get owner: ARCH_WIZARD
-    "Move item to actor's inventory. Returns true. Optional silent flag.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_get must be called by this object");
-    {who, ?silent = false} = args;
-    $thing:take_reachable(this, who) || raise(E_PERM, "That is no longer within reach.");
-    old_location = this.location;
-    if (old_location != who.location)
-      const take_policy = old_location.take_rule;
-      old_location:can_take_from(who, this)['allowed] || raise(E_PERM, "You can't take that from its container.");
-      old_location.take_rule == take_policy || raise(E_PERM, "The container's access rules changed. Please try again.");
-    endif
-    "Container policy callbacks may suspend; recheck the source before moving.";
-    this.location == old_location && $thing:take_reachable(this, who) || raise(E_PERM, "That is no longer within reach.");
-    this:moveto(who);
-    if (!silent && isa(old_location, $room))
-      event = $event:mk_moved(who, @this.get_msg):with_dobj(this):with_iobj(who);
-      old_location:announce(event);
-    endif
+    "Apply get through the shared transfer operation, or raise with the denial reason.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {who, ?silent = false} = args;
+    const result = $thing:transfer(this, 'get, who, silent);
+    result['status] == 'applied || raise(E_PERM, "The item cannot be moved.", result['reason]);
     return true;
   endmethod
 
   method do_drop owner: ARCH_WIZARD
-    "Drop item from actor to their location. Returns true. Optional silent flag.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_drop must be called by this object");
-    {who, ?silent = false} = args;
-    this.location == who || raise(E_PERM, "You no longer have that to drop.");
-    new_location = who.location;
-    valid(new_location) || raise(E_PERM, "There is nowhere to drop that here.");
-    this:moveto(new_location);
-    if (!silent)
-      event = $event:mk_moved(who, @this.drop_msg):with_dobj(this):with_iobj(who);
-      new_location:announce(event);
-    endif
+    "Apply drop through the shared transfer operation, or raise with the denial reason.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {who, ?silent = false} = args;
+    const result = $thing:transfer(this, 'drop, who, silent);
+    result['status] == 'applied || raise(E_PERM, "The item cannot be moved.", result['reason]);
     return true;
   endmethod
 
   verb get (this none none) owner: ARCH_WIZARD flags: "rxd" [ ui -> ["label" -> "Take"] ]
-    "Get/take an object - command handler";
-    set_task_perms(caller_perms());
-    if (this.location == player)
-      event = $event:mk_error(player, "You already have ", $sub:d(), "."):with_dobj(this);
-      player:inform_current(event);
-      return;
+    "Get an item through the same checks and completed events as an action.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player || principal.wizard)
+      || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    const result = $thing:transfer(this, 'get, player);
+    if (result['status] == 'denied)
+      player:inform_current($event:mk_error(player, @result['reason]):with_dobj(this));
     endif
-    if (!$thing:take_reachable(this, player))
-      player:inform_current($event:mk_error(player, "That is no longer within reach."));
-      return;
-    endif
-    if (!this:can_get(player))
-      event = $event:mk_error(player, @this.get_denied_msg):with_dobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    if (!player:acceptable(this))
-      event = $event:mk_no_accept(player, $sub:nc(), " can't put ", $sub:d(), " in ", $sub:ic(), "."):with_dobj(this):with_iobj(player);
-      player:inform_current(event);
-      return;
-    endif
-    try
-      this:do_get(player);
-    except e (E_PERM)
-      msg = length(e) > 2 ? e[2] | "You don't have permission to take that.";
-      event = $event:mk_error(player, msg):with_dobj(this);
-      player:inform_current(event);
-    endtry
+    return result['status] == 'applied;
   endverb
 
   verb drop (this none none) owner: ARCH_WIZARD flags: "rxd"
-    "Drop an object from inventory - command handler";
-    set_task_perms(caller_perms());
-    if (this.location != player)
-      event = $event:mk_error(player, "You don't have ", $sub:d(), " to drop."):with_dobj(this);
-      player:inform_current(event);
-      return;
+    "Drop an item through the same checks and completed events as an action.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player || principal.wizard)
+      || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    const result = $thing:transfer(this, 'drop, player);
+    if (result['status] == 'denied)
+      player:inform_current($event:mk_error(player, @result['reason]):with_dobj(this));
     endif
-    if (!this:can_drop(player))
-      event = $event:mk_error(player, @this.drop_denied_msg):with_dobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    if (!player.location:acceptable(this))
-      event = $event:mk_error(player, "You can't drop ", $sub:d(), " here."):with_dobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    try
-      this:do_drop(player);
-    except e (E_PERM)
-      msg = length(e) > 2 ? e[2] | "You don't have permission to drop that.";
-      event = $event:mk_error(player, msg):with_dobj(this);
-      player:inform_current(event);
-    endtry
+    return result['status] == 'applied;
   endverb
 
   method acceptable owner: ARCH_WIZARD
@@ -326,46 +334,24 @@ object THING [
   endmethod
 
   method "action_get action_take" owner: ARCH_WIZARD
-    "Action handler for reactions: make actor pick up this item.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    "Must be reachable: in same room, or in a container in same room";
-    this.location == who && return false;
-    if (this.location != who.location)
-      "Not in same room - check if in a container in the room";
-      if (!isa(this.location, $container) || this.location.location != who.location)
-        return false;
-      endif
-    endif
-    !this:can_get(who) && return false;
-    !who:acceptable(this) && return false;
-    return this:do_get(who);
+    "Apply get for the authenticated actor with the same policies and triggers as a command.";
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    return $thing:transfer(this, 'get, who, false, context)['status] == 'applied;
   endmethod
 
   method action_drop owner: ARCH_WIZARD
-    "Action handler for reactions: make actor drop this item.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    this.location != who && return false;
-    !this:can_drop(who) && return false;
-    !who.location:acceptable(this) && return false;
-    return this:do_drop(who);
+    "Apply drop for the authenticated actor with the same policies and triggers as a command.";
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    return $thing:transfer(this, 'drop, who, false, context)['status] == 'applied;
   endmethod
 
   method action_put owner: ARCH_WIZARD
-    "Action handler for reactions: put this item into a container.";
-    set_task_perms(this.owner);
-    {who, context, dest} = args;
-    this.location != who && return false;
-    !this:can_drop(who) && return false;
-    "Delegate to container's action_put_into if available";
-    if (respond_to(dest, 'action_put_into))
-      return dest:action_put_into(who, context, this);
-    endif
-    "Fallback for non-container destinations: check acceptable and move";
-    !dest:acceptable(this) && return false;
-    this:moveto(dest);
-    return true;
+    "Put this item in a container through the same checked operation as a command.";
+    set_task_perms(caller_perms());
+    const {who, context, destination} = args;
+    return $container:_operate(destination, 'put, who, ['item -> this], false, context)['status] == 'applied;
   endmethod
 
   method help_topics owner: ARCH_WIZARD

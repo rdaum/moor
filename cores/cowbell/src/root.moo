@@ -8,6 +8,9 @@ object ROOT [
   fertile: true
   readable: true
 
+  property reaction_state_fields (owner: HACKER, flags: "rc") = [];
+  property reaction_timers (owner: ARCH_WIZARD, flags: "") = [];
+
   property aliases (owner: HACKER, flags: "rc") = {};
   property description (owner: HACKER, flags: "rc") = "Root prototype object from which all other objects inherit.";
   property description_kind (owner: HACKER, flags: "rc") = 'literal;
@@ -995,6 +998,17 @@ object ROOT [
     return result;
   endmethod
 
+  method check_actor owner: ARCH_WIZARD
+    "Require the caller to act as itself, as an owned NPC, or with wizard authority.";
+    const {who, ?principal = caller_perms()} = args;
+    (principal == caller_perms() || caller_perms().wizard) || raise(E_PERM);
+    (typeof(who) == TYPE_OBJ && valid(who) && isa(who, $actor))
+      || raise(E_INVARG, "The action needs a person or an NPC.");
+    (principal == who || principal.wizard
+      || (principal == who.owner && !is_player(who))) || raise(E_PERM, "You cannot act as that person.");
+    return true;
+  endmethod
+
   method fire_trigger owner: ARCH_WIZARD
     "Request a trigger as the host owner, a wizard, or a verified movement callback.";
     const {trigger_name, ?initial_context = []} = args;
@@ -1026,14 +1040,14 @@ object ROOT [
     "Publish entry only for an actual movement callback.";
     const {who} = args;
     $root:_is_movement_callback(this, "enterfunc") || return;
-    this:fire_trigger('on_enter, ['Who -> who]);
+    this:fire_trigger('on_enter, ['Who -> who, 'Actor -> who, 'Location -> this]);
   endmethod
 
   method exitfunc owner: HACKER
     "Publish departure only for an actual movement callback.";
     const {who} = args;
     $root:_is_movement_callback(this, "exitfunc") || return;
-    this:fire_trigger('on_exit, ['Who -> who]);
+    this:fire_trigger('on_exit, ['Who -> who, 'Actor -> who, 'Location -> this]);
   endmethod
 
   method initialize owner: ARCH_WIZARD

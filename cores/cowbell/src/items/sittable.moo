@@ -205,7 +205,7 @@ object SITTABLE [
 
   method add_sitter owner: HACKER
     "Programmatically add an actor to sit. Returns true if successful.";
-    {who, ?silent = false} = args;
+    const {who, ?silent = false, ?context = []} = args;
     if (who in this.sitting)
       return false;
     endif
@@ -220,7 +220,7 @@ object SITTABLE [
       this.location:engage_actor(who, this);
     endif
     this.sitting = {@this.sitting, who};
-    this:fire_trigger('on_sit, ['Actor -> who]);
+    this:fire_trigger('on_sit, mapmerge(context, ['Actor -> who, 'Location -> this.location]));
     if (!silent && valid(this.location))
       event = $event:mk_act(who, @this.sit_msg):with_this(this);
       this.location:announce(event);
@@ -235,7 +235,7 @@ object SITTABLE [
 
   method remove_sitter owner: HACKER
     "Programmatically remove an actor from sitting. Returns true if successful.";
-    {who, ?silent = false} = args;
+    const {who, ?silent = false, ?context = []} = args;
     pos = who in this.sitting;
     if (!pos)
       return false;
@@ -245,7 +245,7 @@ object SITTABLE [
     if (valid(this.location) && respond_to(this.location, 'disengage_actor))
       this.location:disengage_actor(who);
     endif
-    this:fire_trigger('on_stand, ['Actor -> who]);
+    this:fire_trigger('on_stand, mapmerge(context, ['Actor -> who, 'Location -> this.location]));
     if (!silent && valid(this.location))
       event = $event:mk_act(who, @this.stand_msg):with_this(this);
       this.location:announce(event);
@@ -269,16 +269,18 @@ object SITTABLE [
 
   method action_sit owner: ARCH_WIZARD
     "Action handler for reactions: make actor sit on this furniture.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    return this:add_sitter(who);
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    $root:check_actor(who);
+    return this:add_sitter(who, false, context);
   endmethod
 
   method action_stand owner: ARCH_WIZARD
     "Action handler for reactions: make actor stand from this furniture.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    return this:remove_sitter(who);
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    $root:check_actor(who);
+    return this:remove_sitter(who, false, context);
   endmethod
 
   verb dump_sitter (none none none) owner: HACKER flags: "rxd"

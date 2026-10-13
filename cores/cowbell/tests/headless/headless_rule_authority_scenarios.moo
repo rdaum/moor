@@ -44,6 +44,7 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
     "A real guest operation runs approved effects; forged events and transitions do not.";
     const target = create($container, #90101, 2);
     try
+      move(target, #90102.location);
       add_property(target, "audit_value", 0, {#90101, ""});
       target.open = false;
       target.locked = false;
@@ -168,7 +169,7 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
         const target = create($root, #90101, 2);
         targets = {@targets, target};
         add_property(target, "audit_value", 0, {#90101, "r"});
-        $reaction:install(target, "probe_reaction", $reaction:mk('later, 0, {{'delay, 1, {'set, 'audit_value, 7}}}));
+        $reaction:install(target, "probe_reaction", $reaction:mk('later, 0, {{'schedule, 'probe, 1, {'set, 'audit_value, 7}}}));
         target:fire_trigger('later);
         if (mode == "disabled")
           let reaction = target.probe_reaction;
@@ -277,7 +278,7 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
     const {entry, target} = args;
     entry == "direct" && return $reaction:execute_effect({'set, 'audit_value, 7}, ['Actor -> #90101, 'This -> target], target);
     if (entry == "owned")
-      const reaction = $reaction:mk('probe, 0, {{'set, 'audit_value, 3}, {'delay, 1, {'increment, 'audit_value, 1}}});
+      const reaction = $reaction:mk('probe, 0, {{'set, 'audit_value, 3}, {'schedule, 'probe, 1, {'increment, 'audit_value, 1}}});
       return reaction:execute(['Actor -> #90101, 'This -> target]);
     endif
     raise(E_INVARG);

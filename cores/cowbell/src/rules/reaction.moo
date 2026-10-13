@@ -9,6 +9,8 @@ object REACTION [
   fertile: true
   readable: true
 
+  property action_sources (owner: HACKER, flags: "r") = [];
+
   property comparison_ops (owner: HACKER, flags: "rc") = {'eq, 'ne, 'gt, 'lt, 'ge, 'le};
   property effect_types (owner: HACKER, flags: "rc") = {
     'set,
@@ -19,7 +21,8 @@ object REACTION [
     'tell,
     'move,
     'trigger,
-    'delay,
+    'schedule,
+    'cancel,
     'action
   };
   property event_triggers (owner: HACKER, flags: "rc") = {
@@ -32,11 +35,10 @@ object REACTION [
     'on_lock,
     'on_unlock,
     'on_enter,
-    'on_leave,
+    'on_exit,
     'on_pet,
     'on_wear,
     'on_remove,
-    'on_use,
     'on_sit,
     'on_stand,
     'on_sittable_squeeze,
@@ -45,172 +47,161 @@ object REACTION [
 
   override description (owner: HACKER, flags: "rc") = "Flyweight delegate for reactive behaviors on objects.";
   override object_documentation (owner: HACKER, flags: "rc") = {
-    "# $reaction - Reactive Behavior System",
+    "# Reactions",
     "",
-    "## Overview",
+    "A reaction responds to an event, such as a cupboard opening, or to a counter crossing a threshold. It can check a condition before it performs its effects.",
     "",
-    "The Reaction System provides a declarative way to define dynamic behaviors on objects in response",
-    "to various events. Instead of writing complex imperative verb code, builders can specify high-level",
-    "triggers, conditions, and effects. This system is designed to simplify common interaction patterns,",
-    "access controls, and environmental responses.",
+    "Effects run in their listed order. A denied action or an error stops the remaining effects. A false condition skips the reaction.",
     "",
-    "Reactions are essentially encapsulated rules that execute specific actions when their criteria are met.",
-    "They are particularly useful for creating:",
-    "- **Interactive objects**: Doors that unlock, containers that react to items.",
-    "- **Environmental responses**: Objects changing state based on player actions.",
-    "- **Simple AI behaviors**: NPCs reacting to stimuli.",
+    "## Core programming interface",
     "",
-    "## How It Works",
+    "`$reaction:mk(trigger, condition, effects, state_types)` constructs a reaction. The condition can be zero or a condition string. The optional state type map describes declared counters and state values.",
+    "`$reaction:install(host, name, reaction)` authorizes the definition on an owned object. The property name ends in `_reaction`. Ownership changes and edits invalidate the authorization.",
+    "Execution uses the installation owner’s permissions. Event participants do not grant authority. For an action, the `actor` argument identifies the person or owned NPC that will act.",
     "",
-    "Each reaction is composed of three main parts:",
-    "1.  **Trigger**: The event that initiates the reaction check. This can be a simple symbolic event (e.g., `'on_unlock`, `'on_pet`) or a more complex threshold condition.",
-    "2.  **When Clause (Condition)**: An optional logical expression, evaluated by the `$rule_engine`, that must be true for the reaction's effects to fire. This allows for conditional behaviors (e.g., 'only if locked', 'only if owner').",
-    "3.  **Effects**: A list of actions to perform if the trigger fires and the 'when' clause is satisfied. These effects range from setting properties to sending messages or triggering other events.",
+    "`$reaction:action_schemas()` lists supported actions and their required named arguments. Action argument values use the same literal, input, state, and binding expressions as conditions.",
+    "`$reaction:perform_action(name, arguments)` takes actual values and returns an applied, denied, or error result. A missing argument or unknown action is an error.",
+    "Wizards can register a MOO action service with `register_action(name, schema, provider, method)`. The service receives named values and a reaction context. It must check its caller’s authority, preserve the context for chained actions, and return a structured result. Preview must never call the service.",
     "",
-    "## Creating Reactions",
+    "## State and time",
     "",
-    "Use `$reaction:mk` to construct a reaction. Use `$reaction:install(host, property, reaction)` to authorize it on a named `_reaction` property.",
+    "`$reaction:declare_state(host, name, type, initial, choices)` declares a counter or state value. Choices are optional. `change` checks declared types and choices before it changes a value and evaluates threshold reactions.",
+    "`{'schedule, name, seconds, effect}` schedules a named timer. Scheduling the same name replaces its pending task. `{'cancel, name}` cancels it. An object can have at most 16 pending timers, with delays of zero seconds through one day.",
+    "Replacing or disabling an installation cancels its pending timers. Re-enabling it does not revive them. A timer rechecks ownership, location, installation, and its condition before it acts.",
+    "`timers(host)` lists pending names and due times for the owner. `cancel_timer(host, name)` cancels one timer without changing the reaction.",
+    "Scheduling commits earlier effects. A later error cannot undo that commit. Explicit reaction chains stop after four steps. Each reaction has at most 64 immediate effects and 16 levels of nested effects.",
     "",
-    "The caller must own the host or be a wizard. Installation binds the exact definition to the host, property, and current owner.",
-    "Direct property edits and ownership transfers invalidate that authorization. Reinstall the reaction after an approved change.",
-    "Builder commands install and authorize reactions for the builder. Direct `fire_trigger` requests require the host owner or a wizard.",
-    "Delayed effects recheck installation before execution. State effects cannot write built-in identity or security properties.",
-    "",
-    "### Basic Event Trigger",
-    "",
-    "A reaction that fires on a simple event, with no special conditions:",
-    "```moo",
-    "reaction = $reaction:mk('on_unlock, 0, {",
-    "  {'announce, \"{nc} hears a click from {i}.\"},",
-    "  {'set, 'locked, false}",
-    "});",
-    "```",
-    "",
-    "Here:",
-    "- `'on_unlock`: The symbolic event that triggers this reaction.",
-    "- `0`: No 'when' clause (always fires if triggered).",
-    "- `{{'announce, ...}, {'set, ...}}`: A list of effects to execute.",
-    "",
-    "### Reaction with a Condition (`when` clause)",
-    "",
-    "Conditions use the `$rule_engine` syntax to define prerequisites for effects to run:",
-    "```moo",
-    "reaction = $reaction:mk('on_pet, \"NOT property_is(object: input.This, field: 'mood, value: \\\"grouchy\\\")\", {",
-    "  {'increment, 'pets_received},",
-    "  {'emote, \"purrs contentedly.\"}",
-    "});",
-    "```",
-    "",
-    "This reaction will only fire if the `on_pet` event occurs *and* the object (`This`) does not have a grouchy mood.",
-    "",
-    "### Threshold Triggers",
-    "",
-    "Threshold triggers allow reactions to fire when an object's property crosses a specific value, rather than on a discrete event. The trigger is specified as a list:",
-    "```moo",
-    "reaction = $reaction:mk({'when, 'pets_received, 'ge, 10}, 0, {",
-    "  {'set, 'mood, \"happy\"},",
-    "  {'emote, \"seems to have warmed up.\"}",
-    "});",
-    "```",
-    "",
-    "This reaction fires when `pets_received` becomes greater than or equal to `10`. The possible comparison operators are (`'eq`, `'ne`, `'gt`, `'lt`, `'ge`, `'le`).",
-    "",
-    "## Effect Types",
-    "",
-    "The reaction system supports a variety of built-in effects. Messages within `announce`, `emote`, and `tell` effects can use `$sub_utils` templating.",
-    "",
-    "| Effect Type   | Syntax                               | Description                                                                  |",
-    "|---------------|--------------------------------------|------------------------------------------------------------------------------|",
-    "| `'set`         | `{'set, 'prop_name, value}`          | Sets a property `prop_name` on the reacting object to `value`.               |",
-    "| `'increment`   | `{'increment, 'prop_name, ?amount}` | Adds `amount` (default 1) to a numeric property `prop_name`.                 |",
-    "| `'decrement`   | `{'decrement, 'prop_name, ?amount}` | Subtracts `amount` (default 1) from a numeric property `prop_name`.          |",
-    "| `'announce`    | `{'announce, \"message template\"}`   | Sends a message to the reacting object's location, parsed by `$sub_utils`.   |",
-    "| `'emote`       | `{'emote, \"message template\"}`      | Causes the reacting object to emote in its location, parsed by `$sub_utils`. |",
-    "| `'tell`        | `{'tell, 'RecipientVar, \"message\"}` | Sends a private message to a recipient (resolved from context), parsed by `$sub_utils`. |",
-    "| `'move`        | `{'move, destination}`                | Moves the reacting object to the `destination` object.                       |",
-    "| `'trigger`     | `{'trigger, target_obj, 'event_sym}` | Fires another symbolic event on `target_obj`.                                |",
-    "| `'delay`       | `{'delay, seconds, inner_effect}`     | Schedules `inner_effect` to execute after `seconds` in a forked task.      |",
-    "| `'action`      | `{'action, 'verb_name, target}`       | Calls `target:action_<verb_name>(this, context)` for extensible behaviors.   |",
-    "",
-    "## Action Effects",
-    "",
-    "The `'action` effect provides an extensible way to invoke behaviors on other objects. When executed:",
-    "",
-    "1. The `target` is resolved (if a symbol, looked up in context; otherwise used directly)",
-    "2. The verb `action_<verb_name>` is called on the target with `(reacting_object, context)`",
-    "",
-    "This allows objects to define their own action handlers. For example, `$sittable` defines:",
-    "",
-    "- `action_sit(who, context)` - makes `who` sit on the furniture",
-    "- `action_stand(who, context)` - makes `who` stand up from the furniture",
-    "",
-    "Example reaction making Henri sit on a couch when the cupboard opens:",
-    "",
-    "```moo",
-    "$reaction:install(henri, \"sit_reaction\", $reaction:mk('on_cupboard_open, 0, {{'action, 'sit, some_couch}}));",
-    "```",
-    "",
-    "Or with a context variable:",
-    "",
-    "```moo",
-    "$reaction:install(henri, \"sit_reaction\", $reaction:mk('on_cupboard_open, 0, {{'action, 'sit, 'Furniture}}));",
-    "// Fire with: henri:fire_trigger('on_cupboard_open, ['Furniture -> some_couch])",
-    "```",
-    "",
-    "## Message Templates",
-    "",
-    "As noted above, `announce`, `emote`, and `tell` effects leverage the `$sub_utils` template language for dynamic message generation. This allows messages to include information about the actor, direct/indirect objects, pronouns, and even self-alternating phrases.",
-    "",
-    "Examples of `$sub_utils` tokens:",
-    "- `{nc}`: Capitalized name of the actor.",
-    "- `{d}`: Name of the direct object.",
-    "- `{i}`: Name of the indirect object (often the reacting object itself).",
-    "- `{s}`: Subject pronoun for the actor (e.g., \"he\", \"she\", \"they\").",
-    "- `{feel|feels}`: A self-alternating phrase that displays differently to the actor versus others.",
-    "",
-    "For full details on template syntax, see `$sub_utils` documentation.",
-    "",
-    "## Adding Reactions to Objects",
-    "",
-    "Reactions are stored as properties ending with `_reaction`. Use `@add-reaction` or install them from MOO code:",
-    "",
-    "```moo",
-    "$reaction:install(chest, \"unlock_reaction\", $reaction:mk('on_unlock, 0, {{'announce, \"Click!\"}}));",
-    "$reaction:install(chest, \"open_reaction\", $reaction:mk('on_open, 0, {{'emote, \"creaks open.\"}}));",
-    "```",
-    "",
-    "Installed reactions run while enabled and their authorization remains valid. Use `@enable-reaction` and `@disable-reaction` to toggle them.",
-    "",
-    "## Message Property References",
-    "",
-    "Instead of inline message strings, effects can reference message properties by symbol:",
-    "",
-    "```moo",
-    "cat.pet_msg = $sub_utils:compile(\"purrs contentedly.\");",
-    "$reaction:install(cat, \"pet_reaction\", $reaction:mk('on_pet, 0, {{'emote, 'pet_msg}}));",
-    "```",
-    "",
-    "If the property is a `$msg_bag`, a random message is picked each time. This allows varying responses:",
-    "",
-    "```moo",
-    "cat.pet_msgs = $msg_bag:create(true);",
-    "cat.pet_msgs:add($sub_utils:compile(\"purrs contentedly.\"));",
-    "cat.pet_msgs:add($sub_utils:compile(\"rubs against {p} legs.\"));",
-    "$reaction:install(cat, \"pet_reaction\", $reaction:mk('on_pet, 0, {{'emote, 'pet_msgs}}));",
-    "```"
+    "The Cowbell manual’s rule and reaction data reference documents the internal records. The builder authoring commands are separate from this MOO interface."
   };
+
+  method _builtin_action_schemas owner: HACKER
+    "Describe supported actions and their named arguments for validation and authoring help.";
+    const basic = ['target -> 'object, 'actor -> 'object];
+    const item = mapmerge(basic, ['item -> 'object]);
+    const key = mapmerge(basic, ['key -> 'object]);
+    return [
+      'open -> ['description -> "Open a nearby container.", 'inputs -> basic],
+      'close -> ['description -> "Close a nearby container.", 'inputs -> basic],
+      'lock -> ['description -> "Lock a container with a carried key.", 'inputs -> key],
+      'unlock -> ['description -> "Unlock a container with a carried key.", 'inputs -> key],
+      'take_from -> ['description -> "Take an item from a container.", 'inputs -> item],
+      'put_into -> ['description -> "Put a carried item in a container.", 'inputs -> item],
+      'get -> ['description -> "Pick up a nearby item.", 'inputs -> basic],
+      'drop -> ['description -> "Drop a carried item.", 'inputs -> basic],
+      'sit -> ['description -> "Sit on nearby furniture.", 'inputs -> basic],
+      'stand -> ['description -> "Stand up from furniture.", 'inputs -> basic],
+      'wear -> ['description -> "Put on a carried wearable item.", 'inputs -> basic],
+      'remove -> ['description -> "Take off a worn item.", 'inputs -> basic]
+    ];
+  endmethod
+
+  method action_schemas owner: HACKER
+    "List the argument declarations for built-in actions and registered MOO extensions.";
+    let schemas = $reaction:_builtin_action_schemas();
+    for name in (mapkeys($reaction.action_sources))
+      schemas[name] = $reaction.action_sources[name]['schema];
+    endfor
+    return schemas;
+  endmethod
+
+  method register_action owner: ARCH_WIZARD
+    "Register a trusted action service with named arguments. Only wizards can extend the vocabulary.";
+    caller_perms().wizard || raise(E_PERM);
+    const {name, schema, provider, method} = args;
+    $behavior_schema:_name(name, "action");
+    !maphaskey($reaction:_builtin_action_schemas(), name)
+      || raise(E_INVARG, "Cannot replace a built-in action.");
+    $behavior_schema:_vocabulary(['triggers -> [], 'predicates -> [], 'actions -> [name -> schema]]);
+    (typeof(provider) == TYPE_OBJ && valid(provider) && typeof(method) == TYPE_STR)
+      || raise(E_INVARG, "Invalid action service.");
+    respond_to(provider, tosym(method)) || raise(E_VERBNF, "The action service method does not exist.");
+    $reaction.action_sources[name] = ['schema -> schema, 'provider -> provider, 'method -> method];
+  endmethod
+
+  method unregister_action owner: ARCH_WIZARD
+    "Remove a registered action. Reactions that still use its name become invalid.";
+    caller_perms().wizard || raise(E_PERM);
+    const {name} = args;
+    if (maphaskey($reaction.action_sources, name))
+      $reaction.action_sources = mapdelete($reaction.action_sources, name);
+    endif
+  endmethod
+
+  method perform_action owner: ARCH_WIZARD
+    "Run a declared action. Return applied, denied, or error; retain error details for the author.";
+    set_task_perms(caller_perms());
+    const {name, arguments, ?context = []} = args;
+    try
+      const schemas = $reaction:action_schemas();
+      maphaskey(schemas, name) || raise(E_INVARG, "Unknown action: " + tostr(name));
+      $behavior_schema:bindings(arguments, schemas[name]['inputs], "action " + tostr(name));
+      if (maphaskey($reaction.action_sources, name))
+        const service = $reaction.action_sources[name];
+        const result = service['provider]:(service['method])(arguments, context);
+        (typeof(result) == TYPE_MAP && maphaskey(result, 'status)
+          && result['status] in {'applied, 'denied, 'error})
+          || raise(E_INVARG, "The action service returned an invalid result.");
+        result['status] == 'denied && $behavior_schema:_type(result['reason], 'list, "action denial");
+        if (result['status] == 'error)
+          const problem = result['error];
+          (typeof(problem) == TYPE_LIST && length(problem) >= 3 && typeof(problem[1]) == TYPE_ERR
+            && typeof(problem[2]) == TYPE_STR) || raise(E_INVARG, "The action service returned an invalid error.");
+        endif
+        return result;
+      endif
+      const {target, who} = {arguments['target], arguments['actor]};
+      valid(target) || raise(E_INVARG, "The action's target no longer exists.");
+      $root:check_actor(who);
+      if (name in {'open, 'close, 'lock, 'unlock, 'take_from, 'put_into})
+        const operations = ['take_from -> 'take, 'put_into -> 'put];
+        const operation = `operations[name] ! E_RANGE => name';
+        const values = mapdelete(mapdelete(arguments, 'target), 'actor);
+        return $container:_operate(target, operation, who, values, false, context);
+      elseif (name in {'get, 'drop})
+        return $thing:transfer(target, name, who, false, context);
+      elseif (name in {'wear, 'remove})
+        isa(target, $wearable) || raise(E_INVARG, "This action needs a wearable item.");
+        const applied = name == 'wear ? target:action_wear(who, context) | target:action_remove(who, context);
+        return ['status -> applied ? 'applied | 'denied,
+          'reason -> applied ? {} | {"The actor cannot " + tostr(name) + " that item."}];
+      else
+        isa(target, $sittable) || raise(E_INVARG, "This action needs a seat.");
+        const applied = name == 'sit ? target:action_sit(who, context) | target:action_stand(who, context);
+        return ['status -> applied ? 'applied | 'denied,
+          'reason -> applied ? {} | {"The actor cannot " + tostr(name) + " there."}];
+      endif
+    except problem (ANY)
+      return ['status -> 'error, 'error -> problem];
+    endtry
+  endmethod
+
+  method _validate_effects owner: HACKER
+    "Check action arguments against the trigger's declared inputs, including nested delays.";
+    const {effects, scope, ?depth = 0} = args;
+    depth <= 16 || raise(E_QUOTA, "Effects are nested more than 16 levels.");
+    length(effects) <= 64 || raise(E_QUOTA, "A reaction has more than 64 effects.");
+    for effect in (effects)
+      effect.type in $reaction.effect_types || raise(E_INVARG, "Unknown effect: " + tostr(effect.type));
+      if (effect.type == 'action)
+        const schema = $reaction:action_schemas()[effect.action];
+        $behavior_schema:_arguments(effect.arguments, schema['inputs], scope, "action " + tostr(effect.action), 0);
+      elseif (effect.type == 'schedule)
+        $reaction:_validate_effects({effect.effect}, scope, depth + 1);
+      endif
+    endfor
+  endmethod
 
   method mk owner: HACKER
     "Create an enabled reaction flyweight from a trigger, optional when clause, and effect specs.";
     "Args: trigger, when_clause (0 or rule string), effects (list of effect specs)";
     "Returns: <REACTION, .trigger, .when, .effects, .enabled, .fired_at>.";
-    const {trigger, ?when_clause = 0, ?effects = {}} = args;
+    const {trigger, ?when_clause = 0, ?effects = {}, ?state_types = []} = args;
     "Validate trigger";
     this:validate_trigger(trigger);
     "Parse when clause if provided";
     let parsed_when = 0;
     if (typeof(when_clause) == TYPE_STR && length(when_clause) > 0)
-      parsed_when = $rule_engine:parse_expression(when_clause, 'reaction_condition, $rule_engine:trigger_scope(trigger));
+      parsed_when = $rule_engine:parse_expression(when_clause, 'reaction_condition, $rule_engine:trigger_scope(trigger, state_types));
     elseif (typeof(when_clause) != TYPE_INT || when_clause != 0)
       raise(E_INVARG, "Reaction condition must be zero or a nonempty rule string");
     endif
@@ -219,7 +210,13 @@ object REACTION [
     for effect_spec in (effects)
       parsed_effects = {@parsed_effects, this:parse_effect(effect_spec)};
     endfor
-    return <this, .trigger = trigger, .when = parsed_when, .effects = parsed_effects, .enabled = true, .fired_at = 0>;
+    let scope = $rule_engine:trigger_scope(trigger, state_types);
+    if (parsed_when != 0)
+      scope['binding] = $rule_engine:validate_rule(parsed_when)['bindings];
+    endif
+    $reaction:_validate_effects(parsed_effects, scope);
+    return <this, .trigger = trigger, .when = parsed_when, .effects = parsed_effects,
+      .state_types = state_types, .enabled = true, .fired_at = 0>;
   endmethod
 
   method validate_trigger owner: HACKER
@@ -243,51 +240,53 @@ object REACTION [
   endmethod
 
   method parse_effect owner: HACKER
-    "Parse one effect spec into a validated reaction-effect flyweight.";
-    "String message effects are compiled through $sub_utils; list messages are preserved.";
-    {spec} = args;
-    typeof(spec) == TYPE_LIST || raise(E_INVARG, "Effect must be list");
-    length(spec) >= 2 || raise(E_INVARG, "Effect must have at least type and one argument");
-    effect_type = spec[1];
-    effect_type in this.effect_types || raise(E_INVARG, "Unknown effect type: " + tostr(effect_type));
-    if (effect_type == 'set)
-      length(spec) == 3 || raise(E_INVARG, "'set requires {'set, 'prop, value}");
-      {_, prop, value} = spec;
-      return <$reaction, .type = 'set, .prop = prop, .value = value>;
-    elseif (effect_type == 'increment)
-      {_, prop, ?by = 1} = spec;
-      return <$reaction, .type = 'increment, .prop = prop, .by = by>;
-    elseif (effect_type == 'decrement)
-      {_, prop, ?by = 1} = spec;
-      return <$reaction, .type = 'decrement, .prop = prop, .by = by>;
-    elseif (effect_type == 'announce)
-      {_, msg} = spec;
-      compiled_msg = typeof(msg) == TYPE_STR ? $sub_utils:compile(msg) | msg;
-      return <$reaction, .type = 'announce, .msg = compiled_msg>;
-    elseif (effect_type == 'emote)
-      {_, msg} = spec;
-      compiled_msg = typeof(msg) == TYPE_STR ? $sub_utils:compile(msg) | msg;
-      return <$reaction, .type = 'emote, .msg = compiled_msg>;
-    elseif (effect_type == 'tell)
-      {_, target_var, msg} = spec;
-      compiled_msg = typeof(msg) == TYPE_STR ? $sub_utils:compile(msg) | msg;
-      return <$reaction, .type = 'tell, .target = target_var, .msg = compiled_msg>;
-    elseif (effect_type == 'move)
-      {_, dest} = spec;
-      return <$reaction, .type = 'move, .destination = dest>;
-    elseif (effect_type == 'trigger)
-      {_, target_obj, event} = spec;
-      return <$reaction, .type = 'trigger, .target = target_obj, .event = event>;
-    elseif (effect_type == 'delay)
-      {_, seconds, inner_effect} = spec;
-      parsed_inner = this:parse_effect(inner_effect);
-      return <$reaction, .type = 'delay, .seconds = seconds, .effect = parsed_inner>;
-    elseif (effect_type == 'action)
-      {_, action_name, ?action_target = 0} = spec;
-      typeof(action_name) == TYPE_SYM || raise(E_INVARG, "'action requires symbol for action name");
-      return <$reaction, .type = 'action, .action = action_name, .action_target = action_target>;
+    "Parse one effect, checking names, argument shapes, numeric amounts, and bounded nesting.";
+    const {spec, ?depth = 0} = args;
+    depth <= 16 || raise(E_QUOTA, "Effects are nested more than 16 levels.");
+    (typeof(spec) == TYPE_LIST && length(spec) >= 2) || raise(E_INVARG, "Invalid effect.");
+    const kind = spec[1];
+    kind in $reaction.effect_types || raise(E_INVARG, "Unknown effect: " + tostr(kind));
+    if (kind == 'set)
+      const {_, property, value} = spec;
+      $behavior_schema:_name(property, "state field");
+      return <$reaction, .type = 'set, .prop = property, .value = value>;
+    elseif (kind in {'increment, 'decrement})
+      const {_, property, ?amount = 1} = spec;
+      $behavior_schema:_name(property, "state field");
+      typeof(amount) in {TYPE_INT, TYPE_FLOAT} || raise(E_INVARG, "A counter needs a numeric amount.");
+      return <$reaction, .type = kind, .prop = property, .by = amount>;
+    elseif (kind in {'announce, 'emote})
+      const {_, message} = spec;
+      const compiled = typeof(message) == TYPE_STR ? $sub_utils:compile(message) | message;
+      return <$reaction, .type = kind, .msg = compiled>;
+    elseif (kind == 'tell)
+      const {_, recipient, message} = spec;
+      const compiled = typeof(message) == TYPE_STR ? $sub_utils:compile(message) | message;
+      return <$reaction, .type = 'tell, .target = recipient, .msg = compiled>;
+    elseif (kind == 'move)
+      const {_, destination} = spec;
+      return <$reaction, .type = 'move, .destination = destination>;
+    elseif (kind == 'trigger)
+      const {_, target, event} = spec;
+      $behavior_schema:_name(event, "trigger");
+      return <$reaction, .type = 'trigger, .target = target, .event = event>;
+    elseif (kind == 'schedule)
+      const {_, name, seconds, inner} = spec;
+      $behavior_schema:_name(name, "timer name");
+      (typeof(seconds) == TYPE_INT && seconds >= 0 && seconds <= 86400)
+        || raise(E_INVARG, "A timer must wait between zero seconds and one day.");
+      const parsed = $reaction:parse_effect(inner, depth + 1);
+      return <$reaction, .type = 'schedule, .name = name, .seconds = seconds, .effect = parsed>;
+    elseif (kind == 'cancel)
+      const {_, name} = spec;
+      $behavior_schema:_name(name, "timer name");
+      return <$reaction, .type = 'cancel, .name = name>;
     endif
-    raise(E_INVARG, "Unhandled effect type: " + tostr(effect_type));
+    const {_, name, arguments} = spec;
+    const schemas = $reaction:action_schemas();
+    maphaskey(schemas, name) || raise(E_INVARG, "Unknown action: " + tostr(name));
+    $behavior_schema:_fields(arguments, mapkeys(schemas[name]['inputs]), {}, "action arguments");
+    return <$reaction, .type = 'action, .action = name, .arguments = arguments>;
   endmethod
 
   method _definition owner: HACKER
@@ -297,7 +296,23 @@ object REACTION [
     $reaction:validate_trigger(value.trigger);
     (typeof(value.when) == TYPE_INT && value.when == 0) || (typeof(value.when) == TYPE_FLYWEIGHT && value.when.delegate == $rule) || raise(E_INVARG, "Invalid reaction condition");
     typeof(value.effects) == TYPE_LIST || raise(E_INVARG, "Reaction effects must be a list");
-    return <$reaction, .trigger = value.trigger, .when = value.when, .effects = value.effects, .enabled = value.enabled, .fired_at = 0>;
+    let effects = {};
+    for effect in (value.effects)
+      const parsed = typeof(effect) == TYPE_LIST ? $reaction:parse_effect(effect) | effect;
+      (typeof(parsed) == TYPE_FLYWEIGHT && parsed.delegate == $reaction)
+        || raise(E_INVARG, "Invalid reaction effect");
+      effects = {@effects, parsed};
+    endfor
+    const state_types = `value.state_types ! E_PROPNF => []';
+    let scope = $rule_engine:trigger_scope(value.trigger, state_types);
+    if (value.when != 0)
+      const checked = $rule_engine:validate_rule(value.when);
+      checked['valid] || raise(E_INVARG, checked['warnings]:join("; "));
+      scope['binding] = checked['bindings];
+    endif
+    $reaction:_validate_effects(effects, scope);
+    return <$reaction, .trigger = value.trigger, .when = value.when, .effects = effects,
+      .state_types = state_types, .enabled = value.enabled, .fired_at = 0>;
   endmethod
 
   method install owner: ARCH_WIZARD
@@ -309,6 +324,11 @@ object REACTION [
     const name = tostr(property);
     name:ends_with("_reaction") || raise(E_INVARG, "Reaction properties must end with '_reaction'");
     let reaction = $reaction:_definition(value);
+    const declared = $reaction:state_types(host);
+    for field in (mapkeys(reaction.state_types))
+      (maphaskey(declared, field) && declared[field] == reaction.state_types[field])
+        || raise(E_INVARG, "Declare state " + tostr(field) + " on the object before installing this reaction.");
+    endfor
     "CBOR preserves anonymous references and value types inside the signed snapshot.";
     const snapshot = {host, name, host.owner, host.owner.wizard, reaction};
     const claims = ['kind -> "cowbell.reaction", 'installation -> encode_base64(encode_cbor(snapshot))];
@@ -319,6 +339,7 @@ object REACTION [
     else
       host.(name) = reaction;
     endif
+    $reaction:_cancel_installation_timers(host, name);
     return reaction;
   endmethod
 
@@ -346,6 +367,67 @@ object REACTION [
     return 0;
   endmethod
 
+  method declare_state owner: ARCH_WIZARD
+    "Declare an owned object's counter or state value, with an optional list of allowed values.";
+    const {host, name, type, initial, ?choices = {}} = args;
+    const principal = caller_perms();
+    (principal == host.owner || principal.wizard) || raise(E_PERM);
+    $behavior_schema:_name(name, "state name");
+    !(tostr(name) in {"name", "owner", "location", "contents", "programmer", "wizard", "r", "w", "f"})
+      || raise(E_PERM, "That name is reserved for an object setting.");
+    !tostr(name):starts_with("reaction_") || raise(E_INVARG, "That state name is reserved.");
+    $behavior_schema:_type(initial, type, "initial state");
+    typeof(choices) == TYPE_LIST || raise(E_TYPE);
+    for choice in (choices)
+      $behavior_schema:_type(choice, type, "state choice");
+    endfor
+    $reaction:_check_state_value(initial, ['type -> type, 'choices -> choices]);
+    set_task_perms(principal);
+    const field = tostr(name);
+    if ($obj_utils:property_key(host, field) == E_PROPNF)
+      add_property(host, field, initial, {host.owner, "r"});
+    else
+      $reaction:_check_state_value(host.(field), ['type -> type, 'choices -> choices]);
+    endif
+    host.reaction_state_fields[name] = ['type -> type, 'initial -> initial, 'choices -> choices];
+    return host.(field);
+  endmethod
+
+  method _check_state_value owner: HACKER
+    "Require the declared type and, when present, one exact choice.";
+    const {value, declaration} = args;
+    $behavior_schema:_type(value, declaration['type], "state value");
+    length(declaration['choices]) == 0 && return true;
+    for choice in (declaration['choices])
+      equal(value, choice) && return true;
+    endfor
+    raise(E_INVARG, "That value is not one of the declared state choices.");
+  endmethod
+
+  method state_values owner: ARCH_WIZARD
+    "Read declared state using the caller's permissions and validate each current value.";
+    set_task_perms(caller_perms());
+    const {host} = args;
+    let values = [];
+    for name in (mapkeys(host.reaction_state_fields))
+      const value = host.(tostr(name));
+      $reaction:_check_state_value(value, host.reaction_state_fields[name]);
+      values[name] = value;
+    endfor
+    return values;
+  endmethod
+
+  method state_types owner: ARCH_WIZARD
+    "Return the names and types available to conditions and action arguments on this host.";
+    set_task_perms(caller_perms());
+    const {host} = args;
+    let types = [];
+    for name in (mapkeys(host.reaction_state_fields))
+      types[name] = host.reaction_state_fields[name]['type];
+    endfor
+    return types;
+  endmethod
+
   method change owner: ARCH_WIZARD
     "Mutate an owned state property and dispatch thresholds from the actual before/after values.";
     const {host, property, operation, value, ?context = []} = args;
@@ -356,11 +438,22 @@ object REACTION [
     typeof(property) == TYPE_SYM || typeof(property) == TYPE_STR || raise(E_INVARG);
     const name = tostr(property);
     "Built-in identity and security properties are not behavioral state.";
-    name in {"name", "owner", "location", "contents", "programmer", "wizard", "r", "w", "f", "readable", "writable", "fertile"} && raise(E_PERM, "Reaction effects cannot change built-in object properties");
+    name in {"name", "owner", "location", "contents", "programmer", "wizard", "r", "w", "f", "readable", "writable", "fertile", "reaction_state_fields", "reaction_timers"} && raise(E_PERM, "Reaction effects cannot change built-in object properties");
     typeof(context) == TYPE_MAP || raise(E_INVARG);
     set_task_perms(principal);
     const old_value = host.(name);
-    const new_value = operation == 'set ? value | (operation == 'increment ? old_value + value | old_value - value);
+    let operand = value;
+    if (operation != 'set)
+      (typeof(old_value) in {TYPE_INT, TYPE_FLOAT} && typeof(value) in {TYPE_INT, TYPE_FLOAT})
+        || raise(E_INVARG, "Only numeric state can be incremented or decremented.");
+      if (typeof(old_value) == TYPE_FLOAT && typeof(value) == TYPE_INT)
+        operand = tofloat(value);
+      endif
+    endif
+    const new_value = operation == 'set ? value | (operation == 'increment ? old_value + operand | old_value - operand);
+    if (maphaskey(host.reaction_state_fields, tosym(name)))
+      $reaction:_check_state_value(new_value, host.reaction_state_fields[tosym(name)]);
+    endif
     host.(name) = new_value;
     $reaction:_dispatch(host, 0, context, {tosym(name), old_value, new_value});
     return new_value;
@@ -369,12 +462,28 @@ object REACTION [
   method _dispatch owner: ARCH_WIZARD
     "Dispatch only after the trigger entry or mutation method authenticates its caller.";
     const source = callers()[1];
-    (source[4] == $root && source[2] == "fire_trigger") || (source[4] == $reaction && source[2] == "change") || raise(E_PERM);
+    ((source[4] == $root && source[2] == "fire_trigger")
+      || (source[4] == $reaction && source[2] == "change")
+      || (source[4] == $container && source[2] == "_operate")
+      || (source[4] == $thing && source[2] == "transfer")
+      || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})) || raise(E_PERM);
     const {host, trigger_name, initial_context, ?transition = {}} = args;
     let context = initial_context;
+    const chain = `context['_reaction_chain] ! E_RANGE => {}';
+    typeof(chain) == TYPE_LIST || raise(E_INVARG, "Invalid reaction chain.");
+    const depth = length({frame for frame in (callers())
+      if (frame[4] == $reaction && frame[2] == "_dispatch")});
+    (length(chain) < 4 && depth < 4)
+      || raise(E_QUOTA, "Reaction chain stopped after 4 steps: " + chain:join(" -> "));
+    const event = length(transition) == 0 ? tostr(trigger_name) | "change " + tostr(transition[1]);
+    context['_reaction_chain] = {@chain, host.name + " / " + event};
     context['This] = host;
-    context['Location] = host.location;
-    for entry in ($root:_get_reactions_for(host, $arch_wizard, true))
+    if (!maphaskey(context, 'Location))
+      context['Location] = isa(host, $room) ? host | host.location;
+    endif
+    const installed = $root:_get_reactions_for(host, $arch_wizard, true);
+    length(installed) <= 64 || raise(E_QUOTA, "This object has more than 64 reactions.");
+    for entry in (installed)
       const {property, reaction} = entry;
       if (!reaction.enabled)
         continue;
@@ -397,11 +506,111 @@ object REACTION [
     endfor
   endmethod
 
+  method cancel_timer owner: ARCH_WIZARD
+    "Cancel a named pending timer on an owned object. Return false when no timer exists.";
+    const {host, name} = args;
+    const principal = caller_perms();
+    (principal == host.owner || principal.wizard) || raise(E_PERM);
+    if (!maphaskey(host.reaction_timers, name))
+      return false;
+    endif
+    const timer = host.reaction_timers[name];
+    host.reaction_timers = mapdelete(host.reaction_timers, name);
+    if (timer['task] != 0)
+      `kill_task(timer['task]) ! E_INVARG';
+    endif
+    return true;
+  endmethod
+
+  method timers owner: ARCH_WIZARD
+    "List names and due times for an owner's pending timers, without exposing execution records.";
+    const {host} = args;
+    const principal = caller_perms();
+    (principal == host.owner || principal.wizard) || raise(E_PERM);
+    let result = [];
+    for name in (mapkeys(host.reaction_timers))
+      const timer = host.reaction_timers[name];
+      result[name] = ['due -> timer['due], 'reaction -> timer['property]];
+    endfor
+    return result;
+  endmethod
+
+  method _cancel_installation_timers owner: ARCH_WIZARD
+    "Cancel timers belonging to the reaction being replaced or disabled.";
+    const source = callers()[1];
+    source[4] == $reaction && source[2] == "install" || raise(E_PERM);
+    const {host, property} = args;
+    for name in (mapkeys(host.reaction_timers))
+      if (host.reaction_timers[name]['property] == tostr(property))
+        $reaction:cancel_timer(host, name);
+      endif
+    endfor
+  endmethod
+
+  method _schedule owner: ARCH_WIZARD
+    "Replace one named timer. Fork commits earlier effects; no later error can undo that commit.";
+    const source = callers()[1];
+    source[4] == $reaction && source[2] == "execute_effect" || raise(E_PERM);
+    const {host, name, seconds, effect, context, installation, environment} = args;
+    const principal = caller_perms();
+    (principal == host.owner || principal.wizard) || raise(E_PERM);
+    $behavior_schema:_name(name, "timer name");
+    (typeof(seconds) == TYPE_INT && seconds >= 0 && seconds <= 86400)
+      || raise(E_INVARG, "A timer must wait between zero seconds and one day.");
+    $reaction:cancel_timer(host, name);
+    length(host.reaction_timers) < 16 || raise(E_QUOTA, "This object already has 16 pending timers.");
+    const token = uuid();
+    host.reaction_timers[name] = ['token -> token, 'task -> 0, 'due -> time() + seconds,
+      'owner -> host.owner, 'wizard -> host.owner.wizard, 'location -> host.location,
+      'property -> installation == 0 ? "" | tostr(installation[2]),
+      'installation -> installation, 'effect -> effect, 'context -> context, 'environment -> environment];
+    fork task (seconds)
+      $reaction:_resume_timer(host, name, token);
+    endfork
+    "A zero-second timer can finish before this parent resumes after fork.";
+    if (valid(host) && maphaskey(host.reaction_timers, name)
+      && host.reaction_timers[name]['token] == token)
+      host.reaction_timers[name]['task] = task;
+    endif
+    return ['status -> 'scheduled, 'name -> name];
+  endmethod
+
+  method _resume_timer owner: ARCH_WIZARD
+    "Consume only the current timer, recheck its owner, location, installation, and condition, then act.";
+    const source = callers()[1];
+    source[4] == $reaction && source[2] == "_schedule" || raise(E_PERM);
+    const {host, name, token} = args;
+    valid(host) || return false;
+    maphaskey(host.reaction_timers, name) || return false;
+    const timer = host.reaction_timers[name];
+    timer['token] == token || return false;
+    host.reaction_timers = mapdelete(host.reaction_timers, name);
+    (host.owner == timer['owner] && host.owner.wizard == timer['wizard]
+      && host.location == timer['location]) || return false;
+    const installation = timer['installation];
+    if (installation != 0)
+      $reaction:_authority(host, installation[2], installation[3]) == host.owner || return false;
+    endif
+    set_task_perms(host.owner);
+    let environment = timer['environment];
+    environment['state] = $reaction:state_values(host);
+    if (installation != 0 && installation[3].when != 0)
+      const result = $rule_engine:evaluate(installation[3].when, environment['input], [], environment['state]);
+      result['success] || return false;
+      environment['binding] = result['bindings];
+    endif
+    if (installation == 0)
+      return $reaction:execute_effect(timer['effect], timer['context], host, 0, environment);
+    endif
+    return $reaction:_run_installed(host, installation[2], installation[3], timer['context], timer['effect], environment);
+  endmethod
+
   method _run_installed owner: ARCH_WIZARD
     "Recheck installation before execution, including after a delayed continuation.";
     const source = callers()[1];
-    source[4] == $reaction && source[2] in {"_dispatch", "execute_effect"} || raise(E_PERM);
-    const {host, property, reaction, context, ?effect = 0} = args;
+    source[4] == $reaction && source[2] in {"_dispatch", "_resume_timer"} || raise(E_PERM);
+    const {host, property, reaction, context, ?effect = 0,
+      ?environment = ['input -> context, 'parameter -> [], 'state -> [], 'binding -> []]} = args;
     const principal = $reaction:_authority(host, property, reaction);
     principal != 0 || return false;
     set_task_perms(principal);
@@ -409,7 +618,7 @@ object REACTION [
     if (effect == 0)
       return reaction:execute(context, installation);
     endif
-    return $reaction:execute_effect(effect, context, host, installation);
+    return $reaction:execute_effect(effect, context, host, installation, environment);
   endmethod
 
   method compare owner: HACKER
@@ -450,21 +659,25 @@ object REACTION [
       source[4] == $reaction && source[2] == "_run_installed" || raise(E_PERM);
     endif
     let context = initial_context;
+    let environment = ['input -> initial_context, 'parameter -> [],
+      'state -> $reaction:state_values(initial_context['This]), 'binding -> []];
     "A zero when clause means the reaction is unconditional.";
     if (this.when != 0)
-      const result = $rule_engine:evaluate(this.when, context);
+      const result = $rule_engine:evaluate(this.when, context, [], environment['state]);
       if (!result['success])
         return false;
       endif
       "Merge any new bindings into context";
       if (maphaskey(result, 'bindings))
         context = mapmerge(context, result['bindings]);
+        environment['binding] = result['bindings];
       endif
     endif
     "Execute each effect";
     const target = context['This];
     for effect in (this.effects)
-      $reaction:execute_effect(effect, context, target, installation);
+      environment['state] = $reaction:state_values(target);
+      $reaction:execute_effect(effect, context, target, installation, environment);
     endfor
     return true;
   endmethod
@@ -498,7 +711,8 @@ object REACTION [
     "Execute a single parsed or raw effect against target using context bindings.";
     "Mutation effects also check threshold reactions on the same target.";
     set_task_perms(caller_perms());
-    const {raw_effect, context, target, ?installation = 0} = args;
+    const {raw_effect, context, target, ?installation = 0,
+      ?environment = ['input -> context, 'parameter -> [], 'state -> [], 'binding -> []]} = args;
     if (installation != 0)
       const source = callers()[1];
       source[4] == $reaction && source[2] in {"execute", "_run_installed"} || raise(E_PERM);
@@ -541,33 +755,30 @@ object REACTION [
       endif
     elseif (effect.type == 'move)
       const dest = typeof(effect.destination) == TYPE_SYM ? context[effect.destination] | effect.destination;
-      if (valid(dest))
-        move(target, dest);
-      endif
+      valid(dest) || raise(E_INVARG, "The movement destination no longer exists.");
+      move(target, dest);
     elseif (effect.type == 'trigger)
       "Fire another trigger on another object";
-      if (valid(effect.target))
-        effect.target:fire_trigger(effect.event, context);
-      endif
-    elseif (effect.type == 'delay)
-      "Fork commits earlier effects before this delayed effect runs.";
-      fork (effect.seconds)
-        if (installation == 0)
-          $reaction:execute_effect(effect.effect, context, target);
-        else
-          $reaction:_run_installed(target, installation[2], installation[3], context, effect.effect);
-        endif
-      endfork
+      valid(effect.target) || raise(E_INVARG, "The trigger target no longer exists.");
+      effect.target:fire_trigger(effect.event, context);
+    elseif (effect.type == 'schedule)
+      return $reaction:_schedule(target, effect.name, effect.seconds, effect.effect, context, installation, environment);
+    elseif (effect.type == 'cancel)
+      return $reaction:cancel_timer(target, effect.name);
     elseif (effect.type == 'action)
-      "Call action_<name> on action_target, passing the reacting object and context";
-      let action_target = effect.action_target;
-      if (typeof(action_target) == TYPE_SYM)
-        action_target = context[action_target];
+      let values = [];
+      for name in (mapkeys(effect.arguments))
+        values[name] = $condition:resolve(effect.arguments[name], environment);
+      endfor
+      const result = $reaction:perform_action(effect.action, values, context);
+      if (result['status] == 'error)
+        const error = result['error];
+        raise(error[1], "Action " + tostr(effect.action) + " failed: " + error[2], error[3]);
       endif
-      if (valid(action_target))
-        const verb_name = "action_" + tostr(effect.action);
-        `action_target:(verb_name)(target, context) ! E_VERBNF';
+      if (result['status] == 'denied)
+        raise(E_PERM, "Action " + tostr(effect.action) + " was denied.", result['reason]);
       endif
+      return result;
     endif
   endmethod
 
@@ -662,11 +873,11 @@ object REACTION [
     return true;
   endmethod
 
-  method test_parse_effect_delay owner: HACKER
-    "Test parsing a 'delay' effect with nested effect.";
-    effect = this:parse_effect({'delay, 5, {'announce, "Boom!"}});
+  method test_parse_effect_schedule owner: HACKER
+    "Test parsing a named timer with nested effect.";
+    const effect = this:parse_effect({'schedule, 'reminder, 5, {'announce, "Boom!"}});
     $test_utils:assert_type(effect, TYPE_FLYWEIGHT, "parse_effect() should return a flyweight");
-    $test_utils:assert_eq(effect.type, 'delay, "effect type");
+    $test_utils:assert_eq(effect.type, 'schedule, "effect type");
     $test_utils:assert_eq(effect.seconds, 5, "delay seconds");
     $test_utils:assert_type(effect.effect, TYPE_FLYWEIGHT, "nested effect should be parsed");
     $test_utils:assert_eq(effect.effect.type, 'announce, "nested effect type");
@@ -763,21 +974,32 @@ object REACTION [
   endmethod
 
   method test_trigger_and_action_effects owner: HACKER
-    "Test trigger effects chaining into action effects with context bindings.";
-    source = $test_utils:anonymous($root);
-    receiver = $test_utils:anonymous($root);
-    handler = $test_utils:anonymous($root);
-    add_property(receiver, "action_seen", false, {this.owner, "r"});
-    add_property(receiver, "action_this", #-1, {this.owner, "r"});
-    add_property(receiver, "action_actor", #-1, {this.owner, "r"});
-    add_verb(handler, {this.owner, "rxd", "action_mark"}, {"this", "none", "this"});
-    set_verb_code(handler, "action_mark", {"{target, context} = args;", "target.action_seen = true;", "target.action_this = context['This];", "target.action_actor = context['Actor];", "return true;"});
+    "A chained reaction supplies named action arguments; denial stops its remaining effects.";
+    const source = $test_utils:anonymous($root);
+    const receiver = $test_utils:anonymous($actor);
+    const box = $test_utils:anonymous($container);
+    const key = $test_utils:anonymous($thing);
+    move(box, receiver);
+    move(key, receiver);
+    box.locked = true;
+    box.unlock_rule = $rule_engine:parse_expression("location_is(object: input.Key, location: input.Accessor)",
+      'matching_key, $rule_engine:policy_scope('unlock_rule));
+    add_property(receiver, "action_count", 0, {this.owner, "r"});
+    const arguments = ['target -> ['kind -> 'literal, 'value -> box],
+      'actor -> ['kind -> 'input, 'name -> 'This], 'key -> ['kind -> 'literal, 'value -> key]];
     $reaction:install(source, "chain_reaction", this:mk('on_first, 0, {{'trigger, receiver, 'on_second}}));
-    $reaction:install(receiver, "mark_reaction", this:mk('on_second, 0, {{'action, 'mark, handler}}));
+    $reaction:install(receiver, "unlock_reaction", this:mk('on_second, 0,
+      {{'action, 'unlock, arguments}, {'increment, 'action_count}}));
     source:fire_trigger('on_first, ['Actor -> player]);
-    $test_utils:assert_true(receiver.action_seen, "triggered action should run");
-    $test_utils:assert_eq(receiver.action_this, receiver, "chained trigger should update This binding");
-    $test_utils:assert_eq(receiver.action_actor, player, "chained trigger should preserve Actor binding");
+    $test_utils:assert_false(box.locked, "Named key and actor arguments reach the operation");
+    $test_utils:assert_eq(receiver.action_count, 1, "The following effect runs after success");
+    $test_utils:assert_raises(E_PERM, source, "fire_trigger", {'on_first, ['Actor -> player]},
+      "An already unlocked box denies the second action");
+    $test_utils:assert_eq(receiver.action_count, 1, "Denial stops the remaining effects");
+    $test_utils:assert_raises(E_INVARG, $reaction, "mk", {'probe, 0, {{'action, 'missing, []}}},
+      "Unknown actions fail while authoring");
+    $test_utils:assert_raises(E_INVARG, $reaction, "mk", {'probe, 0,
+      {{'action, 'unlock, mapdelete(arguments, 'key)}}}, "A missing key is an authoring error");
     return true;
   endmethod
 endobject

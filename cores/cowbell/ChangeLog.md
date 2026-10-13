@@ -19,6 +19,17 @@ Cowbell entries.
 
 ### Changed
 
+- Containers use the same checks and reactions for commands and actions. Taking an item directly
+  also fires its container's take reaction. Viewing contents has its own `view_rule`.
+- Actions take named arguments and report success, denial, or error. Wearing and removing items now
+  emit their completed reactions. Passage conditions name `From` and `To`; key-independent rules no
+  longer require a carried item.
+- Objects can declare typed counters and state choices. Named timers support replacement and
+  cancellation, recheck conditions when they wake, and stop after an installation is disabled or
+  replaced. Reaction chains and pending timers have explicit limits.
+- Reinstall existing reactions after upgrading. Action effects now use named value expressions.
+  Replace anonymous `delay` effects with named `schedule` effects.
+
 - Relations store each tuple once. Repeated assertion returns the existing identity, and one
   retraction removes the fact. The first write repairs duplicate records and indexes from older
   worlds. Owners can also run `relation:repair()` explicitly.

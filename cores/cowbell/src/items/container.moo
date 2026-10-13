@@ -80,6 +80,8 @@ object CONTAINER [
     "."
   };
   property take_rule (owner: HACKER, flags: "rc") = 0;
+  property view_rule (owner: HACKER, flags: "rc") = 0;
+  property view_denied_msg (owner: HACKER, flags: "rc") = {"You cannot see inside that container."};
   property unlock_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " won't unlock."};
   property unlock_msg (owner: HACKER, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'actor>,
@@ -313,21 +315,12 @@ object CONTAINER [
     return container.locked;
   endmethod
 
-  method can_lock owner: HACKER
-    "Check if accessor can lock this container with key. Returns {allowed, reason}.";
-    {accessor, key} = args;
-    "No rule = public access";
-    if (this.lock_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate lock rule";
-    result = $rule_engine:evaluate(this.lock_rule, ['This -> this, 'Accessor -> accessor, 'Key -> key]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.lock_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_lock owner: ARCH_WIZARD
+    "Check the container's lock policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who, key} = args;
+    const allowed = $container:_policy(this, 'lock, who, ['key -> key]);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.lock_denied_msg];
   endmethod
 
   method _log owner: ARCH_WIZARD
@@ -336,63 +329,30 @@ object CONTAINER [
     server_log(@args);
   endmethod
 
-  method can_unlock owner: HACKER
-    "Check if accessor can unlock this container with key. Returns {allowed, reason}.";
-    {accessor, key} = args;
-    "No rule = public access";
-    if (this.unlock_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate unlock rule";
-    result = $rule_engine:evaluate(this.unlock_rule, ['This -> this, 'Accessor -> accessor, 'Key -> key]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.unlock_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_unlock owner: ARCH_WIZARD
+    "Check the container's unlock policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who, key} = args;
+    const allowed = $container:_policy(this, 'unlock, who, ['key -> key]);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.unlock_denied_msg];
   endmethod
 
-  method can_take_from owner: HACKER
-    "Check if accessor can take dobj from this container. Returns {allowed, reason}.";
-    {accessor, dobj} = args;
-    "Check if container is open";
-    if (!this.open)
-      return ['allowed -> false, 'reason -> this.take_denied_msg];
-    endif
-    "No rule = public access";
-    if (this.take_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate take rule";
-    result = $rule_engine:evaluate(this.take_rule, ['This -> this, 'Accessor -> accessor, 'Dobj -> dobj]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.take_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_take_from owner: ARCH_WIZARD
+    "Check the container's take policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who, item} = args;
+    this.open || return ['allowed -> false, 'reason -> this.take_denied_msg];
+    const allowed = $container:_policy(this, 'take, who, ['item -> item]);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.take_denied_msg];
   endmethod
 
-  method can_put_into owner: HACKER
-    "Check if accessor can put dobj into this container. Returns {allowed, reason}.";
-    {accessor, dobj} = args;
-    "Check if container is open";
-    if (!this.open)
-      return ['allowed -> false, 'reason -> this.put_denied_msg];
-    endif
-    "No rule = public access";
-    if (this.put_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate put rule";
-    result = $rule_engine:evaluate(this.put_rule, ['This -> this, 'Accessor -> accessor, 'Dobj -> dobj]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.put_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_put_into owner: ARCH_WIZARD
+    "Check the container's put policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who, item} = args;
+    this.open || return ['allowed -> false, 'reason -> this.put_denied_msg];
+    const allowed = $container:_policy(this, 'put, who, ['item -> item]);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.put_denied_msg];
   endmethod
 
   method can_view_contents owner: ARCH_WIZARD
@@ -401,10 +361,9 @@ object CONTAINER [
     const {viewer} = args;
     const reachable = this.location == viewer || $thing:take_reachable(this, viewer);
     this.open && reachable || return false;
-    if (this.take_rule != 0)
-      const result = $rule_engine:evaluate(this.take_rule, ['This -> this, 'Accessor -> viewer]);
-      result['success] || return false;
-    endif
+    const policy = this.view_rule;
+    $container:_policy(this, 'view, viewer) || return false;
+    equal(policy, this.view_rule) || return false;
     return this.open && (this.location == viewer || $thing:take_reachable(this, viewer));
   endmethod
 
@@ -441,7 +400,7 @@ object CONTAINER [
         blocks = {@blocks, $format.paragraph:mk(@parts, ".")};
       endif
     else
-      const denied = $event:mk_info(player, this.take_denied_msg):with_iobj(this):resolve(player);
+      const denied = $event:mk_info(player, @this.view_denied_msg):with_iobj(this):resolve(player);
       blocks = {@blocks, @flycontents(denied)};
     endif
     return <$look, .what = this, .title = this:name(), .description = $document_template:mk('blocks, blocks)>;
@@ -504,26 +463,7 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule";
-    const access_check = this:can_take_from(player, dobj);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(dobj):with_iobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    "Check if player can accept the item";
-    if (!player:acceptable(dobj))
-      event = $event:mk_error(player, "You can't carry ", $sub:d(), "."):with_dobj(dobj);
-      player:inform_current(event);
-      return;
-    endif
-    try
-      this:do_take_from(player, dobj);
-    except e (E_PERM)
-      const msg = length(e) > 2 ? e[2] | "You can't take that from " + this:name() + ".";
-      event = $event:mk_error(player, msg):with_dobj(dobj);
-      player:inform_current(event);
-    endtry
+    return $container:_command(this, 'take, player, ['item -> dobj]);
   endverb
 
   verb put (any any this) owner: ARCH_WIZARD flags: "rd" [
@@ -568,26 +508,7 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule.";
-    const access_check = this:can_put_into(player, dobj);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(dobj):with_iobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    "Check if this container can accept the item.";
-    if (!this:acceptable(dobj))
-      event = $event:mk_error(player, $sub:i(), " can't hold ", $sub:d(), "."):with_dobj(dobj):with_iobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    try
-      this:do_put_into(player, dobj, prepstr);
-    except e (E_PERM)
-      const msg = length(e) > 2 ? e[2] | "You can't put that " + prepstr + " " + this:name() + ".";
-      event = $event:mk_error(player, msg):with_dobj(dobj);
-      player:inform_current(event);
-    endtry
+    return $container:_command(this, 'put, player, ['item -> dobj]);
   endverb
 
   verb lock (this with any) owner: ARCH_WIZARD flags: "rxd"
@@ -627,14 +548,7 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule";
-    const access_check = this:can_lock(player, key);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(key):with_iobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    this:do_lock(player, key);
+    return $container:_command(this, 'lock, player, ['key -> key]);
   endverb
 
   verb unlock (this with any) owner: ARCH_WIZARD flags: "rxd"
@@ -674,48 +588,23 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule";
-    const access_check = this:can_unlock(player, key);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(key):with_iobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    this:do_unlock(player, key);
+    return $container:_command(this, 'unlock, player, ['key -> key]);
   endverb
 
-  method can_open owner: HACKER
-    "Check if accessor can open this container. Returns {allowed, reason}.";
-    {accessor} = args;
-    "No rule = public access";
-    if (this.open_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate open rule";
-    result = $rule_engine:evaluate(this.open_rule, ['This -> this, 'Accessor -> accessor]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.open_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_open owner: ARCH_WIZARD
+    "Check the container's open policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who} = args;
+    const allowed = $container:_policy(this, 'open, who, []);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.open_denied_msg];
   endmethod
 
-  method can_close owner: HACKER
-    "Check if accessor can close this container. Returns {allowed, reason}.";
-    {accessor} = args;
-    "No rule = public access";
-    if (this.close_rule == 0)
-      return ['allowed -> true, 'reason -> {}];
-    endif
-    "Evaluate close rule";
-    result = $rule_engine:evaluate(this.close_rule, ['This -> this, 'Accessor -> accessor]);
-    if (result['success])
-      return ['allowed -> true, 'reason -> {}];
-    else
-      reason = this.close_denied_msg;
-      return ['allowed -> false, 'reason -> reason];
-    endif
+  method can_close owner: ARCH_WIZARD
+    "Check the container's close policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {who} = args;
+    const allowed = $container:_policy(this, 'close, who, []);
+    return ['allowed -> allowed, 'reason -> allowed ? {} | this.close_denied_msg];
   endmethod
 
   verb "open op*" (this none none) owner: ARCH_WIZARD flags: "rxd"
@@ -736,14 +625,7 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule";
-    const access_check = this:can_open(player);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    this:do_open(player);
+    return $container:_command(this, 'open, player, []);
   endverb
 
   verb close (this none none) owner: ARCH_WIZARD flags: "rxd"
@@ -758,14 +640,7 @@ object CONTAINER [
       player:inform_current(event);
       return;
     endif
-    "Check access via rule";
-    const access_check = this:can_close(player);
-    if (!access_check['allowed])
-      event = $event:mk_error(player, @access_check['reason]):with_dobj(this);
-      player:inform_current(event);
-      return;
-    endif
-    this:do_close(player);
+    return $container:_command(this, 'close, player, []);
   endverb
 
   method fact_is_open owner: HACKER
@@ -773,179 +648,245 @@ object CONTAINER [
     return this.open;
   endmethod
 
-  method do_take_from owner: ARCH_WIZARD
-    "Core: move item from container to actor's inventory.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_take_from must be called by this object");
-    const {who, item, ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    valid(item) && item.location == this && this.open || return false;
-    const policy = this.take_rule;
-    this:can_take_from(who, item)['allowed] && who:acceptable(item) || return false;
-    item.location == this && this.open && this.take_rule == policy || return false;
-    const moved = item:moveto(who);
-    typeof(moved) == TYPE_ERR && raise(moved);
-    item.location == who || raise(E_INVARG, "Item movement did not reach its destination");
-    if (!silent && valid(who.location))
-      const event = $event:mk_info(who, @this.take_msg):with_dobj(item):with_iobj(this):with_this(who.location);
-      who.location:announce(event);
+  method _command owner: ARCH_WIZARD
+    "Run the shared operation and show a denied result to the person who issued the command.";
+    set_task_perms(caller_perms());
+    const {host, operation, who, arguments} = args;
+    const result = $container:_operate(host, operation, who, arguments);
+    if (result['status] == 'denied)
+      const subject = `arguments['item] ! E_RANGE => `arguments['key] ! E_RANGE => host'';
+      who:inform_current($event:mk_error(who, @result['reason]):with_dobj(subject):with_iobj(host));
     endif
-    this:fire_trigger('on_take, ['Actor -> who, 'Item -> item]);
-    return true;
+    return result['status] == 'applied;
+  endmethod
+
+  method _reachable owner: HACKER
+    "Check that the container is held by the actor or directly beside that actor.";
+    const {host, who} = args;
+    return host.location == who || (valid(who.location) && host.location == who.location);
+  endmethod
+
+  method _policy owner: ARCH_WIZARD
+    "Evaluate the named container policy under the caller's read permissions.";
+    set_task_perms(caller_perms());
+    const {host, operation, who, ?arguments = []} = args;
+    operation in {'take, 'put, 'open, 'close, 'lock, 'unlock, 'view} || raise(E_INVARG);
+    let context = ['This -> host, 'Accessor -> who];
+    if (operation in {'take, 'put})
+      context['Dobj] = arguments['item];
+    elseif (operation in {'lock, 'unlock})
+      context['Key] = arguments['key];
+    endif
+    const policy = host.(tostr(operation) + "_rule");
+    if (policy == 0)
+      return !(operation in {'lock, 'unlock});
+    endif
+    return $rule_engine:evaluate(policy, context)['success];
+  endmethod
+
+  method _snapshot owner: ARCH_WIZARD
+    "Capture custody, ownership, state, and policies that an operation must recheck after callbacks.";
+    set_task_perms(caller_perms());
+    const {host, who, arguments} = args;
+    let snapshot = {host.owner, host.location, host.open, host.locked,
+      host.take_rule, host.put_rule, host.open_rule, host.close_rule, host.lock_rule, host.unlock_rule,
+      who.owner, who.location, who.wearing};
+    if (maphaskey(arguments, 'item))
+      const item = arguments['item];
+      snapshot = {@snapshot, item.owner, item.location, item.portable, item.get_rule, item.drop_rule};
+    endif
+    if (maphaskey(arguments, 'key))
+      const key = arguments['key];
+      snapshot = {@snapshot, key.owner, key.location};
+    endif
+    return snapshot;
+  endmethod
+
+  method _check_operation owner: ARCH_WIZARD
+    "Check rules and acceptance with the initiating principal's permissions, before mutation.";
+    const {host, operation, who, arguments, principal} = args;
+    const source = callers()[1];
+    source[4] == $container && source[2] == "_operate" || raise(E_PERM);
+    set_task_perms(principal);
+    $container:_policy(host, operation, who, arguments)
+      || return host.(tostr(operation) + "_denied_msg");
+    if (operation in {'take, 'put})
+      const item = arguments['item];
+      if (operation == 'take)
+        $thing:_policy(item, 'get, who) || return item.get_denied_msg;
+        who:acceptable(item) || return {"You cannot carry that item."};
+      else
+        $thing:_policy(item, 'drop, who) || return item.drop_denied_msg;
+        host:acceptable(item) || return {"That item does not fit here."};
+      endif
+    endif
+    return {};
+  endmethod
+
+  method _operate owner: ARCH_WIZARD
+    "Apply one container operation for an authenticated actor. Return status and denial reason.";
+    "Policies and acceptance can suspend. Recheck the captured state before any mutation.";
+    const {host, operation, who, ?arguments = [], ?silent = false, ?reaction_context = []} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    isa(host, $container) || raise(E_INVARG, "That object is not a container.");
+    operation in {'take, 'put, 'open, 'close, 'lock, 'unlock} || raise(E_INVARG);
+    const schema = operation in {'take, 'put} ? ['item -> 'object]
+      | (operation in {'lock, 'unlock} ? ['key -> 'object] | []);
+    $behavior_schema:bindings(arguments, schema, "action arguments");
+    for argument in (mapvalues(arguments))
+      valid(argument) || raise(E_INVARG, "An action argument no longer exists.");
+    endfor
+    const denied = {reason} => ['status -> 'denied, 'reason -> reason];
+    $container:_reachable(host, who) || return denied({"That is no longer within reach."});
+    if (operation in {'take, 'put})
+      host.open || return denied(host.(tostr(operation) + "_denied_msg"));
+      const source = operation == 'take ? host | who;
+      arguments['item].location == source || return denied({"That item is no longer there."});
+    elseif (operation == 'open)
+      !host.open || return denied(host.already_open_msg);
+      !host.locked || return denied(host.open_locked_msg);
+    elseif (operation == 'close)
+      host.open || return denied(host.already_closed_msg);
+    else
+      arguments['key].location == who || return denied({"You are not carrying that key."});
+      if (operation == 'lock)
+        !host.locked || return denied(host.already_locked_msg);
+      else
+        host.locked || return denied(host.already_unlocked_msg);
+      endif
+    endif
+    const before = $container:_snapshot(host, who, arguments);
+    const reason = $container:_check_operation(host, operation, who, arguments, principal);
+    length(reason) == 0 || return denied(reason);
+    $root:check_actor(who, principal);
+    equal(before, $container:_snapshot(host, who, arguments))
+      || return denied({"The objects or their rules changed. Try again."});
+    const location = who.location;
+    let context = ['Actor -> who, 'Location -> location,
+      '_reaction_chain -> `reaction_context['_reaction_chain] ! E_RANGE => {}'];
+    if (operation in {'take, 'put})
+      const item = arguments['item];
+      const destination = operation == 'take ? who | host;
+      move(item, destination);
+      item.location == destination || raise(E_INVARG, "The item did not reach its destination.");
+      context['Item] = item;
+      $reaction:_dispatch(item, operation == 'take ? 'on_get | 'on_drop, context);
+    else
+      const property = operation in {'open, 'close} ? "open" | "locked";
+      const old_value = host.(property);
+      const new_value = !!(operation in {'open, 'lock});
+      host.(property) = new_value;
+      $reaction:_dispatch(host, 0, context, {tosym(property), old_value, new_value});
+      if (maphaskey(arguments, 'key))
+        context['Key] = arguments['key];
+      endif
+    endif
+    $reaction:_dispatch(host, tosym("on_" + tostr(operation)), context);
+    set_task_perms(principal);
+    if (!silent && valid(location))
+      let event = $event:mk_info(who, @host.(tostr(operation) + "_msg")):with_this(location);
+      if (operation in {'take, 'put})
+        event = event:with_dobj(arguments['item]):with_iobj(host)
+          :with_text_binding('prep, host.put_prep_display);
+      elseif (operation in {'lock, 'unlock})
+        event = event:with_dobj(arguments['key]):with_iobj(host);
+      else
+        event = event:with_dobj(host):with_iobj(host);
+      endif
+      location:announce(event);
+    endif
+    return ['status -> 'applied, 'reason -> {}];
+  endmethod
+
+  method do_take_from owner: ARCH_WIZARD
+    "Apply take through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
+    const {who, item, ?silent = false} = args;
+    return $container:_operate(this, 'take, who, ['item -> item], silent)['status] == 'applied;
   endmethod
 
   method do_put_into owner: ARCH_WIZARD
-    "Core: move item from actor into this container.";
-    "Only callable by this object itself.";
-    caller != this && raise(E_PERM, "do_put_into must be called by this object");
+    "Apply put through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     const {who, item, ?prep = "", ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    valid(item) && item.location == who && this.open || return false;
-    const policy = this.put_rule;
-    this:can_put_into(who, item)['allowed] && this:acceptable(item) || return false;
-    item.location == who && this.open && this.put_rule == policy || return false;
-    const moved = item:moveto(this);
-    typeof(moved) == TYPE_ERR && raise(moved);
-    item.location == this || raise(E_INVARG, "Item movement did not reach its destination");
-    this:fire_trigger('on_put, ['Actor -> who, 'Item -> item]);
-    if (!silent && valid(who.location))
-      "Use prep passed in, or fall back to put_prep_display property.";
-      const display_prep = prep != "" ? prep | this.put_prep_display;
-      const msg = $sub_utils:compile("{Nc} {put|puts} {d} " + display_prep + " {i}.");
-      const event = $event:mk_info(who, @msg):with_dobj(item):with_iobj(this):with_this(who.location);
-      who.location:announce(event);
-    endif
-    return true;
+    return $container:_operate(this, 'put, who, ['item -> item], silent)['status] == 'applied;
   endmethod
 
   method do_open owner: ARCH_WIZARD
-    "Core: open this container.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_open must be called by this object");
+    "Apply open through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     const {who, ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    !this.open && !this.locked || return false;
-    const policy = this.open_rule;
-    this:can_open(who)['allowed] || return false;
-    !this.open && !this.locked && this.open_rule == policy || return false;
-    this.open = true;
-    this:fire_trigger('on_open, ['Actor -> who]);
-    if (!silent && valid(who.location))
-      const event = $event:mk_info(who, @this.open_msg):with_dobj(this):with_this(who.location);
-      who.location:announce(event);
-    endif
-    return true;
+    return $container:_operate(this, 'open, who, [], silent)['status] == 'applied;
   endmethod
 
   method do_close owner: ARCH_WIZARD
-    "Core: close this container.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_close must be called by this object");
+    "Apply close through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     const {who, ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    this.open || return false;
-    const policy = this.close_rule;
-    this:can_close(who)['allowed] || return false;
-    this.open && this.close_rule == policy || return false;
-    this.open = false;
-    this:fire_trigger('on_close, ['Actor -> who]);
-    if (!silent && valid(who.location))
-      const event = $event:mk_info(who, @this.close_msg):with_dobj(this):with_this(who.location);
-      who.location:announce(event);
-    endif
-    return true;
+    return $container:_operate(this, 'close, who, [], silent)['status] == 'applied;
   endmethod
 
   method do_lock owner: ARCH_WIZARD
-    "Core: lock this container with key.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_lock must be called by this object");
+    "Apply lock through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     const {who, key, ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    !this.locked && valid(key) && key.location == who || return false;
-    const policy = this.lock_rule;
-    policy != 0 && this:can_lock(who, key)['allowed] || return false;
-    !this.locked && key.location == who && this.lock_rule == policy || return false;
-    this.locked = true;
-    this:fire_trigger('on_lock, ['Actor -> who, 'Key -> key]);
-    if (!silent && valid(who.location))
-      const event = $event:mk_info(who, @this.lock_msg):with_dobj(key):with_iobj(this):with_this(who.location);
-      who.location:announce(event);
-    endif
-    return true;
+    return $container:_operate(this, 'lock, who, ['key -> key], silent)['status] == 'applied;
   endmethod
 
   method do_unlock owner: ARCH_WIZARD
-    "Core: unlock this container with key.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_unlock must be called by this object");
+    "Apply unlock through the common container operation; return whether it succeeded.";
+    caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     const {who, key, ?silent = false} = args;
-    const actor = caller_perms();
-    valid(who) && (actor == who || (valid(actor) && actor.wizard)) || raise(E_PERM);
-    this.locked && valid(key) && key.location == who || return false;
-    const policy = this.unlock_rule;
-    policy != 0 && this:can_unlock(who, key)['allowed] || return false;
-    this.locked && key.location == who && this.unlock_rule == policy || return false;
-    this.locked = false;
-    this:fire_trigger('on_unlock, ['Actor -> who, 'Key -> key]);
-    if (!silent && valid(who.location))
-      const event = $event:mk_info(who, @this.unlock_msg):with_dobj(key):with_iobj(this):with_this(who.location);
-      who.location:announce(event);
-    endif
-    return true;
+    return $container:_operate(this, 'unlock, who, ['key -> key], silent)['status] == 'applied;
   endmethod
 
   method action_take_from owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply take for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context, item} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_take_from(who, item);
+    return $container:_operate(this, 'take, who, ['item -> item], false, context)['status] == 'applied;
   endmethod
 
   method action_put_into owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply put for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context, item} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_put_into(who, item);
+    return $container:_operate(this, 'put, who, ['item -> item], false, context)['status] == 'applied;
   endmethod
 
   method action_open owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply open for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_open(who);
+    return $container:_operate(this, 'open, who, [], false, context)['status] == 'applied;
   endmethod
 
   method action_close owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply close for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_close(who);
+    return $container:_operate(this, 'close, who, [], false, context)['status] == 'applied;
   endmethod
 
   method action_lock owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply lock for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context, key} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_lock(who, key);
+    return $container:_operate(this, 'lock, who, ['key -> key], false, context)['status] == 'applied;
   endmethod
 
   method action_unlock owner: ARCH_WIZARD
-    "Apply the container action for its authenticated accessor.";
+    "Apply unlock for the caller or an actor they own, with normal policies and triggers.";
+    set_task_perms(caller_perms());
     const {who, context, key} = args;
-    const actor = caller_perms();
-    actor == who || (valid(actor) && actor.wizard) || raise(E_PERM);
-    return this:do_unlock(who, key);
+    return $container:_operate(this, 'unlock, who, ['key -> key], false, context)['status] == 'applied;
   endmethod
 
   method help_topics owner: ARCH_WIZARD
