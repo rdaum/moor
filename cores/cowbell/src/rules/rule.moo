@@ -9,10 +9,12 @@ object RULE [
 
   override description (owner: ARCH_WIZARD, flags: "rc") = "A validated condition tree with declared input, parameter, and state types.";
 
-  method mk owner: HACKER
+  method mk owner: ARCH_WIZARD
     "Construct one rule from a canonical condition tree and its declared scope.";
-    const {name, condition, ?scope = $rule_engine:scope()} = args;
-    const rule = <$rule, .name = tosym(name), .condition = condition, .scope = scope>;
+    set_task_perms(caller_perms());
+    const {name, condition, ?scope = $rule_engine:scope(), ?parameters = []} = args;
+    const tree = $condition:prepare_relations(condition, parameters);
+    const rule = <$rule, .name = tosym(name), .condition = tree, .scope = scope>;
     const validation = $rule_engine:validate_rule(rule);
     validation['valid] || raise(E_INVARG, validation['warnings]:join("; "));
     return rule;

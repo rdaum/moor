@@ -147,21 +147,23 @@ object HEADLESS_RELATION_SCENARIOS
       const absent = relation:query_result({2, {'var, 'Name}});
       $test_utils:assert_true(absent['complete], "An absent indexed value has a complete empty result");
       $test_utils:assert_eq(absent['rows], {}, "No matching fact");
-      $rule_engine:register_relation('test_names, relation, {'group, 'name},
-        ['description -> "Names in one group.", 'inputs -> ['group -> 'integer],
-          'outputs -> ['name -> 'string]]);
+      const fields = ['group -> 'integer, 'name -> 'string];
+      $relation:define_fields(relation, {'group, 'name}, fields);
       const rule = $rule_engine:parse_expression(
-        "test_names(group: 1) -> (name: Name) AND test_names(group: 1) -> (name: Name)");
+        "relation(" + tostr(relation) + ", group: 1) -> (name: Name) AND relation("
+          + tostr(relation) + ", group: 1) -> (name: Name)");
       const matched = $rule_engine:evaluate(rule);
       $test_utils:assert_eq(1 + length(matched['alternatives]), 2,
         "Repeated bindings preserve both exact string values");
-      const incomplete = $rule_engine:query('test_names, ['group -> 1], 1);
+      const incomplete = $relation:query_rows(relation, fields, ['group -> 1], 1);
       $test_utils:assert_false(incomplete['complete], "Named queries retain result completeness");
-      relation:assert({1, 2});
+      $test_utils:assert_raises(E_INVARG, relation, "assert", {{1, 2}},
+        "Typed relations reject malformed facts at insertion");
+      add_property(relation, "tuple_bad", {1, 2}, {$hacker, "r"});
+      $relation:_index_tuple(relation, "bad", {1, 2});
       $test_utils:assert_raises(E_INVARG, $rule_engine, "evaluate", {rule},
         "Malformed typed facts remain errors, rather than missing facts");
     finally
-      $rule_engine:unregister_predicate('test_names);
       relation:destroy();
     endtry
     return true;
@@ -176,11 +178,9 @@ object HEADLESS_RELATION_SCENARIOS
       move(visitor, room);
       relation:assert({room, visitor});
       relation:assert({room, visitor});
-      $rule_engine:register_relation('test_members, relation, {'location, 'member},
-        ['description -> "Members recorded at a location.", 'inputs -> ['location -> 'object],
-          'outputs -> ['member -> 'object]]);
+      $relation:define_fields(relation, {'location, 'member}, ['location -> 'object, 'member -> 'object]);
       const text = "occupants(location: input.Location) -> (object: Visitor)"
-        + " AND test_members(location: input.Location) -> (member: Visitor)";
+        + " AND relation(" + tostr(relation) + ", location: input.Location) -> (member: Visitor)";
       const rule = $rule_engine:parse_expression(text, 'members,
         $rule_engine:scope(['Location -> 'object]));
       const result = $rule_engine:evaluate(rule, ['Location -> room]);
@@ -201,15 +201,14 @@ object HEADLESS_RELATION_SCENARIOS
       relation.r = 0;
       let denied = false;
       try
-        const negative = $rule_engine:parse_expression("NOT test_members(location: input.Location)",
+        const negative = $rule_engine:parse_expression("NOT relation(" + tostr(relation) + ", location: input.Location)",
           'absence, $rule_engine:scope(['Location -> 'object]));
         this:_query_as_player(negative, room);
       except (E_PERM)
         denied = true;
       endtry
-      $test_utils:assert_true(denied, "A registered query does not grant read access");
+      $test_utils:assert_true(denied, "An explicit relation query does not grant read access");
     finally
-      $rule_engine:unregister_predicate('test_members);
       recycle(visitor);
       recycle(room);
       relation:destroy();
@@ -220,6 +219,7 @@ object HEADLESS_RELATION_SCENARIOS
   method test_relation_owner_authoring_permissions owner: ARCH_WIZARD
     "A non-programmer can expose an owned relation but cannot change a foreign relation.";
     const owned = create($relation, #90102, 2);
+    const other_owner = create($relation, #90101, 2);
     const foreign = create($relation, $hacker, 2);
     try
       for method in ({"_index_tuple", "_find_tuple_id", "repair"})
@@ -227,40 +227,51 @@ object HEADLESS_RELATION_SCENARIOS
         set_verb_code(owned, method, {"raise(E_ASSERT, \"An internal storage call reached a target override\");"});
       endfor
       foreign:assert({1});
-      this:_register_as_player(owned);
+      this:_define_as_player(owned);
+      this:_define_as_programmer(other_owner);
+      $test_utils:assert_eq(owned.fact_schema, other_owner.fact_schema,
+        "Different owners can define identical fields without registering a name");
+      $test_utils:assert_eq(other_owner:tuples(), {{2}}, "Each owner has independent storage");
       $test_utils:assert_eq(owned:tuples(), {{1}}, "The owner's fact was stored");
-      for operation in ({"register", "assert"})
+      for operation in ({"define", "assert"})
         let denied = false;
         try
-          this:_register_as_player(foreign, operation);
+          this:_define_as_player(foreign, operation);
         except (E_PERM)
           denied = true;
         endtry
-        $test_utils:assert_true(denied, "Foreign registration and even idempotent writes require ownership");
+        $test_utils:assert_true(denied, "Foreign field definitions and even idempotent writes require ownership");
       endfor
     finally
-      $rule_engine:unregister_predicate('test_owned_relation);
       owned:destroy();
+      other_owner:destroy();
       foreign:destroy();
     endtry
     return true;
   endmethod
 
-  method _register_as_player owner: RUNTIME_PLAYER
+  method _define_as_player owner: RUNTIME_PLAYER
     "Use relation authoring services under the non-programmer owner's permissions.";
     caller == this || raise(E_PERM);
     const {relation, ?operation = "both"} = args;
     if (operation in {"both", "assert"})
       relation:assert({1});
     endif
-    if (operation in {"both", "register"})
-      $rule_engine:register_relation('test_owned_relation, relation, {'value},
-        ['description -> "An owner's declared fact.", 'inputs -> [], 'outputs -> ['value -> 'integer]]);
+    if (operation in {"both", "define"})
+      $relation:define_fields(relation, {'value}, ['value -> 'integer]);
     endif
   endmethod
 
+  method _define_as_programmer owner: RUNTIME_PROGRAMMER
+    "Define the same local fields as another owner and store a different fact.";
+    caller == this || raise(E_PERM);
+    const {relation} = args;
+    $relation:define_fields(relation, {'value}, ['value -> 'integer]);
+    $relation:assert({2}, relation);
+  endmethod
+
   method _query_as_player owner: RUNTIME_PLAYER
-    "Exercise registered relation reads with ordinary player permissions.";
+    "Exercise explicit relation reads with ordinary player permissions.";
     caller == this || raise(E_PERM);
     const {rule, room} = args;
     return $rule_engine:evaluate(rule, ['Location -> room]);
@@ -279,4 +290,57 @@ object HEADLESS_RELATION_SCENARIOS
     raise(E_PERM);
   endmethod
 
+  method test_relation_directions_joins_and_absence owner: ARCH_WIZARD
+    "One field definition supports either query direction, joins, and correlated absence checks.";
+    const relation = create($relation, $hacker);
+    try
+      $relation:define_fields(relation, {'parent, 'child}, ['parent -> 'integer, 'child -> 'integer]);
+      relation:assert({1, 2});
+      relation:assert({1, 3});
+      relation:assert({2, 4});
+      const call = "relation(" + tostr(relation);
+      const forward = $rule_engine:parse_expression(call + ", parent: 1) -> (child: Child)");
+      const children = $rule_engine:evaluate(forward);
+      $test_utils:assert_eq(1 + length(children['alternatives]), 2, "Both children are selected");
+      const parameters = ['family -> relation];
+      const scope = $rule_engine:scope([], ['family -> 'object]);
+      const reusable = $rule_engine:parse_expression(
+        "relation(parameter.family, child: 4) -> (parent: Parent)", 'parents, scope, parameters);
+      $test_utils:assert_eq($rule_engine:evaluate(reusable, [], parameters)['bindings], ['Parent -> 2],
+        "Programmers can compile a query through an explicit setting");
+      const restored = $rule_engine:parse_expression($rule_engine:decompile_rule(reusable),
+        'parents, scope, parameters);
+      $test_utils:assert_eq($rule_engine:evaluate(restored, [], parameters)['bindings], ['Parent -> 2],
+        "Printed settings remain references when reparsed");
+      const reverse = $rule_engine:parse_expression(call + ", child: 4) -> (parent: Parent)");
+      $test_utils:assert_eq($rule_engine:evaluate(reverse)['bindings], ['Parent -> 2], "Either column can be bound");
+      const join = $rule_engine:parse_expression(call + ", parent: 1) -> (child: Middle) AND "
+        + call + ", parent: binding.Middle) -> (child: End)");
+      const joined = $rule_engine:evaluate(join);
+      $test_utils:assert_eq(joined['bindings], ['Middle -> 2, 'End -> 4], "The first query feeds the next");
+      const leaf = $rule_engine:parse_expression(call + ", parent: 1) -> (child: Leaf) AND NOT "
+        + call + ", parent: binding.Leaf)");
+      $test_utils:assert_eq($rule_engine:evaluate(leaf)['bindings], ['Leaf -> 3], "Absence is correlated with each match");
+      const printed = $rule_engine:decompile_rule(join);
+      const reparsed = $rule_engine:parse_expression(printed);
+      $test_utils:assert_eq($rule_engine:evaluate(reparsed), joined, "Printing and parsing preserve relation joins");
+      $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression",
+        {"NOT " + call + ") -> (child: Unbound)"}, "Negation cannot introduce a selected value");
+      $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression",
+        {call + ", missing: 1)"}, "Unknown fields fail at authoring time");
+      $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression",
+        {call + ", parent: \"one\")"}, "Mistyped inputs fail at authoring time");
+      const saved = relation.fact_schema;
+      $test_utils:assert_raises(E_INVARG, $relation, "define_fields",
+        {relation, {'parent, 'child}, ['parent -> 'string, 'child -> 'integer]},
+        "A field change must validate existing tuples before changing anything");
+      $test_utils:assert_eq(relation.fact_schema, saved, "A failed field change preserves the definition");
+      $relation:define_fields(relation, {'from, 'to}, ['from -> 'integer, 'to -> 'integer]);
+      $test_utils:assert_raises(E_INVARG, $rule_engine, "evaluate", {forward},
+        "Existing conditions detect renamed fields instead of silently changing meaning");
+    finally
+      recycle(relation);
+    endtry
+    return true;
+  endmethod
 endobject

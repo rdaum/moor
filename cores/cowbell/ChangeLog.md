@@ -21,6 +21,16 @@ Cowbell entries.
 
 ### Changed
 
+- Relations define their own named fields. Rules and reaction steps reference a relation object or a
+  reaction setting, so builders can reuse field names without sharing data. Queries can bind either
+  side of a relation. Copies retain their chosen relation; change the setting to use a separate one.
+  Incompatible fields and unavailable relations produce errors.
+- Replace global relation registrations with `@facts OBJECT define FIELD:TYPE ...`. Use
+  `fact in OBJECT ...`, `record in OBJECT ...`, and `forget in OBJECT ...`, or name a reaction
+  setting in place of the object. Recreate rules and steps that used registered relation names.
+  Stored tuples remain in their relation objects. Re-register extension predicates after upgrading;
+  their registry now contains query providers only.
+
 - Builders can author reactions with `@reaction`, declare state with `@state`, set access rules with
   `@rule`, and keep named facts with `@facts`. The commands require no programmer privileges or MOO
   literals. Help, inspection, preview, execution reports, and copying use the same services as

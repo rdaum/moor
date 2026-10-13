@@ -9,21 +9,21 @@ true
 ~~Created
 % @create $relation named members
 ~~Created
-% @facts members define club_members person:object group:text
-~~Defined club_members
+% @facts members define person:object group:text
+~~Defined fields on members
 % @facts members add person=me group=readers
 ~~Recorded fact
 % @facts members add person=me group=readers
 ~~does not create a duplicate
-% @rule clubbox open fact club_members person=actor group=readers
+% @rule clubbox open fact in members person=actor group=readers
 ~~Set open rule
 % @create $relation named visits
 ~~Created
-% @facts visits define club_visits person:object box:object
-~~Defined club_visits
+% @facts visits define person:object box:object
+~~Defined fields on visits
 % @reaction clubbox log after open
 ~~disabled
-% @reaction clubbox log then record club_visits person=actor box=this
+% @reaction clubbox log then record in visits person=actor box=this
 ~~Saved
 % @reaction clubbox log enable
 ~~enabled
@@ -40,7 +40,7 @@ true
 % open clubbox
 ~~won't open
 % @rule clubbox open show
-~~fact club_members
+~~fact in members
 % @facts members
 ~~No facts yet
 @wizard

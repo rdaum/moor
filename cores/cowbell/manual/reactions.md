@@ -6,6 +6,9 @@ commands inside the world. You do not need to write MOO code or have programmer 
 This guide starts with a box that announces a message. Later examples add a counter, club
 membership, and a timer. Enter each command on its own line in your usual command input.
 
+For an overview of the ideas, start with the
+[introduction to rules, reactions, and relations](../docs/rules-reactions-relations.md).
+
 ## Before you start
 
 Your account needs builder privileges. A world administrator can grant them. The objects in these
@@ -213,25 +216,25 @@ Create the box and a relation to hold the list:
 ```text
 @create $container named clubbox
 @create $relation named members
-@facts members define club_members person:object group:text
+@facts members define person:object group:text
 ```
 
-`members` is the object that stores the list. `club_members` is the fact name used in conditions.
-`person:object` means each entry names a person in the world. `group:text` means it also contains a
-group name. Fact names are shared across the world. Choose a different name if someone already uses
-`club_members`.
+`members` is the object that stores the list. `person:object` means each entry names a person in the
+world. `group:text` means it also contains a group name. These fields belong to this relation.
+Another builder can use the same field names on a separate relation without sharing your list.
 
 Add yourself to the readers group, then set the opening rule:
 
 ```text
 @facts members add person=me group=readers
-@rule clubbox open fact club_members person=actor group=readers
+@rule clubbox open fact in members person=actor group=readers
 close clubbox
 open clubbox
 ```
 
-The rule looks for an entry whose person is the opener and whose group is `readers`. The word `fact`
-means “look for this stored fact.” Repeating the same `add` command keeps one entry.
+The rule looks in `members` for an entry whose person is the opener and whose group is `readers`.
+The command saves the relation's object reference, so renaming it does not change the rule.
+Repeating the same `add` command keeps one entry.
 
 Remove your membership, then try again:
 
@@ -257,9 +260,10 @@ A second relation can remember which people opened which boxes:
 
 ```text
 @create $relation named visits
-@facts visits define club_visits person:object box:object
+@facts visits define person:object box:object
 @reaction clubbox log after open
-@reaction clubbox log then record club_visits person=actor box=this
+@reaction clubbox log with visitors object visits
+@reaction clubbox log then record in visitors person=actor box=this
 @reaction clubbox log enable
 ```
 
@@ -273,6 +277,36 @@ open clubbox
 
 The new fact names you and `clubbox`. Repeated visits by the same person keep one fact. This list
 answers “who visited which box?” A counter is a better choice for “how many visits?”
+
+`visitors` is this reaction's setting. To use another list with the same fields, change that
+setting:
+
+```text
+@create $relation named other_visits
+@facts other_visits define person:object box:object
+@reaction clubbox log with visitors object other_visits
+```
+
+The condition and steps stay the same. Copies retain the chosen relation until you change their
+setting. They start disabled, so inspect their settings before enabling them. Relations are never
+copied automatically. Readable relations can be queried by other owners; writing requires ownership
+or wizard authority.
+
+A condition can also find values in a relation:
+
+```text
+fact in members group=readers person as visitor
+```
+
+This binds `visitor` to each matching person. Later conditions and steps can use that name. Use
+`select each by visitor` to act on each match. Use `select once` when only existence matters. The
+same fields can be used in either direction: `person=actor group as group_name` finds that person's
+groups. Use `NOT fact in members person=actor group=readers` to check that an entry is absent.
+
+A relation setting must keep the field names and types required by its conditions and steps. An
+incompatible change is rejected before saving. If a relation is deleted or access changes, execution
+reports an error. It does not treat unreadable facts as absent. Use `show`, `check`, `preview`, or
+`trace` to inspect the problem, then change the setting to a suitable relation.
 
 ## Build a timed puzzle
 
