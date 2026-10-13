@@ -137,6 +137,7 @@ define RULE_ENGINE = #62;
 define RULE = #63;
 define RULE_TEST = #64;
 define REACTION = #69;
+define BEHAVIOR_SCHEMA = #3010;
 
 // types
 define STR_PROTO = #13;

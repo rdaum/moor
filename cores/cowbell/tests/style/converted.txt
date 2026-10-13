@@ -272,3 +272,4 @@ features/builder_features.moo:@clear-rule
 features/builder_features.moo:@add-reaction
 features/builder_features.moo:@enable-reaction
 features/builder_features.moo:@disable-reaction
+rules/behavior_schema.moo

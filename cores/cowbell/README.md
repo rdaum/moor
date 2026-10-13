@@ -118,6 +118,7 @@ Developer references cover specific parts of the project:
 - [Runtime testing](RUNTIME_TESTING.md): test suites and focused checks.
 - [Style guide](STYLE_GUIDE.md): conventions for Cowbell code.
 - [Capabilities](CAPABILITIES.md): permissions and delegated authority.
+- [Behavior model](manual/behavior-model.md): definitions, bindings, state, and execution contracts.
 - [Contextual suggestions](docs/suggestions.md): choices offered in Meadow's command inputs.
 - [Audit matrix](AUDIT.md): review coverage and remaining work.
 
