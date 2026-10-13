@@ -14,6 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased 2.0 series (`main`) branch
 
+- Term matching and query builtins accept a `case_sensitive` option. It preserves string case in
+  matches, repeated bindings, and duplicate removal. Existing calls keep their current behavior.
+
 - Cowbell change reviews preserve decisions and drafts when groups or policy change. Refresh keeps
   unaffected decisions and retains changed drafts for another check. Apply summaries cover every
   selected effect. Administrators can finish partial reviews without accepting deferred changes, and

@@ -211,6 +211,38 @@ Reactions run in definition order. Effects run in list order. A later reaction o
 state changes. A denial or error stops the current reaction's remaining effects and ends that
 dispatch. It cannot be reported as successful execution.
 
+## Query implementation
+
+Conditions and relation queries use the kernel's `term_match` builtin with case-sensitive matching
+and duplicate removal. The MOO code supplies facts, checks access, and combines conditions. The
+kernel does not inspect objects or call world verbs.
+
+`$rule_engine:register_relation(name, relation, columns, schema)` exposes one relation as a named
+query. `columns` lists its field names in tuple order. The schema describes input and output types.
+A field belongs to one of those groups. The caller must own the relation or be a wizard. The
+registration does not grant readers permission to access private facts.
+
+For example, a membership relation can store `{club, member}` pairs. Its query takes a club and
+returns members. The column names are `{'club, 'member}`. Its schema declares an object input named
+`club` and an object output named `member`. A rule can use the selected member in later conditions.
+The builder workflow will supply these declarations through commands and describe the fields by
+name.
+
+`relation:query_result(pattern, bindings, options)` returns `rows` and `complete`. It asks for one
+extra distinct answer to detect overflow. `relation:query` requires a complete answer and raises
+`E_QUOTA` on overflow. The query uses a bound scalar's index when possible and reads at most 4096
+candidate records. A broader query raises an error asking for a narrower input scope. Permission,
+invalid-data, and search-budget errors remain errors, including under negation.
+
+Stored values that resemble term-variable markers remain data. Inputs use existing bindings, and
+matching interprets variables only in the supplied pattern. A named relation query checks its
+candidate tuples against the declared field types before matching.
+
+Relations use exact value equality for tuple identity. Repeated assertion returns the same identity.
+Legacy reads already remove duplicates from results. The first mutation collapses duplicate storage
+and rebuilds indexes, retaining an original identity for each fact. Owners can call `repair()`
+explicitly before that first mutation. Repair does not suspend or commit partial batches.
+
 ## Effects, state, and timers
 
 | `kind`     | Other required fields        | Operation                                               |

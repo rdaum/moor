@@ -448,6 +448,11 @@ of search work before the builtin raises `E_MAXREC`. `term_query()` also consume
 normal tick budget as it searches, so expensive queries can raise `E_MAXREC` even before `max_steps`
 is reached. `dedupe` removes duplicate result maps and suppresses repeated active recursive states.
 
+The term builtins also accept `['case_sensitive -> true]`. This option makes matching and result
+deduplication preserve string case, including nested values and string map keys. Symbols retain
+their normal case-insensitive identity. The default is `false`, which uses ordinary MOO equality.
+Use the same setting when matching facts and checking bound values.
+
 ## Grid tile maps
 
 The grid functions use a flat list to represent a two-dimensional tile map. They can be used for map
