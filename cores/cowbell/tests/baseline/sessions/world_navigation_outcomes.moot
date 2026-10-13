@@ -1,0 +1,24 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); const far_area = create($area, #90101, 2); move(#90110, far_area); #90110.name = "Far Landing"; #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true):with_locked(true)); return true;
+true
+// A route can become unusable at execution. Denial must not report arrival.
+@nonprogrammer
+% walk Far Landing
+=Walking to Far Landing (1 step)...
+@text-within 5 The east door is locked.
+=Something blocked your path - stopping.
+@quiet
+@wizard
+; return #90102.location == #90103;
+true
+// Joining another player follows the same ordinary passage across an area boundary.
+; const p = $room:find_passage(#90103, "east"); #90108:update_passage(#90103, #90110, p:with_locked(false)); move(#90101, #90110); return true;
+true
+@nonprogrammer
+% join RUNTIME_PROGRAMMER
+=Walking to RUNTIME_PROGRAMMER (1 step)...
+@wizard
+; suspend(3); return #90102.location == #90110;
+true

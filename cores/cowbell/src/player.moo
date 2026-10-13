@@ -2603,7 +2603,7 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach " + destination:name() + ", you'll need to take the " + label + ". I can't walk you through transport systems yet."));
+            player:inform_current($event:mk_info(player, "To reach " + destination:name() + ", you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
             return;
           endif
         endfor
@@ -2764,7 +2764,7 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach " + target:name() + ", you'll need to take the " + label + ". I can't walk you through transport systems yet."));
+            player:inform_current($event:mk_info(player, "To reach " + target:name() + ", you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
             return;
           endif
         endfor
@@ -2788,6 +2788,7 @@ object PLAYER [
   method _walk_path_options owner: ARCH_WIZARD
     "Return {passage_only_path, transport_inclusive_path} for walking commands.";
     caller == this || raise(E_PERM);
+    set_task_perms(caller_perms());
     {area, current_room, destination} = args;
     try
       path = area:find_path(current_room, destination, true, false);
@@ -2855,7 +2856,7 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach home, you'll need to take the " + label + ". Can't auto-walk through transport systems yet."));
+            player:inform_current($event:mk_info(player, "To reach home, you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
             return;
           endif
         endfor

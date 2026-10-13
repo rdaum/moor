@@ -92,11 +92,16 @@ object REACTION [
     const basic = ['target -> 'object, 'actor -> 'object];
     const item = mapmerge(basic, ['item -> 'object]);
     const key = mapmerge(basic, ['key -> 'object]);
+    const exit = mapmerge(basic, ['exit -> 'string]);
     return [
       'open -> ['description -> "Open a nearby container.", 'inputs -> basic],
       'close -> ['description -> "Close a nearby container.", 'inputs -> basic],
       'lock -> ['description -> "Lock a container with a carried key.", 'inputs -> key],
       'unlock -> ['description -> "Unlock a container with a carried key.", 'inputs -> key],
+      'open_exit -> ['description -> "Open a passage door at the target room's named exit.", 'inputs -> exit],
+      'close_exit -> ['description -> "Close a passage door at the target room's named exit.", 'inputs -> exit],
+      'lock_exit -> ['description -> "Lock a passage door using the actor's access rule and carried keys.", 'inputs -> exit],
+      'unlock_exit -> ['description -> "Unlock a passage door using the actor's access rule and carried keys.", 'inputs -> exit],
       'take_from -> ['description -> "Take an item from a container.", 'inputs -> item],
       'put_into -> ['description -> "Put a carried item in a container.", 'inputs -> item],
       'get -> ['description -> "Pick up a nearby item.", 'inputs -> basic],
@@ -165,7 +170,15 @@ object REACTION [
       const {target, who} = {arguments['target], arguments['actor]};
       valid(target) || raise(E_INVARG, "The action's target no longer exists.");
       $root:check_actor(who);
-      if (name in {'open, 'close, 'lock, 'unlock, 'take_from, 'put_into})
+      if (name in {'open_exit, 'close_exit, 'lock_exit, 'unlock_exit})
+        isa(target, $room) || raise(E_INVARG, "An exit action needs a room as its target.");
+        const passage = $room:find_passage(target, arguments['exit]);
+        typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT}
+          || return ['status -> 'denied, 'reason -> {"That room has no such exit."}];
+        const operation = ['open_exit -> 'open, 'close_exit -> 'close,
+          'lock_exit -> 'lock, 'unlock_exit -> 'unlock][name];
+        return $passage:operate(passage, operation, who, target, #-1, context);
+      elseif (name in {'open, 'close, 'lock, 'unlock, 'take_from, 'put_into})
         const operations = ['take_from -> 'take, 'put_into -> 'put];
         const operation = `operations[name] ! E_RANGE => name';
         const values = mapdelete(mapdelete(arguments, 'target), 'actor);

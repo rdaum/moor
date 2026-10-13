@@ -133,6 +133,42 @@ Opening a locked door checks its access rule, then unlocks and opens it together
 `passage_open` event on each side. The separate `unlock` command produces `passage_unlock`. Denied
 operations produce no completed event.
 
+### Make a reaction operate another door
+
+A reaction can use `open_exit`, `close_exit`, `lock_exit`, or `unlock_exit`. Each action needs a
+room, an actor, and the exit name on that room's side. The actor must be in that room and must
+satisfy the door's access rule. Locking and unlocking use the actor's carried keys when the rule
+needs a key.
+
+For this example, your room needs two doors called `east` and `stairs`. Add a reaction that opens
+the stairs when you open the east door:
+
+```text
+@reaction here open_stairs after passage_open
+@reaction here open_stairs if exit is "east"
+@reaction here open_stairs then do open_exit target=this actor=me exit="stairs"
+@reaction here open_stairs check
+@reaction here open_stairs enable
+open east
+```
+
+`target=this` selects the room with the reaction. `exit="stairs"` selects its stairs door.
+`actor=me` saves you as the person who operates that door. It does not select each visitor who opens
+the east door. The reaction can act as you because you own it. It cannot control another player's
+character. If you leave the room, the step is denied. The reaction's trace shows the reason.
+
+Replace the step to close the stairs instead:
+
+```text
+@reaction here open_stairs step 1 do close_exit target=this actor=me exit="stairs"
+close east
+open east
+```
+
+These actions produce the same passage events as door commands. Reactions on the other door can
+respond in turn. Keep the exit condition, so this reaction does not respond to its own door
+operation.
+
 ## Name the participants
 
 Conditions and steps can use names supplied by the event:

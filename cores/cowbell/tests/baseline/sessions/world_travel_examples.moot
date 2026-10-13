@@ -1,0 +1,90 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; $first_room:initialize(); $travel_examples:initialize(); const before = $room:passages(#3101); $travel_examples:initialize(); return equal(before, $room:passages(#3101));
+true
+; return index($first_room.description, "examples") > 0;
+true
+; move(#90102, $first_room); return true;
+true
+@nonprogrammer
+% examples
+@wizard
+; return #90102.location == #3101;
+true
+; const view = #3101:look_self():capture(#90102); const body = $document:render(view['description], 'text_plain)['body]; return {index(body, "Try the exits here") > 0, index(body, "A blue arch opens onto a distant hillside") > 0, {entry['label] for entry in (view['exits])}};
+{true, true, {"out", "east", "stairs", "chute", "door (locked)", "lift", "blue portal", "misty arch", "ferry (The ferry is out of service.)"}}
+@nonprogrammer
+% look
+@event text/plain narrative
+% exits
+% board ferry
+% open door
+@wizard
+; return !$room:find_passage(#3101, "door").is_open;
+true
+@nonprogrammer
+% get example key
+% open door with example key
+% go door
+@wizard
+; return #90102.location == #3104;
+true
+@nonprogrammer
+% close gallery
+% south
+% west
+% drop example key
+% stairs
+@wizard
+; return #90102.location == #3102;
+true
+@nonprogrammer
+% down
+% chute
+@wizard
+; return #90102.location == #3103;
+true
+; return $room:find_passage(#3103, "chute");
+false
+@nonprogrammer
+% look
+% ramp
+% north
+@wizard
+; return {#90102.location == #3106, #3106.location != #3102.location};
+{true, true}
+@nonprogrammer
+% look
+% south
+% west
+% call lift
+@wizard
+; return {#90102.location == #3101, #3101.lift_ready, #3101:exit_annotation("lift")["command"]};
+{true, true, "ride lift"}
+@nonprogrammer
+% ride lift
+@wizard
+; return {#90102.location == #3106, #3101.lift_ready};
+{true, false}
+@nonprogrammer
+% south
+% west
+% enter blue portal
+@wizard
+; return #90102.location == #3106;
+true
+@nonprogrammer
+% south
+% west
+% enter misty arch
+@wizard
+; return (#90102.location in {#3102, #3103}) > 0;
+true
+; move(#90102, #3101); return true;
+true
+@nonprogrammer
+% out
+@wizard
+; return #90102.location == $first_room;
+true

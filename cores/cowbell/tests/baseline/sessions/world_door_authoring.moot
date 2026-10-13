@@ -1,0 +1,39 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90110:set_owner(#90101); #90101.is_builder = true; #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true)); return true;
+true
+@programmer
+% @create $thing named testkey
+~~Created
+% @set-passage east is_door true
+=Set east is_door to true.
+% @set-passage east access key is testkey
+=Set east access condition.
+% lock east
+=You lock the east door.
+@nonprogrammer
+% open east
+=RUNTIME_PROGRAMMER locks the east door.
+=You cannot open the east door.
+@programmer
+% @set-passage east open_msg The brass hinges creak.
+=Set east open_msg.
+% @set-passage east open_msg {unknown_binding}
+~~This message does not supply {unknown_binding}.
+% open east
+=The brass hinges creak.
+% @set-passage east open_msg clear
+=Set east open_msg.
+% @set-passage east access clear
+=Set east access condition.
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {p.unlock_rule, p.is_locked, p.open_msg};
+{0, false, {}}
+; #90110:set_owner(#90100); return true;
+true
+@programmer
+% @set-passage east access never
+@wizard
+; return $room:find_passage(#90103, "east").unlock_rule;
+0

@@ -16,12 +16,404 @@ object HEADLESS_PASSAGE_SCENARIOS
     return target:(operation)(@arguments);
   endmethod
 
+  method _as_visitor owner: RUNTIME_PLAYER
+    "Call an operation as an ordinary visitor who does not own the provider.";
+    caller == this && this == #90019 || raise(E_PERM);
+    const {target, operation, @arguments} = args;
+    return target:(operation)(@arguments);
+  endmethod
+
+  method test_nonowner_can_use_programmer_owned_portal owner: ARCH_WIZARD
+    "The core performs the checked move; a provider never needs authority over the visitor.";
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const provider = this:_make_exit_provider(destination);
+    const previous = #90102.location;
+    try
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      move(#90102, source);
+      const action = this:_as_visitor($room, "exit_options", source, #90102)[1]['descriptor];
+      $test_utils:assert_eq(provider.query_principal, #90102, "Discovery retains the actual querying principal");
+      $test_utils:assert_true(this:_as_visitor($room, "use_exit_action", #90102,
+        action["command"], action["exit"]), "A visitor can use another programmer's portal");
+      $test_utils:assert_eq(#90102.location, destination, "The visitor arrives");
+      $test_utils:assert_false(provider.owner.wizard, "The provider's owner is not a wizard");
+      $test_utils:assert_eq(`this:_as_programmer(provider, "use_exit", #90102, source, "portal")
+        ! E_PERM => E_PERM', E_PERM, "Direct calls do not impersonate the checked room action");
+    finally
+      move(#90102, previous);
+      recycle(provider);
+      recycle(source);
+      recycle(destination);
+    endtry
+    return true;
+  endmethod
+
+  method _make_exit_provider owner: ARCH_WIZARD
+    "Create a programmer-owned portal fixture with the public provider interface.";
+    caller == this || raise(E_PERM);
+    const {destination} = args;
+    const provider = create($root, #90101, 2);
+    add_property(provider, "offered", {['id -> "portal", 'label -> "portal", 'command -> "enter portal",
+      'destination -> destination, 'description -> "A blue arch shimmers.", 'ambient -> true]}, {#90101, "r"});
+    add_property(provider, "query_principal", #-1, {#90101, "r"});
+    add_property(provider, "destination", destination, {#90101, "r"});
+    add_verb(provider, {#90101, "rxd", "travel_options"}, {"this", "none", "this"});
+    set_verb_code(provider, "travel_options", {
+      "this.query_principal = caller_perms(); return this.offered;"
+    });
+    add_verb(provider, {#90101, "rxd", "use_exit"}, {"this", "none", "this"});
+    set_verb_code(provider, "use_exit", {
+      "caller == $room || raise(E_PERM); const {who, source, option} = args;",
+      "who.location == source && option == \"portal\" || return false;",
+      "return this.destination;"
+    });
+    return provider;
+  endmethod
+
+  method test_custom_exits_share_discovery_and_routes owner: ARCH_WIZARD
+    "Approved custom travel appears in prose and routes; dropped objects do not become exits.";
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const provider = this:_make_exit_provider(destination);
+    try
+      move(provider, source);
+      $test_utils:assert_eq($room:exit_options(source, #90101), {}, "Contents alone are not exits");
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      let options = this:_as_programmer($room, "exit_options", source, #90101);
+      $test_utils:assert_eq(provider.query_principal, #90101, "Provider receives the caller's authority");
+      $test_utils:assert_eq(length(options), 1, "The registered portal is visible");
+      $test_utils:assert_eq(options[1]['descriptor]["command"], "enter portal", "The provider supplies its action");
+      $document_schema:_descriptor_from_wire(options[1]['descriptor]);
+      add_verb(source, {#90101, "rxd", "available_actions"}, {"this", "none", "this"});
+      set_verb_code(source, "available_actions", {"return {{\"press bell\", \"Ring the bell\"}};"});
+      const view = this:_as_programmer(source, "look_self"):capture(#90101);
+      $test_utils:assert_eq(view['actions][1]['label], "Ring the bell", "Room-defined actions are discoverable");
+      $test_utils:assert_eq(view['exits][1]['label], "portal", "Room capture includes custom travel");
+      const route = this:_as_programmer($area, "find_path", source, destination);
+      $test_utils:assert_eq(route[1][2], {'transport, "portal", provider, "enter portal"},
+        "Routes use the same option and command");
+      $test_utils:assert_false(this:_as_programmer($area, "find_path", source, destination, true, false),
+        "A custom exit is not an automatically walkable passage");
+      provider.offered[1] = mapdelete(provider.offered[1], 'destination);
+      options = this:_as_programmer($room, "exit_options", source, #90101);
+      $test_utils:assert_false(maphaskey(options[1]['descriptor]["exit"], "destination"),
+        "An unknown destination is not invented");
+      $document_schema:_descriptor_from_wire(options[1]['descriptor]);
+      $test_utils:assert_eq(source:transport_destinations(#90101), {}, "Unknown destinations are not route edges");
+      provider.offered[1]['available] = false;
+      provider.offered[1]['reason] = "The portal is recharging.";
+      options = this:_as_programmer($room, "exit_options", source, #90101);
+      $test_utils:assert_eq(options[1]['caption], "portal (The portal is recharging.)", "Unavailable travel explains why");
+      $test_utils:assert_eq(options[1]['descriptor], [], "Unavailable travel has no clickable action");
+    finally
+      recycle(provider);
+      recycle(source);
+      recycle(destination);
+    endtry
+    return true;
+  endmethod
+
+  method test_custom_exit_actions_reject_stale_approval owner: ARCH_WIZARD
+    "Removing, replacing, or transferring a provider invalidates a captured action.";
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const provider = this:_make_exit_provider(destination);
+    const who = create($actor, #90101, 2);
+    try
+      move(who, source);
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      const descriptor = this:_as_programmer($room, "exit_options", source, who)[1]['descriptor];
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      $test_utils:assert_false(this:_as_programmer($room, "use_exit_action", who,
+        descriptor["command"], descriptor["exit"]), "Reapproval invalidates old links");
+      const current = this:_as_programmer($room, "exit_options", source, who)[1]['descriptor];
+      const forged = mapmerge(current["exit"], ["destination" -> $url_utils:to_curie_str(source)]);
+      $test_utils:assert_false(this:_as_programmer($room, "use_exit_action", who, "enter portal", forged),
+        "Destination changes cannot reuse a captured action");
+      $test_utils:assert_true(this:_as_programmer($room, "use_exit_action", who,
+        current["command"], current["exit"]), "A current action reaches the provider as the actor's principal");
+      $test_utils:assert_eq(who.location, destination, "The room performs the selected travel");
+      $test_utils:assert_false(this:_as_programmer($room, "use_exit_action", who,
+        current["command"], current["exit"]), "A link cannot be used from another room");
+      move(who, source);
+      provider.owner = #90100;
+      $test_utils:assert_false(this:_as_programmer($room, "use_exit_action", who,
+        current["command"], current["exit"]), "Changed provider ownership needs approval");
+      this:_as_programmer($room, "unregister_exit_provider", source, provider);
+      $test_utils:assert_eq($room:exit_options(source, who), {}, "Removal clears discovery");
+      source.owner = #90100;
+      $test_utils:assert_eq(`this:_as_programmer($room, "register_exit_provider", source, provider)
+        ! E_PERM => E_PERM', E_PERM, "Only a room author can approve a provider");
+    finally
+      recycle(who);
+      recycle(provider);
+      recycle(source);
+      recycle(destination);
+    endtry
+    return true;
+  endmethod
+
+  method test_broken_exit_provider_preserves_other_exits owner: ARCH_WIZARD
+    "A malformed or conflicting provider is diagnosed without hiding a passage.";
+    const area = create($area, #90100, 2);
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const provider = this:_make_exit_provider(destination);
+    try
+      area:set_passage(source, destination,
+        $passage:mk(source, "east", {}, "", true, destination, "west", {}, "", true));
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      for invalid in ({false, {[]}, {['id -> "portal", 'label -> "east", 'command -> "enter portal"]},
+          {['id -> "portal", 'label -> "portal", 'command -> "go e"]}})
+        provider.offered = invalid;
+        const options = this:_as_programmer($room, "exit_options", source, #90101);
+        $test_utils:assert_eq(options[1]['label], "east", "The passage survives a broken provider");
+        $test_utils:assert_true(maphaskey(options[2], 'error), "The provider's failure remains visible");
+        $test_utils:assert_eq(options[2]['descriptor], [], "Malformed output offers no action");
+      endfor
+    finally
+      recycle(provider);
+      recycle(source);
+      recycle(destination);
+      area:destroy();
+    endtry
+    return true;
+  endmethod
+
+  method test_area_lookup_cannot_retrieve_another_principals_grant owner: ARCH_WIZARD
+    "An ordinary caller cannot obtain another principal's bearer from the area helper.";
+    const room = create($room, #90100, 2);
+    try
+      $root:grant_capability(room, {'dig_from}, #90100, 'room);
+      $test_utils:assert_eq(`this:_as_programmer($area, "_subject_for", #90100, room, 'room)
+        ! E_PERM => E_PERM', E_PERM, "A supplied principal does not grant access to their credentials");
+      $root:grant_capability(room, {'dig_from}, #90101, 'room);
+      const own = this:_as_programmer($area, "_subject_for", #90101, room, 'room);
+      $test_utils:assert_eq(own.delegate, room, "The actual caller can still use their own grant");
+    finally
+      $root:revoke_capability(room, #90100, 'room);
+      $root:revoke_capability(room, #90101, 'room);
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
+  method test_building_tools_use_room_names_and_shared_directions owner: ARCH_WIZARD
+    "Tools reject duplicate names and unknown reverse directions, and can select parallel passages.";
+    const area = create($area, #90101, 2);
+    const holder = create($room, #90101, 2);
+    let source = #-1;
+    let destination = #-1;
+    try
+      move(area, holder);
+      const tools = $agent_building_tools;
+      const build = ["name" -> "tool entrance", "area" -> tostr(area)];
+      this:_as_programmer(tools, "build_room", build, #90101);
+      source = area.contents[1];
+      $test_utils:assert_eq(source.name, "tool entrance", "A valid area can itself have a location");
+      $test_utils:assert_eq(`this:_as_programmer(tools, "build_room", build, #90101)
+        ! E_INVARG => E_INVARG', E_INVARG, "Tools reject a duplicate room name");
+      $test_utils:assert_eq(length(area.contents), 1, "A rejected build creates no room");
+      $test_utils:assert_eq(`this:_as_programmer(tools, "build_room",
+        mapmerge(build, ["area" -> tostr(source)]), #90101) ! E_INVARG => E_INVARG', E_INVARG,
+        "A room is not an area even when it has no suitable contents");
+      destination = this:_as_programmer(area, "make_room_in", $room, "tool landing");
+      const dig = ["source_room" -> tostr(source), "target_room" -> tostr(destination), "direction" -> "ne"];
+      this:_as_programmer(tools, "dig_passage", dig, #90101);
+      $test_utils:assert_type($room:find_passage(destination, "sw"), TYPE_FLYWEIGHT,
+        "Tools infer diagonal reverse directions like @dig");
+      $test_utils:assert_eq(`this:_as_programmer(tools, "dig_passage",
+        mapmerge(dig, ["direction" -> "stairs", "allow_parallel" -> true]), #90101)
+        ! E_INVARG => E_INVARG', E_INVARG, "A named direction requires an explicit return name");
+      this:_as_programmer(tools, "dig_passage", mapmerge(dig,
+        ["direction" -> "stairs", "return_direction" -> "landing", "allow_parallel" -> true]), #90101);
+      $test_utils:assert_eq(length($room:passages(source)), 2, "Parallel tool creation preserves the first passage");
+      this:_as_programmer(tools, "remove_passage", mapmerge(dig, ["direction" -> "stairs"]), #90101);
+      $test_utils:assert_eq(length($room:passages(source)), 1, "Removal selects the named connection");
+      $test_utils:assert_type($room:find_passage(source, "ne"), TYPE_FLYWEIGHT,
+        "Removing the stairs preserves the original passage");
+    finally
+      valid(source) && source:destroy();
+      valid(destination) && destination:destroy();
+      area:destroy();
+      recycle(holder);
+    endtry
+    return true;
+  endmethod
+
+  method test_connection_previews_use_creation_validation owner: ARCH_WIZARD
+    "A dry run rejects the same conflicting vocabulary without changing the connection store.";
+    const area = create($area, #90101, 2);
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const other = create($room, #90101, 2);
+    const foreign_area = create($area, #90100, 2);
+    try
+      const passage = $passage:mk(source, "east", {}, "", true, destination, "west", {}, "", true);
+      $test_utils:assert_true(this:_as_programmer(area, "create_passage", source, destination, passage, false, true),
+        "A valid preview succeeds");
+      $test_utils:assert_eq($room:passages(source), {}, "Preview does not install a passage");
+      this:_as_programmer(area, "create_passage", source, destination, passage);
+      const conflicting = $passage:mk(source, "e", {}, "", true, other, "west", {}, "", true);
+      for preview in ({true, false})
+        $test_utils:assert_eq(`this:_as_programmer(area, "create_passage", source, other, conflicting, false, preview)
+          ! E_INVARG => E_INVARG', E_INVARG, "Both paths reject the expanded alias collision");
+      endfor
+      const moved = `this:_as_programmer($agent_building_tools, "move_object",
+        ["object" -> tostr(source), "destination" -> tostr(foreign_area)], #90101) ! E_NACC => E_NACC';
+      $test_utils:assert_eq(moved, E_NACC, "A denied move is an error, not a successful tool response");
+      $test_utils:assert_eq(source.location, #-1, "Denied area admission does not relocate the room");
+    finally
+      source:destroy();
+      destination:destroy();
+      other:destroy();
+      area:destroy();
+      foreign_area:destroy();
+    endtry
+    return true;
+  endmethod
+
   method test_exit_actions_authenticate_the_actor owner: ARCH_WIZARD
     "A reference to a passage does not grant control of another player.";
     const before = #90102.location;
     $test_utils:assert_eq(`this:_as_programmer($room, "use_exit_action", #90102, "go east", [])
       ! E_PERM => E_PERM', E_PERM, "Foreign players cannot be supplied as the actor");
     $test_utils:assert_eq(#90102.location, before, "Rejected actions leave the actor in place");
+    return true;
+  endmethod
+
+  method test_reaction_door_actions_share_checked_operations owner: ARCH_WIZARD
+    "Declared actions use the named door and retain actor, location, and access checks.";
+    const area = create($area, #90100, 2);
+    const source = create($room, #90100, 2);
+    const destination = create($room, #90100, 2);
+    const who = create($actor, #90101, 2);
+    const stranger = create($actor, #90100, 2);
+    try
+      move(who, source);
+      move(stranger, source);
+      let draft = $passage:mk(source, "east", {}, "", true, destination, "west", {}, "", true, false);
+      draft.is_door = true;
+      draft = draft:with_unlock_rule($rule_engine:parse_expression(
+        "input.Accessor == " + toliteral(who), 'owner, $rule_engine:passage_scope()));
+      area:set_passage(source, destination, draft);
+      const values = ['target -> source, 'actor -> who, 'exit -> "east"];
+      for name in ({'open_exit, 'close_exit, 'lock_exit, 'unlock_exit})
+        const result = this:_as_programmer($reaction, "perform_action", name, values);
+        $test_utils:assert_eq(result['status], 'applied, tostr(name) + " uses the door operation");
+        const passage = area:passage_for(source, destination);
+        $test_utils:assert_eq(passage.is_open, name == 'open_exit, "The selected operation changes open state");
+        $test_utils:assert_eq(passage.is_locked, name == 'lock_exit, "The selected operation changes lock state");
+      endfor
+      const foreign = this:_as_programmer($reaction, "perform_action", 'open_exit,
+        mapmerge(values, ['actor -> stranger]));
+      $test_utils:assert_eq(foreign['status], 'error, "A reaction cannot borrow another actor");
+      $test_utils:assert_eq(foreign['error][1], E_PERM, "Actor authority is required");
+      const missing = this:_as_programmer($reaction, "perform_action", 'open_exit,
+        mapmerge(values, ['exit -> "north"]));
+      $test_utils:assert_eq(missing['status], 'denied, "A missing exit does not select another door");
+      move(who, destination);
+      const remote = this:_as_programmer($reaction, "perform_action", 'open_exit, values);
+      $test_utils:assert_eq(remote['status], 'denied, "The actor must be at the target room");
+      $test_utils:assert_false(area:passage_for(source, destination).is_open,
+        "Denied actions leave the door closed");
+    finally
+      recycle(who);
+      recycle(stranger);
+      recycle(source);
+      recycle(destination);
+      area:destroy();
+    endtry
+    return true;
+  endmethod
+
+  method test_travel_rechecks_rule_facts_after_pre_exit owner: ARCH_WIZARD
+    "A departure hook can revoke access without changing the passage or carried objects.";
+    const area = create($area, #90100, 2);
+    const source = create($room, #90100, 2);
+    const destination = create($room, #90100, 2);
+    const who = create($actor, #90101, 2);
+    try
+      add_property(source, "entry_allowed", true, {#90100, "r"});
+      add_verb(source, {#90100, "rxd", "notify_pre_exit"}, {"this", "none", "this"});
+      set_verb_code(source, "notify_pre_exit", {"this.entry_allowed = false; suspend(0);"});
+      move(who, source);
+      const rule = $rule_engine:parse_expression(
+        "property_is(object: input.From, field: 'entry_allowed, value: true)",
+        'entry, $rule_engine:passage_scope());
+      const passage = area:set_passage(source, destination,
+        $passage:mk(source, "east", {}, "", true, destination, "west", {}, "", true)
+          :with_locked(true):with_unlock_rule(rule));
+      $test_utils:assert_true(passage:check_unlock(who, source), "Access starts allowed");
+      $test_utils:assert_false(this:_as_programmer(passage, "travel_from", who, source, []),
+        "Revoking a fact during the departure hook blocks movement");
+      $test_utils:assert_eq(who.location, source, "The denied actor stays in the source room");
+    finally
+      recycle(who);
+      recycle(source);
+      recycle(destination);
+      area:destroy();
+    endtry
+    return true;
+  endmethod
+
+  method test_travel_reports_redirection_during_native_movement owner: ARCH_WIZARD
+    "An entry callback can redirect a traveler; the passage must not report arrival at its destination.";
+    const area = create($area, #90100, 2);
+    const source = create($room, #90100, 2);
+    const destination = create($room, #90100, 2);
+    const elsewhere = create($room, #90100, 2);
+    const who = create($actor, #90101, 2);
+    try
+      move(who, source);
+      add_property(destination, "redirect_to", elsewhere, {#90100, "r"});
+      add_verb(destination, {#90100, "rxd", "enterfunc"}, {"this", "none", "this"});
+      set_verb_code(destination, "enterfunc", {"move(args[1], this.redirect_to); suspend(0);"});
+      const passage = area:create_passage(source, destination,
+        $passage:mk(source, "east", {}, "", true, destination, "west", {}, "", true));
+      $test_utils:assert_false(this:_as_programmer(passage, "travel_from", who, source, []),
+        "A redirected move did not complete the requested passage step");
+      $test_utils:assert_eq(who.location, elsewhere, "The callback's relocation remains in effect");
+    finally
+      recycle(who);
+      recycle(source);
+      recycle(destination);
+      recycle(elsewhere);
+      area:destroy();
+    endtry
+    return true;
+  endmethod
+
+  method test_room_look_rejects_departed_viewers owner: ARCH_WIZARD
+    "Arrival presentation must not send a former room after movement, including a yielding capture.";
+    const source = create($room, #90100, 2);
+    const elsewhere = create($room, #90100, 2);
+    const receiver = create($event_receiver, #90100, 2);
+    try
+      add_property(receiver, "received", {}, {#90100, "r"});
+      add_verb(receiver, {#90100, "rxd", "inform_current"}, {"this", "none", "this"});
+      set_verb_code(receiver, "inform_current", {"this.received = {@this.received, args[1]};"});
+      move(receiver, source);
+      receiver:emit_room_look(source);
+      $test_utils:assert_eq(length(receiver.received), 1, "A current room look reaches its viewer");
+      receiver.received = {};
+      move(receiver, elsewhere);
+      receiver:emit_room_look(source);
+      $test_utils:assert_eq(receiver.received, {}, "A delayed arrival look does not describe the old room");
+      move(receiver, source);
+      add_property(source, "receiver", receiver, {#90100, "r"});
+      add_property(source, "redirect_to", elsewhere, {#90100, "r"});
+      add_verb(source, {#90100, "rxd", "look_self"}, {"this", "none", "this"});
+      set_verb_code(source, "look_self", {"const look = pass(@args); move(this.receiver, this.redirect_to); suspend(0); return look;"});
+      receiver:emit_room_look(source);
+      $test_utils:assert_eq(receiver.location, elsewhere, "The producer moved the viewer during capture");
+      $test_utils:assert_eq(receiver.received, {}, "A capture that finishes after departure sends no old narrative");
+    finally
+      recycle(receiver);
+      recycle(source);
+      recycle(elsewhere);
+    endtry
     return true;
   endmethod
 

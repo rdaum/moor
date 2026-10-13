@@ -16,6 +16,7 @@ object ROOM [
   property engagements (owner: HACKER, flags: "rc") = [];
   property passage_areas (owner: ARCH_WIZARD, flags: "r") = {};
   property exit_revision (owner: ARCH_WIZARD, flags: "r") = 0;
+  property exit_providers (owner: ARCH_WIZARD, flags: "r") = [];
 
   override description (owner: HACKER, flags: "rc") = "Parent prototype for all rooms in the system, defining room behavior and event broadcasting.";
 
@@ -271,6 +272,17 @@ object ROOM [
     const actor = caller_perms();
     actor == player || (valid(actor) && actor.wizard) || raise(E_PERM);
     set_task_perms(actor);
+    const command = pc['verb] + (pc['argstr] == "" ? "" | " " + pc['argstr]);
+    for option in ($room:exit_options(this, player))
+      if (maphaskey(option, 'provider) && command in option['commands])
+        if (option['state] == 'unavailable)
+          player:inform_current($event:mk_info(player, option['reason]));
+        else
+          $room:use_exit_action(player, option['descriptor]["command"], option['descriptor]["exit"]);
+        endif
+        return true;
+      endif
+    endfor
     return this:maybe_handle_passage(pc);
   endmethod
 
@@ -385,7 +397,7 @@ object ROOM [
     look.ambient_passages = {{option['description], option['prose_style],
       option['label], option['destination]} for option in (look.exit_options) if (option['ambient])};
     let actions = {};
-    for item in (flycontents(look))
+    for item in ({this, @flycontents(look)})
       const available = `item:available_actions() ! E_VERBNF => {}';
       typeof(available) == TYPE_LIST || raise(E_TYPE, "Actions must be a list");
       actions = {@actions, @available};
@@ -419,6 +431,147 @@ object ROOM [
         'state -> state, 'destination -> passage.(prefix == "side_a_" ? "side_b_room" | "side_a_room"),
         'passage -> passage, 'descriptor -> $room:_passage_annotation(room, passage, label),
         'description -> description, 'ambient -> ambient, 'prose_style -> passage.(prefix + "prose_style")]};
+    endfor
+    for provider in (mapkeys(room.exit_providers))
+      try
+        const custom = $room:_provider_options(room, viewer, provider, options);
+        options = {@options, @custom};
+      except error (ANY)
+        "One faulty provider must not erase the room's other exits.";
+        $room:_log_provider_error(room, provider, error);
+        options = {@options, ['identity -> "", 'label -> "Exit provider " + tostr(provider),
+          'caption -> "Exit provider " + tostr(provider) + " (error; contact the room's owner)",
+          'state -> 'unavailable, 'descriptor -> [], 'description -> {}, 'destination -> #-1,
+          'ambient -> false, 'prose_style -> 'sentence, 'error -> error]};
+      endtry
+    endfor
+    return options;
+  endmethod
+
+  method register_exit_provider owner: ARCH_WIZARD
+    "Approve an object's travel_options/use_exit methods. Requires dig_from on the room.";
+    const {subject, provider} = args;
+    const {room, _} = $root:_check_permissions_as(subject, caller_perms(), 'dig_from);
+    valid(room) && isa(room, $room) || raise(E_TYPE);
+    typeof(provider) == TYPE_OBJ && valid(provider) && !is_anonymous(provider) || raise(E_TYPE);
+    respond_to(provider, 'travel_options) && respond_to(provider, 'use_exit)
+      || raise(E_INVARG, "An exit provider needs travel_options and use_exit methods.");
+    const registration = ['token -> uuid(), 'room_owner -> room.owner, 'provider_owner -> provider.owner];
+    room.exit_providers[provider] = registration;
+    $room:connections_changed({room});
+    return registration['token];
+  endmethod
+
+  method unregister_exit_provider owner: ARCH_WIZARD
+    "Remove approval and invalidate old links. Requires dig_from on the room.";
+    const {subject, provider} = args;
+    const {room, _} = $root:_check_permissions_as(subject, caller_perms(), 'dig_from);
+    valid(room) && isa(room, $room) || raise(E_TYPE);
+    maphaskey(room.exit_providers, provider) || return false;
+    room.exit_providers = mapdelete(room.exit_providers, provider);
+    $room:connections_changed({room});
+    return true;
+  endmethod
+
+  method exit_options_changed owner: ARCH_WIZARD
+    "Refresh room panels after a provider changes. The registered provider or room author may call.";
+    const {room, provider} = args;
+    const principal = caller_perms();
+    const registration = $room:_exit_registration(room, provider);
+    length(registration) || raise(E_INVARG, "This exit provider needs the room owner's approval.");
+    if (caller != provider || principal != provider.owner)
+      $root:_check_permissions_as(room, principal, 'dig_from);
+    endif
+    $room:connections_changed({room});
+  endmethod
+
+  method _exit_registration owner: ARCH_WIZARD
+    "Return current approval, or an empty map after removal or an ownership change.";
+    set_task_perms(caller_perms());
+    const {room, provider} = args;
+    typeof(room) == TYPE_OBJ && valid(room) && isa(room, $room) || return [];
+    typeof(provider) == TYPE_OBJ && valid(provider) || return [];
+    const registration = `room.exit_providers[provider] ! E_RANGE => []';
+    length(registration) || return [];
+    (registration['room_owner] == room.owner && registration['provider_owner] == provider.owner)
+      || return [];
+    return registration;
+  endmethod
+
+  method _log_provider_error owner: ARCH_WIZARD
+    "Retain a broken provider's diagnostic without lending wizard authority to its callback.";
+    caller == $room || raise(E_PERM);
+    const {room, provider, error} = args;
+    server_log("Exit provider " + tostr(provider) + " at " + tostr(room) + ": " + toliteral(error));
+  endmethod
+
+  method _provider_options owner: ARCH_WIZARD
+    "Validate a provider's visible options under the caller's authority; no movement happens here.";
+    set_task_perms(caller_perms());
+    const {room, viewer, provider, existing} = args;
+    const registration = $room:_exit_registration(room, provider);
+    length(registration) || return {};
+    const offered = provider:travel_options(room, viewer);
+    typeof(offered) == TYPE_LIST && length(offered) <= 64
+      || raise(E_INVARG, "travel_options must return at most 64 option maps.");
+    equal(registration, $room:_exit_registration(room, provider)) || return {};
+    let options = {};
+    let identities = {};
+    let labels = {option['label] for option in (existing)};
+    let commands = {};
+    for option in (existing)
+      if (maphaskey(option, 'commands))
+        commands = {@commands, @option['commands]};
+      elseif (maphaskey(option, 'passage))
+        const names = $passage:expand_direction_aliases($passage:command_names(option['passage], room));
+        commands = {@commands, @names};
+        for operation in ({"go", "open", "close", "lock", "unlock"})
+          commands = {@commands, @{operation + " " + name for name in (names)}};
+        endfor
+      endif
+    endfor
+    fn text(value, limit)
+      return typeof(value) == TYPE_STR && length(value) > 0 && length(value) <= limit
+        && value == value:trim() && !index(value, "\n") && !index(value, "\r");
+    endfn
+    for offered_option in (offered)
+      typeof(offered_option) == TYPE_MAP || raise(E_TYPE, "An exit option must be a map.");
+      const id = offered_option['id];
+      const label = offered_option['label];
+      const command = offered_option['command];
+      text(id, 128) && text(label, 128) && text(command, 256)
+        || raise(E_INVARG, "Exit id, label, and command must be nonempty single-line text.");
+      !(id in identities) && !(label in labels) || raise(E_INVARG, "Duplicate exit id or label.");
+      const aliases = `offered_option['aliases] ! E_RANGE => {}';
+      typeof(aliases) == TYPE_LIST && length(aliases) <= 16 || raise(E_TYPE, "Invalid exit aliases.");
+      const names = {command, @aliases};
+      for name in (names)
+        text(name, 256) && !(name in commands) || raise(E_INVARG, "Conflicting exit command: " + toliteral(name));
+        commands = {@commands, name};
+      endfor
+      const available = `offered_option['available] ! E_RANGE => true';
+      typeof(available) == TYPE_BOOL || raise(E_TYPE, "Exit available must be a boolean.");
+      const reason = `offered_option['reason] ! E_RANGE => "That way is currently unavailable."';
+      text(reason, 512) || raise(E_TYPE, "Invalid exit availability explanation.");
+      const destination = `offered_option['destination] ! E_RANGE => #-1';
+      (destination == #-1 || (typeof(destination) == TYPE_OBJ && valid(destination) && isa(destination, $room)))
+        || raise(E_TYPE, "An exit destination must be a room or #-1.");
+      const description = $passage:authored_description(
+        `offered_option['description] ! E_RANGE => ""', `offered_option['description_kind] ! E_RANGE => 'literal');
+      const ambient = `offered_option['ambient] ! E_RANGE => false';
+      const style = `offered_option['prose_style] ! E_RANGE => 'sentence';
+      typeof(ambient) == TYPE_BOOL && style in {'sentence, 'fragment}
+        || raise(E_TYPE, "Invalid exit prose layout.");
+      let reference = ["source" -> $url_utils:to_curie_str(room),
+        "provider" -> $url_utils:to_curie_str(provider), "registration" -> registration['token], "option" -> id];
+      valid(destination) && (reference["destination"] = $url_utils:to_curie_str(destination));
+      const descriptor = available ? ["kind" -> "command", "command" -> command, "exit" -> reference] | [];
+      options = {@options, ['identity -> id, 'label -> label, 'commands -> names, 'provider -> provider,
+        'caption -> label + (available ? "" | " (" + reason + ")"), 'reason -> reason,
+        'state -> available ? 'open | 'unavailable, 'descriptor -> descriptor, 'destination -> destination,
+        'description -> description, 'ambient -> ambient && length(description) > 0, 'prose_style -> style]};
+      identities = {@identities, id};
+      labels = {@labels, label};
     endfor
     return options;
   endmethod
@@ -477,9 +630,14 @@ object ROOM [
     "Describe the current action for a registered passage.";
     set_task_perms(caller_perms());
     const {direction} = args;
+    for option in ($room:exit_options(this, player))
+      if (option['label] == direction)
+        return option['descriptor];
+      endif
+    endfor
     const passage = $room:find_passage(this, direction);
-    typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT} || return [];
-    return $room:_passage_annotation(this, passage, direction);
+    return typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT}
+      ? $room:_passage_annotation(this, passage, direction) | [];
   endmethod
 
   method use_exit_action owner: ARCH_WIZARD
@@ -489,7 +647,9 @@ object ROOM [
     $root:check_actor(who, principal);
     set_task_perms(principal);
     fn stale()
-      who:inform_current($event:mk_info(who, "That exit has changed or is no longer here. Look again."));
+      if (respond_to(who, 'inform_current))
+        who:inform_current($event:mk_info(who, "That exit has changed or is no longer here. Look again."));
+      endif
       return false;
     endfn
     typeof(reference) == TYPE_MAP && typeof(command) == TYPE_STR || return stale();
@@ -498,6 +658,30 @@ object ROOM [
     const destination = `reference["destination"] ! E_RANGE => ""';
     const room = who.location;
     valid(room) && source == $url_utils:to_curie_str(room) || return stale();
+    if (maphaskey(reference, "provider"))
+      identity == "" || return stale();
+      for option in ($room:exit_options(room, who))
+        if (maphaskey(option, 'provider) && option['state] == 'open
+            && command == option['descriptor]["command"] && equal(reference, option['descriptor]["exit"]))
+          const provider = option['provider];
+          const registration = $room:_exit_registration(room, provider);
+          (who.location == room && length(registration)
+            && registration['token] == reference["registration"]) || return stale();
+          $root:check_actor(who, principal);
+          const destination = provider:use_exit(who, room, option['identity]);
+          typeof(destination) == TYPE_OBJ && valid(destination) && isa(destination, $room) || return false;
+          (who.location == room && equal(registration, $room:_exit_registration(room, provider)))
+            || return stale();
+          if (maphaskey(reference, "destination"))
+            reference["destination"] == $url_utils:to_curie_str(destination) || return stale();
+          endif
+          $root:check_actor(who, principal);
+          move(who, destination);
+          return who.location == destination;
+        endif
+      endfor
+      return stale();
+    endif
     const found = $room:find_connection(room, identity);
     length(found) || return stale();
     const passage = found[2];
@@ -742,26 +926,12 @@ object ROOM [
   endmethod
 
   method transport_destinations owner: ARCH_WIZARD
-    "Return destinations reachable via transport objects in this room.";
-    "Scans contents for objects implementing :transport_connections().";
-    "Returns list of {destination_room, label, transport_object} tuples.";
+    "Return {destination, label, provider, command} for available, registered custom exits.";
     set_task_perms(caller_perms());
-    results = {};
-    for item in (this.contents)
-      if (!valid(item))
-        continue;
-      endif
-      if (!respond_to(item, 'transport_connections))
-        continue;
-      endif
-      connections = item:transport_connections();
-      if (typeof(connections) == TYPE_LIST)
-        for conn in (connections)
-          results = {@results, conn};
-        endfor
-      endif
-    endfor
-    return results;
+    const {?viewer = player} = args;
+    return {{option['destination], option['label], option['provider], option['descriptor]["command"]}
+      for option in ($room:exit_options(this, viewer)) if (maphaskey(option, 'provider)
+        && option['state] == 'open && valid(option['destination]))};
   endmethod
 
   method _default_distant_transform owner: ARCH_WIZARD

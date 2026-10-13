@@ -47,6 +47,21 @@ describe("semantic annotation boundary", () => {
             }),
         ).toEqual({});
     });
+    it("preserves checked passage and custom exit references, including unknown destinations", () => {
+        const passage = { source: "oid:1", destination: "oid:2", passage: "connection-1" };
+        const portal = { source: "oid:1", provider: "oid:3", registration: "approval-1", option: "portal" };
+        const annotations = {
+            a1: { kind: "command", command: "go east", exit: passage },
+            a2: { kind: "command", command: "enter portal", exit: portal },
+            a3: { kind: "command", command: "board ferry", exit: { ...portal, destination: "oid:2" } },
+        };
+        expect(decodeAnnotations(annotations)).toEqual(annotations);
+        expect(decodeAnnotations({
+            a1: { kind: "command", command: "enter portal", exit: { ...portal, registration: undefined } },
+            a2: { kind: "command", command: "go east", exit: { ...passage, ...portal } },
+            a3: { kind: "command", command: "enter portal", exit: { ...portal, destination: "somewhere" } },
+        })).toEqual({});
+    });
     it("preserves real Djot spans through sanitization and escaped labels", () => {
         const html = renderDjot("[A \\[brass\\] key <&> 🙂]{annotation=a1}", { annotations: table, enableEmoji: true });
         const node = document.createElement("div");

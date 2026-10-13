@@ -413,7 +413,8 @@ object DOCUMENT_SCHEMA [
       'command -> {['kind -> 'kind], ['command -> 1024, 'template -> 1024,
         'arguments -> 'arguments, 'action -> 'action, 'exit -> 'exit]},
       'action -> {['label -> 80], ['icon -> 32, 'title -> 256]},
-      'exit -> {['source -> 'ref, 'destination -> 'ref, 'passage -> 128], []},
+      'exit -> {['source -> 'ref], ['destination -> 'ref, 'passage -> 128,
+        'provider -> 'ref, 'registration -> 128, 'option -> 128]},
       'field -> {['label -> 256, 'expected_kind -> 'expected_kind],
         ['required -> 'boolean, 'suggestions -> 'suggestions, 'bound -> 'bound]},
       'suggestions -> {['provider -> 'ref, 'source -> 256], []},
@@ -490,6 +491,16 @@ object DOCUMENT_SCHEMA [
       key == 'expected_kind && (name = "expectedKind");
       result[name] = encoded;
     endfor
+    if (kind == 'exit)
+      if (maphaskey(result, "passage"))
+        (maphaskey(result, "destination") && !maphaskey(result, "provider")
+          && !maphaskey(result, "registration") && !maphaskey(result, "option"))
+          || raise(E_INVARG, path + ": invalid passage reference");
+      else
+        (maphaskey(result, "provider") && maphaskey(result, "registration")
+          && maphaskey(result, "option")) || raise(E_INVARG, path + ": incomplete custom exit reference");
+      endif
+    endif
     if (kind == 'command)
       if (maphaskey(result, "command"))
         (!maphaskey(result, "template") && !maphaskey(result, "arguments"))

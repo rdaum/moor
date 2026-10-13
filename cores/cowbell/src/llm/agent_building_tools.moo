@@ -17,8 +17,8 @@ object AGENT_BUILDING_TOOLS [
     let tools = {};
     "Build/manipulation tools";
     tools = {@tools, $llm_agent_tool:mk("build_room", "Create a new room in an area. Areas are organizational containers that group rooms. IMPORTANT: The 'area' parameter must be an AREA object (like #38), NOT a room object. To build in the same area as an existing room, omit the area parameter or use 'here'.", ["type" -> "object", "properties" -> ["name" -> ["type" -> "string", "description" -> "Room name"], "area" -> ["type" -> "string", "description" -> "AREA object number to build in (like #38). MUST be an area, NOT a room. Use 'here' for current area, 'ether' for free-floating, or omit entirely to default to current area. NEVER pass a room object here."], "parent" -> ["type" -> "string", "description" -> "Parent room object reference (optional, default: $room)"]], "required" -> {"name"}], target_obj, "build_room")};
-    tools = {@tools, $llm_agent_tool:mk("dig_passage", "Create a passage between two rooms. Can be one-way or bidirectional. ALWAYS use object numbers for room references.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location). Use object numbers like #12 or #50"], "direction" -> ["type" -> "string", "description" -> "Exit direction from source room (e.g. 'north', 'up', 'north,n' for aliases)"], "target_room" -> ["type" -> "string", "description" -> "Destination room object number (like #12 or #50). MUST use object number."], "return_direction" -> ["type" -> "string", "description" -> "Return direction (optional, will be inferred if omitted)"], "oneway" -> ["type" -> "boolean", "description" -> "True for one-way passage (default: false)"]], "required" -> {"direction", "target_room"}], target_obj, "dig_passage")};
-    tools = {@tools, $llm_agent_tool:mk("remove_passage", "Remove/delete a passage between two rooms. Use this to fix duplicate exits or remove unwanted connections.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location)"], "target_room" -> ["type" -> "string", "description" -> "Target room object number to remove passage to"]], "required" -> {"target_room"}], target_obj, "remove_passage")};
+    tools = {@tools, $llm_agent_tool:mk("dig_passage", "Create a passage between two rooms. Can be one-way or bidirectional. ALWAYS use object numbers for room references.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location). Use object numbers like #12 or #50"], "direction" -> ["type" -> "string", "description" -> "Exit direction from source room (e.g. 'north', 'up', 'north,n' for aliases)"], "target_room" -> ["type" -> "string", "description" -> "Destination room object number (like #12 or #50). MUST use object number."], "return_direction" -> ["type" -> "string", "description" -> "Return direction (optional, will be inferred if omitted)"], "oneway" -> ["type" -> "boolean", "description" -> "True for one-way passage (default: false)"], "allow_parallel" -> ["type" -> "boolean", "description" -> "Create a separate connection between rooms already connected (default: false)"]], "required" -> {"direction", "target_room"}], target_obj, "dig_passage")};
+    tools = {@tools, $llm_agent_tool:mk("remove_passage", "Remove/delete a passage between two rooms. Use this to fix duplicate exits or remove unwanted connections.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location)"], "target_room" -> ["type" -> "string", "description" -> "Target room object number to remove passage to"], "direction" -> ["type" -> "string", "description" -> "Source exit name; required when several passages connect the rooms"]], "required" -> {"target_room"}], target_obj, "remove_passage")};
     tools = {@tools, $llm_agent_tool:mk("set_passage_description", "Set the narrative description for a passage/exit. This description integrates into the room's look description when ambient mode is enabled.", ["type" -> "object", "properties" -> ["direction" -> ["type" -> "string", "description" -> "Direction/exit label (e.g. 'north', 'up')"], "description" -> ["type" -> "string", "description" -> "Narrative description for the passage (e.g. 'A dark archway opens to the north')"], "format" -> ["type" -> "string", "enum" -> {"literal", "djot", "template"}, "description" -> "Description syntax. Omit to preserve the current syntax."], "source_room" -> ["type" -> "string", "description" -> "Source room (optional, defaults to actor's current location)"], "ambient" -> ["type" -> "boolean", "description" -> "If true, description integrates into room description. If false, shows in exits list (default: true)"]], "required" -> {"direction", "description"}], target_obj, "set_passage_description")};
     tools = {@tools, $llm_agent_tool:mk("create_object", "Create a new object from a parent prototype.", ["type" -> "object", "properties" -> ["parent" -> ["type" -> "string", "description" -> "Parent object (e.g. '$thing', '$wearable')"], "name" -> ["type" -> "string", "description" -> "Primary name"], "aliases" -> ["type" -> "array", "items" -> ["type" -> "string"], "description" -> "Optional alias names"]], "required" -> {"parent", "name"}], target_obj, "create_object")};
     tools = {@tools, $llm_agent_tool:mk("recycle_object", "Permanently destroy an object. Cannot be undone.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to recycle"]], "required" -> {"object"}], target_obj, "recycle_object")};
@@ -72,15 +72,6 @@ object AGENT_BUILDING_TOOLS [
     return tools;
   endmethod
 
-  method _parse_direction_spec owner: ARCH_WIZARD
-    "Parse direction string into list (handles 'north:n' and 'north,n' formats)";
-    const {dir_spec} = args;
-    !dir_spec:contains(":") && return $str_proto:split(dir_spec, ",");
-    const colon_parts = $str_proto:split(dir_spec, ":");
-    length(colon_parts) < 2 && return {dir_spec};
-    return {colon_parts[1], @$str_proto:split(colon_parts[2], ",")};
-  endmethod
-
   method _require_tool_dispatch owner: ARCH_WIZARD
     "Validate the entry's captured principal before privileged tool effects. Caller ancestry does not grant authority.";
     const {actor, principal} = args;
@@ -90,7 +81,6 @@ object AGENT_BUILDING_TOOLS [
 
   method build_room owner: ARCH_WIZARD
     "Tool: Create a new room";
-    let actual_area = 0;
     let area_spec = 0;
     let area_str = 0;
     let area_target = 0;
@@ -104,7 +94,9 @@ object AGENT_BUILDING_TOOLS [
     set_task_perms(actor);
     {room_name, area_spec, parent_spec} = {args_map["name"], maphaskey(args_map, "area") ? args_map["area"] | "", maphaskey(args_map, "parent") ? args_map["parent"] | "$room"};
     const parent_obj = this:_resolve_object(parent_spec, actor);
-    typeof(parent_obj) == TYPE_OBJ || raise(E_INVARG, "Invalid parent object: " + tostr(parent_spec));
+    (typeof(parent_obj) == TYPE_OBJ && valid(parent_obj) && isa(parent_obj, $room))
+      || raise(E_INVARG, "The parent must be a room prototype.");
+    typeof(room_name) == TYPE_STR && room_name:trim() != "" || raise(E_INVARG, "A room needs a name.");
     "Parse area - default to current area if not specified, 'ether' means free-floating";
     let target_area = #-1;
     if (!area_spec || area_spec == "" || area_spec == "here")
@@ -112,11 +104,11 @@ object AGENT_BUILDING_TOOLS [
       valid(current_room) && (target_area = current_room.location);
     elseif (area_spec != "ether")
       target_area = this:_resolve_object(area_spec, actor);
-      "Validate that target_area is actually an area, not a room";
-      if (valid(target_area) && typeof(target_area) == TYPE_OBJ && valid(target_area.location) && target_area.location != #-1)
-        actual_area = target_area.location;
-        return "Error: " + tostr(target_area) + " is a room, not an area. To build in the same area as that room, omit the 'area' parameter or use 'here'. The area containing that room is " + tostr(actual_area) + ".";
-      endif
+      valid(target_area) || raise(E_INVARG, "Area not found.");
+    endif
+    if (valid(target_area))
+      isa(target_area, $area) || raise(E_INVARG, "Choose an area, or use here for the current area.");
+      $area:check_room_name(target_area, room_name);
     endif
     "Create room";
     if (!valid(target_area))
@@ -126,7 +118,7 @@ object AGENT_BUILDING_TOOLS [
       cap = actor:find_capability_for(target_area, 'area);
       area_target = typeof(cap) == TYPE_FLYWEIGHT ? cap | target_area;
       try
-        new_room = area_target:make_room_in(parent_obj);
+        new_room = area_target:make_room_in(parent_obj, room_name);
         area_str = " in " + tostr(target_area);
       except (E_PERM)
         return "Permission denied: " + $grant_utils:format_denial(target_area, 'area, {'add_room});
@@ -140,7 +132,6 @@ object AGENT_BUILDING_TOOLS [
     "Tool: Create a passage between two rooms";
     let direction = 0;
     let oneway_flag = 0;
-    let opposites = 0;
     let return_dir = 0;
     let source_spec = 0;
     let target_spec = 0;
@@ -148,21 +139,11 @@ object AGENT_BUILDING_TOOLS [
     $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
     {source_spec, direction, target_spec, return_dir, oneway_flag} = {maphaskey(args_map, "source_room") ? args_map["source_room"] | "", args_map["direction"], args_map["target_room"], maphaskey(args_map, "return_direction") ? args_map["return_direction"] | "", maphaskey(args_map, "oneway") ? args_map["oneway"] | false};
-    "Parse direction string into list";
-    let from_dirs = this:_parse_direction_spec(direction);
-    from_dirs = $passage:expand_direction_aliases({@from_dirs});
-    "Parse return direction";
-    let to_dirs = {};
-    if (!oneway_flag)
-      if (return_dir)
-        to_dirs = this:_parse_direction_spec(return_dir);
-        to_dirs = $passage:expand_direction_aliases({@to_dirs});
-      else
-        "Infer opposite direction";
-        opposites = ["north" -> "south", "south" -> "north", "east" -> "west", "west" -> "east", "up" -> "down", "down" -> "up", "in" -> "out", "out" -> "in"];
-        maphaskey(opposites, from_dirs[1]) && (to_dirs = $passage:expand_direction_aliases({opposites[from_dirs[1]]}));
-      endif
-    endif
+    const directions = $passage:parse_directions(direction, return_dir, oneway_flag);
+    const from_dirs = directions['from_dir];
+    const to_dirs = directions['to_dir];
+    const parallel = `args_map["allow_parallel"] ! E_RANGE => false';
+    typeof(parallel) == TYPE_BOOL || raise(E_TYPE);
     "Find source room - default to actor's location if not specified";
     const source_room = this:_resolve_object(source_spec, actor, actor.location);
     typeof(source_room) == TYPE_OBJ || raise(E_INVARG, "Source room not found");
@@ -193,7 +174,7 @@ object AGENT_BUILDING_TOOLS [
     "Register with area";
     const area_cap = actor:find_capability_for(area, 'area);
     const area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-    passage = area_target:create_passage(from_target, to_target, passage);
+    passage = area_target:create_passage(from_target, to_target, passage, parallel);
     "Report";
     const msg = oneway_flag ? "Dug passage: " + from_dirs:join(",") + " to " + tostr(target_room) + " (one-way)." | !to_dirs ? "Dug passage: " + from_dirs:join(",") + " to " + tostr(target_room) + " (one-way - no return direction inferred)." | "Dug passage: " + from_dirs:join(",") + " | " + to_dirs:join(",") + " connecting to " + tostr(target_room) + ".";
     return msg;
@@ -231,7 +212,12 @@ object AGENT_BUILDING_TOOLS [
     valid(target_room) || raise(E_INVARG, "Target room no longer exists");
     const area = source_room.location;
     valid(area) || raise(E_INVARG, "Source room is not in an area");
-    const passage = area:passage_for(source_room, target_room);
+    const direction = `args_map["direction"] ! E_RANGE => ""';
+    const passage = direction == "" ? area:passage_for(source_room, target_room)
+      | $room:find_passage(source_room, direction);
+    if (typeof(passage) == TYPE_FLYWEIGHT)
+      passage:other_room(source_room) == target_room || raise(E_INVARG, "That exit leads to a different room.");
+    endif
     typeof(passage) != TYPE_FLYWEIGHT && return "No passage found between " + tostr(source_room) + " and " + tostr(target_room) + ".";
     "Collect labels for reporting";
     {side_a_room, side_b_room} = {passage.side_a_room, passage.side_b_room};
@@ -372,7 +358,9 @@ object AGENT_BUILDING_TOOLS [
     typeof(dest_obj) == TYPE_OBJ || raise(E_INVARG, "Destination not found");
     valid(dest_obj) || raise(E_INVARG, "Destination no longer exists");
     const old_location_name = valid(target_obj.location) ? target_obj.location.name | "(nowhere)";
-    target_obj:moveto(dest_obj);
+    const result = target_obj:moveto(dest_obj);
+    typeof(result) != TYPE_ERR || raise(error_code(result), "Could not move object.");
+    target_obj.location == dest_obj || raise(E_INVARG, "Could not move object.");
     return "Moved \"" + target_obj.name + "\" (" + tostr(target_obj) + ") from " + old_location_name + " to \"" + dest_obj.name + "\" (" + tostr(dest_obj) + ").";
   endmethod
 
@@ -490,7 +478,7 @@ object AGENT_BUILDING_TOOLS [
     !valid(to_room) && return "Error: Destination room does not exist.";
     {from_name, to_name} = {from_room:name(), to_room:name()};
     to_room == from_room && return "You are already at " + to_name + "!";
-    const path = area:find_path(from_room, to_room);
+    const path = area:find_path(from_room, to_room, true, true, actor);
     !path && return "No route found from " + from_name + " to " + to_name + ".";
     let result = {"Route from " + from_name + " (" + tostr(from_room) + ") to " + to_name + " (" + tostr(to_room) + "):"};
     for i in [1..length(path) - 1]
@@ -501,7 +489,7 @@ object AGENT_BUILDING_TOOLS [
       if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
         "Transport connection: {'transport, label, transport_obj}";
         label = connector[2];
-        result = {@result, "  " + tostr(i) + ". Take the " + label};
+        result = {@result, "  " + tostr(i) + ". At " + room:name() + ", use " + connector[4] + " (" + label + ")"};
       else
         "Passage flyweight - extract direction label";
         {side_a_room, side_b_room} = {connector.side_a_room, connector.side_b_room};

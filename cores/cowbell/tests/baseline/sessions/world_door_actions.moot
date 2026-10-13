@@ -1,0 +1,28 @@
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; let door = $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true, false); door.is_door = true; #90108:create_passage(#90103, #90110, door); let other = $passage:mk(#90103, "stairs", {}, "", true, #90110, "landing", {}, "", true, false); other.is_door = true; #90108:create_passage(#90103, #90110, other, true); return true;
+true
+@programmer
+% @reaction here open_stairs after passage_open
+~~open_stairs
+% @reaction here open_stairs if exit is "east"
+~~open_stairs
+% @reaction here open_stairs then do open_exit target=this actor=me exit="stairs"
+~~open_stairs
+% @reaction here open_stairs check
+~~Valid
+% @reaction here open_stairs enable
+~~enabled
+% open east
+~~You open the stairs.
+~~You open the east door.
+; return $room:find_passage(player.location, "stairs").is_open;
+true
+% @reaction here open_stairs step 1 do close_exit target=this actor=me exit="stairs"
+~~open_stairs
+% close east
+~~You close the east door.
+% open east
+~~You close the stairs.
+~~You open the east door.
+; return $room:find_passage(player.location, "stairs").is_open;
+false

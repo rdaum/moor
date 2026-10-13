@@ -8,6 +8,17 @@ Cowbell entries.
 
 ### Added
 
+- Room authors can register custom exits such as portals and lifts. Room descriptions, `exits`,
+  links, and route hints use the same options. Unavailable travel explains why; destinations can be
+  unknown until use. Saved links recheck the actor, source, registration, and destination.
+- New worlds include a travel example area connected to the First Room. Visitors can try doors,
+  keys, parallel passages, one-way travel, and passages and portals between areas.
+- Builders can use `@set-passage DIRECTION access CONDITION` for readable door conditions and edit
+  `open_msg`, `close_msg`, `lock_msg`, and `unlock_msg`. The room and portal guides contain runnable
+  tutorials.
+- Reactions can use `open_exit`, `close_exit`, `lock_exit`, and `unlock_exit`. These actions use the
+  same presence, key, and access checks as typed door commands.
+
 - Rooms can react to completed passage door operations with `passage_open`, `passage_close`,
   `passage_lock`, and `passage_unlock`. Both sides receive the event, with their own exit name.
 - Passages can connect rooms in different areas. Both ends discover the connection, and walking
@@ -38,6 +49,19 @@ Cowbell entries.
 - Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 
 ### Changed
+
+- Building grant lookup checks the incoming principal before reading another actor's grants.
+  Ordinary callers can no longer obtain someone else's stored capability through the area helper.
+
+- Custom transport providers must register with their room and implement `travel_options` and
+  `use_exit`. `use_exit` returns a destination or false; the room performs the checked move. The old
+  `transport_connections` scan no longer contributes routes. See the portal tutorial.
+- Room-defined actions now appear beside actions supplied by room contents.
+- Passage traversal evaluates access again after departure callbacks, so a revoked rule fact can
+  stop the move even when the passage and inventory are unchanged.
+- A passage no longer reports arrival when a movement callback sends the traveler somewhere else.
+- Building tools use the same room-name and direction checks as builder commands. Passage previews
+  check both endpoints and exit-name collisions before reporting success.
 
 - Ownership transfers include inherited properties with the `c` flag. A new room owner can save
   descriptions without a wizard repairing those property permissions.
@@ -135,8 +159,8 @@ Cowbell entries.
 
 ### Fixed
 
-- Clicking an exit in Meadow checks the room and connection shown by that link. Old links cannot
-  use a different room's exit or a replacement connection. Door actions check the current state.
+- Clicking an exit in Meadow checks the room and connection shown by that link. Old links cannot use
+  a different room's exit or a replacement connection. Door actions check the current state.
 - Closed and locked passages remain visible in room descriptions, `exits`, and room panels. Door
   links offer an opening command. Both endpoints show connections stored in another area. Connection
   changes refresh occupied room panels and prevent older exit captures from replacing the new state.

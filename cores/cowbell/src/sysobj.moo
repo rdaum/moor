@@ -6,7 +6,7 @@ object SYSOBJ [
   owner: ARCH_WIZARD
   readable: true
 
-  property startup_hooks (owner: ARCH_WIZARD, flags: "r") = {FIRST_ROOM};
+  property startup_hooks (owner: ARCH_WIZARD, flags: "r") = {FIRST_ROOM, TRAVEL_EXAMPLES};
   property behavior_schema (owner: HACKER, flags: "r") = BEHAVIOR_SCHEMA;
   property condition (owner: HACKER, flags: "r") = CONDITION;
   property world_facts (owner: HACKER, flags: "r") = WORLD_FACTS;
@@ -60,6 +60,7 @@ object SYSOBJ [
   property fg_ticks (owner: HACKER, flags: "r") = 600000;
   property first_area (owner: HACKER, flags: "r") = FIRST_AREA;
   property first_room (owner: HACKER, flags: "r") = FIRST_ROOM;
+  property travel_examples (owner: HACKER, flags: "r") = TRAVEL_EXAMPLES;
   property food (owner: ARCH_WIZARD, flags: "r") = FOOD;
   property format (owner: HACKER, flags: "r") = FORMAT;
   property git (owner: ARCH_WIZARD, flags: "r") = GIT;

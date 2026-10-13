@@ -197,7 +197,7 @@ object AREA [
     "Find a route through each room's connections, independent of area membership.";
     "Return {room, connector} steps; transport steps remain explicit.";
     set_task_perms(caller_perms());
-    const {start_room, goal_room, ?only_open = true, ?include_transports = true} = args;
+    const {start_room, goal_room, ?only_open = true, ?include_transports = true, ?viewer = player} = args;
     typeof(start_room) == TYPE_OBJ && typeof(goal_room) == TYPE_OBJ || raise(E_TYPE);
     valid(start_room) && valid(goal_room) || return false;
     start_room == goal_room && return {{start_room, false}};
@@ -214,9 +214,9 @@ object AREA [
         endif
       endfor
       if (include_transports)
-        for connection in (current:transport_destinations())
-          const {next, label, provider} = connection;
-          edges = {@edges, {next, {'transport, label, provider}}};
+        for connection in (current:transport_destinations(viewer))
+          const {next, label, provider, command} = connection;
+          edges = {@edges, {next, {'transport, label, provider, command}}};
         endfor
       endif
       for edge in (edges)
@@ -249,17 +249,40 @@ object AREA [
     return room;
   endmethod
 
+  method check_room_name owner: ARCH_WIZARD
+    "Validate a new room name in an area for both command and tool authors.";
+    set_task_perms(caller_perms());
+    const {area, name, ?exclude = #-1} = args;
+    typeof(area) == TYPE_OBJ && valid(area) && isa(area, $area) || raise(E_TYPE, "Expected an area.");
+    typeof(name) == TYPE_STR && name:trim() != "" || raise(E_INVARG, "A room needs a name.");
+    for room in (area.contents)
+      if (room != exclude && valid(room) && room.name == name)
+        raise(E_INVARG, "A room named \"" + name + "\" already exists in " + tostr(area) + ".");
+      endif
+    endfor
+    return true;
+  endmethod
+
   method make_room_in owner: ARCH_WIZARD
     "Create a new room in this area. Requires 'add_room capability on area.";
     const actor = caller_perms();
     $root:_check_permissions_as(this, actor, 'add_room);
-    const {parent_obj} = args;
+    const {parent_obj, ?name = ""} = args;
+    const area = typeof(this) == TYPE_FLYWEIGHT ? this.delegate | this;
+    if (name != "")
+      $area:check_room_name(area, name);
+    endif
     typeof(parent_obj) == TYPE_OBJ && valid(parent_obj) && isa(parent_obj, $room) || raise(E_TYPE);
     "Create room with caller's ownership";
     set_task_perms(actor);
     const new_room = parent_obj:create();
     try
-      return this:_move_room_here(new_room);
+      this:_move_room_here(new_room);
+      if (name != "")
+        $area:check_room_name(area, name, new_room);
+        new_room:set_name_aliases(name, {});
+      endif
+      return new_room;
     except e (ANY)
       valid(new_room) && new_room:destroy();
       raise(e[1], length(e) >= 2 ? e[2] | "Could not create room in area.");
@@ -276,7 +299,7 @@ object AREA [
   method create_passage owner: ARCH_WIZARD
     "Create a connection after checking the storing area and both endpoints.";
     const actor = caller_perms();
-    const {room_a, room_b, passage, ?allow_parallel = false} = args;
+    const {room_a, room_b, passage, ?allow_parallel = false, ?dry_run = false} = args;
     const {area, _} = $root:_check_permissions_as(this, actor, 'create_passage);
     $area:_check_endpoints(actor, room_a, room_b, passage);
     const source = typeof(room_a) == TYPE_FLYWEIGHT ? room_a.delegate | room_a;
@@ -287,7 +310,32 @@ object AREA [
           || raise(E_INVARG, "Those rooms are already connected. Choose parallel mode to add another passage.");
       endfor
     endif
+    $area:_validate_connection_names(passage);
+    dry_run && return true;
     return area:_do_create_passage(source, destination, passage);
+  endmethod
+
+  method _validate_connection_names owner: ARCH_WIZARD
+    "Validate the same local command vocabulary for creation, preview, and updates.";
+    set_task_perms(caller_perms());
+    const {passage, ?previous = false} = args;
+    const replacing = typeof(previous) == TYPE_FLYWEIGHT;
+    for room in ({passage.side_a_room, passage.side_b_room})
+      const names = $passage:expand_direction_aliases($passage:command_names(passage, room));
+      for existing in ($room:passages(room))
+        if (replacing && existing.connection_id == previous.connection_id)
+          continue;
+        endif
+        (passage.connection_id == "" || passage.connection_id != existing.connection_id)
+          || raise(E_INVARG, "That connection identity is already installed.");
+        const existing_names = $passage:expand_direction_aliases($passage:command_names(existing, room));
+        for alias in (names)
+          !(alias in existing_names)
+            || raise(E_INVARG, "Exit name '" + alias + "' is already used at " + tostr(room) + ".");
+        endfor
+      endfor
+    endfor
+    return true;
   endmethod
 
   method _do_create_passage owner: ARCH_WIZARD
@@ -310,21 +358,7 @@ object AREA [
     else
       passage.connection_id = uuid();
     endif
-    for room in ({room_a, room_b})
-      const names = $passage:command_names(passage, room);
-      for existing in ($room:passages(room))
-        if (replacing && existing.connection_id == previous.connection_id)
-          continue;
-        endif
-        passage.connection_id != existing.connection_id
-          || raise(E_INVARG, "That connection identity is already installed.");
-        const existing_names = $passage:expand_direction_aliases($passage:command_names(existing, room));
-        for alias in ($passage:expand_direction_aliases(names))
-          !(alias in existing_names)
-            || raise(E_INVARG, "Exit name '" + alias + "' is already used at " + tostr(room) + ".");
-        endfor
-      endfor
-    endfor
+    $area:_validate_connection_names(passage, previous);
     const tuple = $area:_canonical_tuple(room_a, room_b, passage);
     this:_ensure_passages_relation();
     if (replacing)
@@ -617,6 +651,8 @@ object AREA [
   method _subject_for owner: ARCH_WIZARD
     "Look up a stored grant under its holder's authority and check the target binding.";
     const {actor, target, category} = args;
+    const principal = caller_perms();
+    (actor == principal || (valid(principal) && principal.wizard)) || raise(E_PERM);
     set_task_perms(actor);
     const capability = actor:find_capability_for(target, category);
     if (typeof(capability) == TYPE_FLYWEIGHT)

@@ -8,34 +8,6 @@ object BUILDER_FEATURES [
   owner: HACKER
   readable: true
 
-  property direction_opposites (owner: HACKER, flags: "rc") = [
-    "d" -> "u",
-    "down" -> "up",
-    "downstairs" -> "upstairs",
-    "e" -> "w",
-    "east" -> "west",
-    "i" -> "o",
-    "in" -> "out",
-    "n" -> "s",
-    "ne" -> "sw",
-    "north" -> "south",
-    "northeast" -> "southwest",
-    "northwest" -> "southeast",
-    "nw" -> "se",
-    "o" -> "i",
-    "out" -> "in",
-    "s" -> "n",
-    "se" -> "nw",
-    "south" -> "north",
-    "southeast" -> "northwest",
-    "southwest" -> "northeast",
-    "sw" -> "ne",
-    "u" -> "d",
-    "up" -> "down",
-    "upstairs" -> "downstairs",
-    "w" -> "e",
-    "west" -> "east"
-  ];
   property help_source (owner: ARCH_WIZARD, flags: "rc") = BUILDER_HELP_TOPICS;
 
   override description (owner: HACKER, flags: "rc") = "Provides building commands (@create, @build, @dig, etc.) for builders.";
@@ -331,7 +303,7 @@ object BUILDER_FEATURES [
         "Use capability if found, otherwise use area directly";
         area_target = typeof(cap) == TYPE_FLYWEIGHT ? cap | target_area;
         try
-          new_room = area_target:make_room_in(parent_obj);
+          new_room = area_target:make_room_in(parent_obj, room_name);
           area_str = " in " + tostr(target_area);
         except (E_PERM)
           message = $grant_utils:format_denial(target_area, 'area, {'add_room});
@@ -355,23 +327,9 @@ object BUILDER_FEATURES [
   endverb
 
   method _require_unique_room_name owner: ARCH_WIZARD
-    "Raise if target_area already contains a room with room_name.";
-    caller == this || caller_perms().wizard || raise(E_PERM);
-    {target_area, room_name} = args;
-    for existing_room in (target_area.contents)
-      if (!valid(existing_room))
-        raise(E_INVARG, "Invalid object in area contents while checking duplicate room names: " + toliteral(existing_room));
-      endif
-      try
-        existing_name = existing_room:name();
-      except e (ANY)
-        raise(E_INVARG, "Could not read room name for " + tostr(existing_room) + ": " + toliteral(e));
-      endtry
-      if (existing_name == room_name)
-        raise(E_INVARG, "A room named \"" + room_name + "\" already exists in " + tostr(target_area) + ".");
-      endif
-    endfor
-    return true;
+    "Use the shared area name check before reporting a duplicate room.";
+    set_task_perms(caller_perms());
+    return $area:check_room_name(@args);
   endmethod
 
   method _parse_build_command owner: ARCH_WIZARD
@@ -493,83 +451,6 @@ object BUILDER_FEATURES [
         message = $grant_utils:format_denial(target_room, 'room, {'dig_into});
         raise(E_PERM, message);
       endtry
-      "Reject duplicate aliases in the requested direction set";
-      seen_from = {};
-      for alias in (from_dir)
-        alias in seen_from && raise(E_INVARG, "Duplicate alias in from-direction: '" + alias + "'.");
-        seen_from = {@seen_from, alias};
-      endfor
-      if (!is_oneway)
-        seen_to = {};
-        for alias in (to_dir)
-          alias in seen_to && raise(E_INVARG, "Duplicate alias in return-direction: '" + alias + "'.");
-          seen_to = {@seen_to, alias};
-        endfor
-      endif
-      "Build alias->room map for current room exits";
-      existing_from = [];
-      const from_passages = area:passages_from(current_room);
-      for p in (from_passages)
-        side_a_room = p.side_a_room;
-        side_b_room = p.side_b_room;
-        if (current_room == side_a_room)
-          aliases = p.side_a_aliases;
-          other_room = side_b_room;
-        elseif (current_room == side_b_room)
-          aliases = p.side_b_aliases;
-          other_room = side_a_room;
-        else
-          aliases = {};
-          other_room = #-1;
-        endif
-        for existing_alias in (aliases)
-          !maphaskey(existing_from, existing_alias) && (existing_from[existing_alias] = other_room);
-        endfor
-      endfor
-      "Reject alias conflicts with existing exits from current room";
-      for alias in (from_dir)
-        if (maphaskey(existing_from, alias))
-          conflict_room = existing_from[alias];
-          conflict_name = this:_room_name_for_error(conflict_room);
-          raise(E_INVARG, "Direction alias '" + alias + "' already exists from this room (to " + conflict_name + " (" + tostr(conflict_room) + ")).");
-        endif
-      endfor
-      "Build alias->room map for target room exits when bidirectional";
-      if (!is_oneway)
-        existing_to = [];
-        for p in (area:passages_from(target_room))
-          side_a_room = p.side_a_room;
-          side_b_room = p.side_b_room;
-          if (target_room == side_a_room)
-            aliases = p.side_a_aliases;
-            other_room = side_b_room;
-          elseif (target_room == side_b_room)
-            aliases = p.side_b_aliases;
-            other_room = side_a_room;
-          else
-            aliases = {};
-            other_room = #-1;
-          endif
-          for existing_alias in (aliases)
-            !maphaskey(existing_to, existing_alias) && (existing_to[existing_alias] = other_room);
-          endfor
-        endfor
-        for alias in (to_dir)
-          if (maphaskey(existing_to, alias))
-            conflict_room = existing_to[alias];
-            conflict_name = this:_room_name_for_error(conflict_room);
-            raise(E_INVARG, "Return direction alias '" + alias + "' already exists from target room (to " + conflict_name + " (" + tostr(conflict_room) + ")).");
-          endif
-        endfor
-      endif
-      "Block duplicate passage between same room pair unless explicitly allowed";
-      if (!allow_parallel)
-        const existing_pair = from_passages:any({passage} =>
-          passage.side_a_room == target_room || passage.side_b_room == target_room);
-        if (existing_pair)
-          raise(E_INVARG, "A passage between here and " + tostr(target_room) + " already exists. Use --allow-parallel to create another.");
-        endif
-      endif
       "Create the passage flyweight";
       if (is_oneway)
         passage = $passage:mk(current_room, from_dir[1], from_dir, "", true, target_room, "", {}, "", false, true);
@@ -579,10 +460,9 @@ object BUILDER_FEATURES [
       "Register with area using capability if we have one";
       area_cap = player:find_capability_for(area, 'area);
       area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-      $root:_check_permissions_as(area_target, player, 'create_passage);
-      $area:_check_endpoints(player, from_room_target, to_room_target, passage);
       "Dry-run mode: report planned operation and stop before mutation";
       if (dry_run)
+        area_target:create_passage(from_room_target, to_room_target, passage, allow_parallel, true);
         mode_str = is_oneway ? "one-way" | "bidirectional";
         flags_str = allow_parallel ? "--allow-parallel" | "(no extra flags)";
         preview = "Dry-run OK: " + mode_str + " passage from " + from_dir:join(",") + (is_oneway ? "" | " | " + to_dir:join(",")) + " to " + tostr(target_room) + " " + flags_str + ".";
@@ -737,41 +617,8 @@ object BUILDER_FEATURES [
       dir_spec = dir_spec[8..length(dir_spec)]:trim();
     endif
     !dir_spec && raise(E_INVARG, "Direction spec is required.");
-    "Check for explicit bidirectional spec (|)";
-    if ("|" in dir_spec)
-      parts = dir_spec:split("|");
-      length(parts) == 2 || raise(E_INVARG, "Direction spec must be 'dir' or 'dir|returndir'.");
-      from_dirs = {};
-      for d in (parts[1]:split(","))
-        t = d:trim();
-        t && (from_dirs = {@from_dirs, t});
-      endfor
-      to_dirs = {};
-      for d in (parts[2]:split(","))
-        t = d:trim();
-        t && (to_dirs = {@to_dirs, t});
-      endfor
-      !from_dirs && raise(E_INVARG, "Missing from-direction aliases.");
-      !to_dirs && raise(E_INVARG, "Missing return-direction aliases.");
-      "Expand standard aliases";
-      from_dirs = $passage:expand_direction_aliases(from_dirs);
-      to_dirs = $passage:expand_direction_aliases(to_dirs);
-      return ['oneway -> is_oneway, 'from_dir -> from_dirs, 'to_dir -> to_dirs, 'dry_run -> dry_run, 'allow_parallel -> allow_parallel];
-    endif
-    "Single direction - split on commas for aliases";
-    from_dirs = {};
-    for d in (dir_spec:split(","))
-      t = d:trim();
-      t && (from_dirs = {@from_dirs, t});
-    endfor
-    !from_dirs && raise(E_INVARG, "Missing direction aliases.");
-    "Infer opposite direction";
-    to_dirs = is_oneway ? {} | this:_infer_opposite_directions(from_dirs);
-    !is_oneway && !to_dirs && raise(E_INVARG, "Can't infer opposite direction for '" + dir_spec + "'. Use 'dir|returndir' syntax.");
-    "Expand standard aliases";
-    from_dirs = $passage:expand_direction_aliases(from_dirs);
-    to_dirs = $passage:expand_direction_aliases(to_dirs);
-    return ['oneway -> is_oneway, 'from_dir -> from_dirs, 'to_dir -> to_dirs, 'dry_run -> dry_run, 'allow_parallel -> allow_parallel];
+    const directions = $passage:parse_directions(dir_spec, "", is_oneway);
+    return mapmerge(directions, ['dry_run -> dry_run, 'allow_parallel -> allow_parallel]);
   endmethod
 
   method _room_name_for_error owner: ARCH_WIZARD
@@ -817,21 +664,6 @@ object BUILDER_FEATURES [
       endif
     endfor
     return candidates;
-  endmethod
-
-  method _infer_opposite_directions owner: ARCH_WIZARD
-    "Infer opposite directions for common compass/spatial directions.";
-    caller == this || raise(E_PERM);
-    {directions} = args;
-    result = {};
-    for dir in (directions)
-      if (!maphaskey(this.direction_opposites, dir))
-        return false;
-      endif
-      opposite = this.direction_opposites[dir];
-      result = {@result, opposite};
-    endfor
-    return result;
   endmethod
 
   verb "@rename" (any any any) owner: ARCH_WIZARD flags: "rd"
@@ -1982,7 +1814,7 @@ object BUILDER_FEATURES [
       const destination = passage:other_room(room);
       const source = passage:description_for(room);
       const label = passage:label_for(room);
-      const rows = {
+      let rows = {
         {"Direction", label}, {"Aliases", passage:aliases_for(room):join(", ")},
         {"Description source", typeof(source) == TYPE_STR ? source | toliteral(source)},
         {"Description syntax", tostr(passage:description_kind_for(room))},
@@ -1994,6 +1826,15 @@ object BUILDER_FEATURES [
         {"Return direction", $passage:allows_direction(passage, destination) ? passage:label_for(destination) | "one-way"},
         {"Open", passage.is_open ? "yes" | "no"}, {"Locked", passage.is_locked ? "yes" | "no"}
       };
+      const rule = passage.unlock_rule;
+      rows = {@rows, {"Access condition", typeof(rule) == TYPE_FLYWEIGHT
+        ? $builder_features:_author_condition_text(rule.condition) | "none"}};
+      for property in ({"open_msg", "close_msg", "lock_msg", "unlock_msg"})
+        const message = passage.(property);
+        const authored = typeof(message) in {TYPE_STR, TYPE_LIST, TYPE_FLYWEIGHT};
+        rows = {@rows, {property, authored && message != "" && message != {}
+          ? $sub_utils:decompile(message) | "default message"}};
+      endfor
       const context = $event:mk_look(player):with_dobj(room);
       const prose = $look:_ambient({{$passage:description_content(passage, room),
         passage:prose_style_for(room), label, destination}}, [label -> room:exit_annotation(label)], context, player);
@@ -2010,12 +1851,12 @@ object BUILDER_FEATURES [
   endverb
 
   verb "@set-passage @setp" (any any any) owner: ARCH_WIZARD flags: "rd"
-    "Set a passage property: description, departure, arrival, style, aliases, door mode.";
+    "Set exit prose, aliases, door mode, access conditions, or door messages.";
     caller != player && raise(E_PERM);
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
     if (!argstr || length(args) < 3)
-      lines = {"@set-passage DIRECTION PROPERTY VALUE", "", "Properties:", "  description DESC   - Ambient description (links the complete phrase)", "  departure PHRASE   - e.g., 'through the door'", "  arrival PHRASE     - e.g., 'from the kitchen'", "  style sentence|fragment", "  aliases A,B,C", "  is_door true|false - Enable/disable door operations (open/close/lock/unlock)"};
+      lines = {"@set-passage DIRECTION PROPERTY VALUE", "", "Properties:", "  description DESC   - Ambient description (links the complete phrase)", "  departure PHRASE   - e.g., 'through the door'", "  arrival PHRASE     - e.g., 'from the kitchen'", "  style sentence|fragment", "  aliases A,B,C", "  is_door true|false - Enable/disable door operations (open/close/lock/unlock)", "  access CONDITION - e.g., key is \"brass key\"; clear restores an unlocked passage", "  open_msg|close_msg|lock_msg|unlock_msg TEMPLATE - use clear for the default message"};
       return player:inform_current($event:mk_info(player, $format.block:mk(@lines)));
     endif
     try
@@ -2072,8 +1913,23 @@ object BUILDER_FEATURES [
         props['is_door] = door_value;
         new_passage = passage:_mk_from_props(props);
         prop_display = "is_door to " + (door_value ? "true" | "false");
+      elseif (prop == "access")
+        if (value == "clear")
+          new_passage = passage:with_unlock_rule(0):with_locked(false);
+        else
+          const scope = $rule_engine:passage_scope();
+          const tree = $builder_features:_author_condition($builder_features:_author_words(value), scope, player);
+          new_passage = passage:with_unlock_rule($rule:mk('unlock_rule, tree, scope));
+        endif
+        prop_display = "access condition";
+      elseif (prop in {"open_msg", "close_msg", "lock_msg", "unlock_msg"})
+        const message = value == "clear" ? {} | $sub_utils:compile(value, $passage:message_bindings(prop));
+        props = passage:_extract_all();
+        props[tosym(prop)] = message;
+        new_passage = passage:_mk_from_props(props);
+        prop_display = prop;
       else
-        raise(E_INVARG, "Unknown property. Use: description, departure, arrival, style, aliases, is_door");
+        raise(E_INVARG, "Unknown property. Use: description, departure, arrival, style, aliases, is_door, access, open_msg, close_msg, lock_msg, unlock_msg");
       endif
       area:update_passage(current_room, other_room, new_passage);
       player:inform_current($event:mk_info(player, "Set " + direction + " " + prop_display + "."));

@@ -37,11 +37,9 @@ export type SemanticAnnotation =
     | { kind: "property"; object: string; name: string }
     | { kind: "change"; provider: string; review: number; generation: number; row?: string };
 
-export interface ExitDescriptor {
-    source: string;
-    destination: string;
-    passage: string;
-}
+export type ExitDescriptor =
+    | { source: string; destination: string; passage: string }
+    | { source: string; provider: string; registration: string; option: string; destination?: string };
 
 export interface CommandArgument {
     label: string;
@@ -142,11 +140,32 @@ export function decodeAnnotation(value: unknown): SemanticAnnotation | undefined
             }
             let exit: ExitDescriptor | undefined;
             if (value.exit !== undefined) {
-                if (
-                    !record(value.exit) || !reference(value.exit.source) || !reference(value.exit.destination)
-                    || !text(value.exit.passage, 128)
-                ) return undefined;
-                exit = { source: value.exit.source, destination: value.exit.destination, passage: value.exit.passage };
+                if (!record(value.exit) || !reference(value.exit.source)) return undefined;
+                if (value.exit.passage !== undefined) {
+                    if (
+                        !reference(value.exit.destination) || !text(value.exit.passage, 128)
+                        || value.exit.provider !== undefined || value.exit.registration !== undefined
+                        || value.exit.option !== undefined
+                    ) return undefined;
+                    exit = {
+                        source: value.exit.source,
+                        destination: value.exit.destination,
+                        passage: value.exit.passage,
+                    };
+                } else {
+                    if (
+                        !reference(value.exit.provider) || !text(value.exit.registration, 128)
+                        || !text(value.exit.option, 128)
+                        || (value.exit.destination !== undefined && !reference(value.exit.destination))
+                    ) return undefined;
+                    exit = {
+                        source: value.exit.source,
+                        provider: value.exit.provider,
+                        registration: value.exit.registration,
+                        option: value.exit.option,
+                        ...(value.exit.destination !== undefined ? { destination: value.exit.destination } : {}),
+                    };
+                }
             }
             if (text(value.command, 1024) && value.template === undefined && value.arguments === undefined) {
                 return { kind: "command", command: value.command, exit, ...(action ? { action } : {}) };

@@ -8,6 +8,34 @@ object PASSAGE [
   fertile: true
   readable: true
 
+  property direction_opposites (owner: HACKER, flags: "rc") = [
+    "d" -> "u",
+    "down" -> "up",
+    "downstairs" -> "upstairs",
+    "e" -> "w",
+    "east" -> "west",
+    "i" -> "o",
+    "in" -> "out",
+    "n" -> "s",
+    "ne" -> "sw",
+    "north" -> "south",
+    "northeast" -> "southwest",
+    "northwest" -> "southeast",
+    "nw" -> "se",
+    "o" -> "i",
+    "out" -> "in",
+    "s" -> "n",
+    "se" -> "nw",
+    "south" -> "north",
+    "southeast" -> "northwest",
+    "southwest" -> "northeast",
+    "sw" -> "ne",
+    "u" -> "d",
+    "up" -> "down",
+    "upstairs" -> "downstairs",
+    "w" -> "e",
+    "west" -> "east"
+  ];
   property close_msg (owner: HACKER, flags: "rc") = 0;
   property connection_id (owner: HACKER, flags: "rc") = "";
   property direction_abbrevs (owner: HACKER, flags: "rc") = [
@@ -86,6 +114,9 @@ object PASSAGE [
     "Sentence descriptions retain their spelling and punctuation. @set-passage east style fragment joins a short phrase into a You see sentence.",
     "The complete ambient phrase links to its exit. Explicit document references can link a selected phrase instead. Direction names remain listed separately.",
     "@set-passage east departure through the brass door controls departure wording. The arrival setting describes arrival on this side.",
+    "@set-passage east access key is brasskey sets a readable access condition. The door must be locked for access to restrict passage travel.",
+    "@set-passage east access clear removes the condition and unlocks the passage. Shared changes require authority at both ends.",
+    "Use @set-passage east open_msg TEMPLATE (or close_msg, lock_msg, unlock_msg) for door messages; clear restores the standard message.",
     "Ambient descriptions do not supply movement wording. Use the dedicated phrases or side_a_leave_msg, side_b_leave_msg, side_a_arrive_msg, and side_b_arrive_msg.",
     "For MOO code, with_description_from(room, source, kind) validates and retains source. Kinds are literal, djot_inline, and template. Omit kind to preserve it.",
     "Literal mode also accepts explicit inline document content and compiled substitution lists. mk preserves these values; it does not turn them into empty text."
@@ -401,12 +432,17 @@ object PASSAGE [
     "Actually move the traveler before any expensive presentation work.";
     "Pre-exit callbacks may suspend or change the actor's location.";
     traveler.location == from_room || return false;
+    "A hook can change rule facts without changing the passage or inventory.";
+    this:check_unlock(traveler, from_room) || return this:_notify_locked(traveler, from_room);
+    $root:check_actor(traveler, actor);
     "Callbacks may yield; normal travel must not use a replaced passage or outdated access state.";
     const after_callback = $room:find_connection(from_room, this.connection_id);
     length(after_callback) && equal(after_callback[2], this) || return false;
     this.is_open && {this.is_locked, this.unlock_rule, traveler.contents} == access_state || return false;
     set_task_perms(actor);
     this:_move_actor(traveler, to_room);
+    "Native movement callbacks can redirect or recycle the traveler.";
+    valid(traveler) && traveler.location == to_room || return false;
     "Render and announce movement asynchronously after the move commits.";
     fork (0)
       const departure = $passage:movement_from(this, traveler, from_room, to_room, false):with_audience('narrative);
@@ -442,6 +478,38 @@ object PASSAGE [
       player:inform_current($event:mk_error(player, message));
     endif
     return false;
+  endmethod
+
+  method parse_directions owner: HACKER
+    "Parse command or tool directions with the same reverse inference and one-way rules.";
+    const {outward, ?inward = "", ?oneway = false} = args;
+    typeof(outward) == TYPE_STR && typeof(inward) == TYPE_STR || raise(E_TYPE);
+    typeof(oneway) == TYPE_BOOL || raise(E_TYPE);
+    let source = outward;
+    let reverse = inward;
+    if (index(source, "|"))
+      reverse == "" || raise(E_INVARG, "Supply the return direction only once.");
+      const parts = source:split("|");
+      length(parts) == 2 || raise(E_INVARG, "Direction spec must be 'dir' or 'dir|returndir'.");
+      source = parts[1];
+      reverse = parts[2];
+    endif
+    const names = {name:trim() for name in (strsub(source, ":", ","):split(","))
+      if (name:trim() != "")};
+    length(names) || raise(E_INVARG, "Missing direction aliases.");
+    let returns = {reverse_name:trim() for reverse_name in (strsub(reverse, ":", ","):split(","))
+      if (reverse_name:trim() != "")};
+    if (oneway)
+      !length(returns) || raise(E_INVARG, "A one-way passage has no return direction.");
+    elseif (!length(returns))
+      for name in (names)
+        maphaskey($passage.direction_opposites, name)
+          || raise(E_INVARG, "Can't infer opposite direction for '" + source + "'. Use 'dir|returndir' syntax.");
+        returns = {@returns, $passage.direction_opposites[name]};
+      endfor
+    endif
+    return ['oneway -> oneway, 'from_dir -> $passage:expand_direction_aliases(names),
+      'to_dir -> $passage:expand_direction_aliases(returns)];
   endmethod
 
   method expand_direction_aliases owner: HACKER

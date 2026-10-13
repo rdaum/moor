@@ -48,6 +48,11 @@ how these parts fit together. The [builder's guide](manual/reactions.md) gives c
 responsive box, club membership, and a timed puzzle. These examples require builder privileges, with
 no MOO programming.
 
+The [rooms and passages guide](manual/rooms-and-passages.md) walks through building a workshop,
+connecting its rooms, and adding a keyed door. The [portal tutorial](manual/custom-exits.md) shows
+programmers how custom travel can appear in room descriptions and exit lists. Both tutorials run in
+the test suite. In a fresh world, type `examples` in the First Room to visit the travel examples.
+
 Objects also have owners and permissions. Cowbell provides ways to grant specific operations on an
 object without handing over ownership. This lets people share building work and give tools limited
 authority.

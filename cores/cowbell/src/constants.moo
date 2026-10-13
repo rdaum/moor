@@ -161,3 +161,13 @@ define TEST_UTILS = #127;
 define ROOM = #7;
 define AREA = #11;
 define PASSAGE = #12;
+
+// travel examples
+define TRAVEL_EXAMPLES = #3100;
+define EXAMPLE_GALLERY = #3101;
+define EXAMPLE_COURTYARD = #3102;
+define EXAMPLE_LANDING = #3103;
+define EXAMPLE_WORKSHOP = #3104;
+define EXAMPLE_HILLS = #3105;
+define EXAMPLE_OVERLOOK = #3106;
+define EXAMPLE_KEY = #3107;
