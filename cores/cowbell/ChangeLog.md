@@ -93,6 +93,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Capitalized substitutions handle Unicode initials, including accented names, without changing the
+  rest of the name.
+
 - Article templates preserve capitalization and binding names ending in `c`. Mass nouns and plural
   nouns omit indefinite articles. Common pronunciation exceptions select `a` or `an`; set a thing's
   `indefinite_article` to override the guess, or leave it empty for automatic selection.

@@ -213,27 +213,30 @@ object STR_PROTO [
   override description (owner: HACKER, flags: "rc") = "Prototype object for string utility methods and text manipulation operations.";
 
   method "capitalize capitalise" owner: HACKER
-    "Capitalizes its argument.";
-    let {string} = args;
-    if (string)
-      const i = index("abcdefghijklmnopqrstuvwxyz", string[1], 1);
-      if (i)
-        string[1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i];
-      endif
-    endif
-    return string;
+    "Uppercase the first Unicode character and leave the remaining text unchanged.";
+    const {string} = args;
+    typeof(string) == TYPE_STR || raise(E_TYPE);
+    !string && return string;
+    "Case-insensitive strtr gives the replacement the source character's Unicode case.";
+    return strtr("A", "a", string[1], 0) + string[2..$];
   endmethod
 
   method initial_lowercase owner: HACKER
-    "Lowercases the first character of its argument.";
-    let {string} = args;
-    if (string)
-      const i = index("ABCDEFGHIJKLMNOPQRSTUVWXYZ", string[1], 1);
-      if (i)
-        string[1] = "abcdefghijklmnopqrstuvwxyz"[i];
-      endif
-    endif
-    return string;
+    "Lowercase the first Unicode character and leave the remaining text unchanged.";
+    const {string} = args;
+    typeof(string) == TYPE_STR || raise(E_TYPE);
+    !string && return string;
+    return strtr("a", "a", string[1], 0) + string[2..$];
+  endmethod
+
+  method test_unicode_initial_case owner: HACKER
+    "Initial case conversion preserves name spelling and supports expanding Unicode mappings.";
+    for example in ({{"éloïse", "Éloïse"}, {"σάρα", "Σάρα"}, {"ßeta", "SSeta"},
+      {"McDonald", "McDonald"}, {"猫", "猫"}, {"", ""}, {"!é", "!é"}})
+      $test_utils:assert_eq(strcmp(this:capitalize(example[1]), example[2]), 0, example[1]);
+    endfor
+    $test_utils:assert_eq(strcmp(this:initial_lowercase("Éloïse"), "éloïse"), 0, "lowercase initial");
+    return true;
   endmethod
 
   method "centre center" owner: HACKER

@@ -380,7 +380,7 @@ object SUB [
     strip_period = typeof(options) == TYPE_LIST && 'strip_period in options;
     initial_lowercase = typeof(options) == TYPE_LIST && 'initial_lowercase in options;
     strip_period && length(text) && text[$] == "." && (text = text[1..$ - 1]);
-    initial_lowercase && length(text) && (text = text[1]:lowercase() + (length(text) >= 2 ? text[2..$] | ""));
+    initial_lowercase && length(text) && (text = text:initial_lowercase());
     return text;
   endmethod
 
@@ -644,6 +644,17 @@ object SUB [
     const event = $event:mk_test(this, this:the('dc)):with_dobj(this);
     const result = $document:render(event:resolve(#0), 'text_plain)['body];
     $test_utils:assert_eq(result, "the " + this.name:capitalize(), "Capitalized binding");
+    return true;
+  endmethod
+
+  method test_unicode_capitalized_substitutions owner: HACKER
+    "Name, text binding, and selected-branch capitalization share Unicode case conversion.";
+    const actor = $thing:create(true);
+    actor.name = "éloïse";
+    const event = $event:mk_test(actor, this:nc(), " / ", this:bindingc('word), " / ",
+      this:self_altc("you", {this:n()})):with_text_binding('word, "σάρα");
+    const rendered = $document:render(event:resolve(player), 'text_plain)['body];
+    $test_utils:assert_eq(strcmp(rendered, "Éloïse / Σάρα / Éloïse"), 0, "Unicode substitutions");
     return true;
   endmethod
 
