@@ -36,6 +36,10 @@ object REACTION [
     'on_close,
     'on_lock,
     'on_unlock,
+    'on_passage_open,
+    'on_passage_close,
+    'on_passage_lock,
+    'on_passage_unlock,
     'on_enter,
     'on_exit,
     'on_pet,
@@ -565,6 +569,7 @@ object REACTION [
     ((source[4] == $root && source[2] == "fire_trigger")
       || (source[4] == $reaction && source[2] == "change")
       || (source[4] == $container && source[2] == "_operate")
+      || (source[4] == $passage && source[2] == "operate")
       || (source[4] == $thing && source[2] == "transfer")
       || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})
       || (source[4] == $henri && source[2] in {"_pet", "_feed"})) || raise(E_PERM);

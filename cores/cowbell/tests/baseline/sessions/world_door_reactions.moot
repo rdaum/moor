@@ -1,0 +1,24 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; let door = $passage:mk(#90103, "east", {"e"}, "", true, #90110, "west", {"w"}, "", true, false); door.is_door = true; #90108:create_passage(#90103, #90110, door); let other = $passage:mk(#90103, "stairs", {}, "", true, #90110, "landing", {}, "", true, false); other.is_door = true; #90108:create_passage(#90103, #90110, other, true); return true;
+true
+@programmer
+% @reaction here doorbell after passage_open
+~~doorbell
+% @reaction here doorbell if exit is "east"
+~~doorbell
+% @reaction here doorbell then announce "A brass bell rings."
+~~doorbell
+% @reaction here doorbell check
+~~Valid
+% @reaction here doorbell enable
+~~enabled
+@nonprogrammer
+% open east
+~~A brass bell rings.
+~~You open the east door.
+% open east
+~~The east door is already open.
+% open stairs
+~~You open the stairs.

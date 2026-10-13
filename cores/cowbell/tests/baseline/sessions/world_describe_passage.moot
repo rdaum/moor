@@ -1,0 +1,16 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; #90108:set_passage(#90103, #90110, $passage:mk(#90103, "east", {"e"}, "", true, #90110, "west", {"w"}, "", true)); return true;
+true
+@programmer
+% @describe east as an east archway
+~~Set ambient description
+@wizard
+; return #90108:passage_for(#90103, #90110):description_for(#90103);
+"an east archway"
+@programmer
+% walk e
+@wizard
+; return #90101.location == #90110;
+true

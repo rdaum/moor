@@ -1,0 +1,30 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; #90103:set_owner(#90101); #90101.is_builder = true; return true;
+true
+@attach second programmer
+@programmer
+% @edit-description here
+=A room for isolated Cowbell runtime tests.
+@event present:text/plain text-editor
+; player.runtime_probe = mapkeys(player.editing_sessions)[1]; return true;
+true
+@second
+@quiet
+@noevents
+; return `$builder_features:receive_description_edit(player.runtime_probe, "wrong connection") ! E_PERM => E_PERM';
+E_PERM
+@programmer
+; $builder_features:receive_description_edit(player.runtime_probe, "First edit."); return true;
+true
+=Description updated for Runtime Test Chamber.
+@wizard
+; #90103:set_owner(#90100); return true;
+true
+@programmer
+; return `$builder_features:receive_description_edit(player.runtime_probe, "revoked permission") ! E_PERM => E_PERM';
+E_PERM
+@wizard
+; return #90103.description;
+"First edit."

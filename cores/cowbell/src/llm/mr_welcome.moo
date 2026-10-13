@@ -860,7 +860,7 @@ object MR_WELCOME [
       move(r2, area);
       move(this, r1);
       passage = <$passage, .side_a_room = r1, .side_a_label = "east", .side_b_room = r2, .side_b_label = "west", .is_open = true>;
-      area:set_passage(r1, r2, passage);
+      passage = area:set_passage(r1, r2, passage);
       map = this:_tool_area_map([], $hacker);
       $test_utils:assert_true(index(map, "Current Location: Welcome Test Start") > 0, "area_map should include current room name");
       $test_utils:assert_true(index(map, "Area: Welcome Test Area") > 0, "area_map should include area name");

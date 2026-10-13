@@ -1,0 +1,48 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); const other = create($area, #90100, 2); move(#90110, other); move(#90109, other); #90109.name = "Far Workshop"; #90100.is_builder = true; return true;
+true
+% @dig east to #90110
+~~Dug passage:
+% @dig --allow-parallel up|down to #90110
+~~Dug passage:
+; move(#90100, #90110); return true;
+true
+% @dig north to #90109
+~~Dug passage:
+; return {length(#90108:find_path(#90103, #90109)), length(#90110.location:find_path(#90109, #90103))};
+{3, 3}
+@nonprogrammer
+% east
+@wizard
+; return #90102.location == #90110;
+true
+@nonprogrammer
+% west
+@wizard
+; return #90102.location == #90103;
+true
+@nonprogrammer
+% up
+% north
+@wizard
+; return #90102.location == #90109;
+true
+; move(#90100, #90103); return true;
+true
+% @undig up
+; return {length($room:passages(#90103)), typeof($room:find_passage(#90103, "east")) == TYPE_FLYWEIGHT, $room:find_passage(#90110, "down")};
+{1, true, false}
+@programmer
+% walk Far Workshop
+@wizard
+; suspend(5); return #90101.location == #90109;
+true
+; #90101.home = #90103; return true;
+true
+@programmer
+% home
+@wizard
+; suspend(5); return #90101.location == #90103;
+true

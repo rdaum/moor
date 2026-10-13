@@ -87,7 +87,7 @@ object LOOK [
       entry['ambient] = !(direction in directions);
       exits = {@exits, entry};
     endfor
-    description = {@description, @$look:_ambient(ambient, exit_descriptors)};
+    description = {@description, @$look:_ambient(ambient, exit_descriptors, event, viewer)};
     const source = toflyweight($event, flyslots(event), $format:blocks(description));
     const resolved = source:resolve(viewer);
     let actions = {};
@@ -114,48 +114,50 @@ object LOOK [
     return ['label -> label, 'descriptor -> descriptor, 'content -> content];
   endmethod
 
-  method _ambient owner: HACKER
-    "Build ambient prose from captured descriptions and passage descriptors, without room reads.";
-    const {passages, descriptors} = args;
+  method _ambient owner: ARCH_WIZARD
+    "Resolve each passage's inline content with its own bindings, then assemble captured prose.";
+    set_task_perms(caller_perms());
+    const {passages, descriptors, event, viewer} = args;
     let sentences = {};
     let fragments = {};
     for passage in (passages)
-      let text = passage;
-      let style = 'fragment;
-      let direction = "";
-      if (typeof(passage) == TYPE_LIST)
-        {text, style, ?direction = ""} = passage;
+      const {source, style, ?direction = "", ?destination = #-1} = passage;
+      let context = event:with_this(event.dobj):with_location(event.dobj)
+        :with_object_binding('from_room, event.dobj):with_object_binding('to_room, destination)
+        :with_text_binding('direction, direction):with_text_binding('passage, direction);
+      const template = toflyweight($event, flyslots(context), $format:blocks({source}));
+      const resolved = template:resolve(viewer);
+      if (!length(flycontents(resolved)))
+        continue;
       endif
-      if (style == 'sentence)
-        text = text:capitalize();
-        if (length(text) && !(text[$] in {".", "!", "?"}))
-          text = text + ".";
-        endif
-      else
-        while (length(text) && text[$] in {".", "!", "?"})
-          text = text[1..length(text) - 1];
-        endwhile
-        text = text:initial_lowercase();
+      let content = flycontents(flycontents(resolved)[1]);
+      if (maphaskey(descriptors, direction) && length(descriptors[direction])
+          && !$look:_has_inline_link(content))
+        content = {$document_node:mk('reference, content,
+          ['descriptor -> $document_schema:_descriptor_from_wire(descriptors[direction])])};
       endif
-      let content = $format:literal_inline(text);
-      const position = length(direction) ? index(text, direction) | 0;
-      if (position && maphaskey(descriptors, direction))
-        const label = text[position..position + length(direction) - 1];
-        content = {@$format:literal_inline(text[1..position - 1]),
-          @$look:_entry(label, descriptors[direction])['content],
-          @$format:literal_inline(text[position + length(direction)..$])};
-      endif
-      const inline = $document_template:mk('inline, content);
-      if (style == 'sentence)
-        sentences = {@sentences, "  ", inline};
-      else
+      if (style == 'fragment)
         fragments = {@fragments, ['content -> content]};
+      else
+        length(sentences) && (sentences = {@sentences, @$format:literal_inline(" ")});
+        sentences = {@sentences, @content};
       endif
     endfor
     if (length(fragments))
-      sentences = {@sentences, "  You see ", @$look:_join(fragments), "."};
+      sentences = {@sentences, @$format:literal_inline(length(sentences) ? " You see " | "You see "),
+        @$look:_join(fragments), @$format:literal_inline(".")};
     endif
-    return sentences;
+    return length(sentences) ? {$document_node:mk('paragraph, sentences)} | {};
+  endmethod
+
+  method _has_inline_link owner: HACKER
+    "Avoid nesting a generated exit reference around authored links or object references.";
+    const {nodes} = args;
+    for node in (nodes)
+      node.kind in {'reference, 'link} && return true;
+      $look:_has_inline_link(flycontents(node)) && return true;
+    endfor
+    return false;
   endmethod
 
   method _join owner: HACKER
@@ -177,7 +179,7 @@ object LOOK [
     const {view} = args;
     let blocks = {$document_node:mk('heading, view['title], ['level -> 3]),
       @flycontents(view['description])};
-    const exits = {entry for entry in (view['exits]) if (!entry['ambient])};
+    const exits = view['exits];
     if (length(exits))
       const prefix = length(exits) == 1 ? "An exit leads out " | "Exits lead out ";
       blocks = {@blocks, $document_node:mk('paragraph, {

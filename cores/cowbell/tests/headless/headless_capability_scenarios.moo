@@ -284,8 +284,10 @@ object HEADLESS_CAPABILITY_SCENARIOS
       to_cap = $root:grant_capability(room_b, {'dig_into}, $player, 'room);
       passage = $passage:mk(room_a, "east", {"east", "e"}, "", true, room_b, "", {}, "", false, true);
       created = this:_create_passage_with_caps_as_player(area_cap, from_cap, to_cap, passage);
-      $test_utils:assert_eq(created, passage, "capability passage creation should return the passage");
-      $test_utils:assert_eq(test_area:passage_for(room_a, room_b), passage, "capability passage creation should register the passage");
+      $test_utils:assert_true(created.connection_id != "", "Registration assigns an identity");
+      $test_utils:assert_eq(created.side_a_room, room_a, "Registration preserves the authorized source");
+      $test_utils:assert_eq(created.side_b_room, room_b, "Registration preserves the authorized destination");
+      $test_utils:assert_eq(test_area:passage_for(room_a, room_b), created, "Creation returns the installed passage");
     finally
       valid(room_b) && room_b:destroy();
       valid(room_a) && room_a:destroy();
@@ -332,7 +334,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_a = test_area:make_room_in($room);
       room_b = test_area:make_room_in($room);
       passage = $passage:mk(room_a, "east", {"east", "e"}, "", true, room_b, "", {}, "", false, true);
-      test_area:create_passage(room_a, room_b, passage);
+      passage = test_area:create_passage(room_a, room_b, passage);
       $test_utils:assert_eq(test_area:passage_for(room_a, room_b), passage, "wizard setup should register passage");
       area_cap = $root:grant_capability(test_area, {'remove_passage}, $player, 'area);
       from_cap = $root:grant_capability(room_a, {'dig_from}, $player, 'room);
@@ -357,8 +359,8 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_a = test_area:make_room_in($room);
       room_b = test_area:make_room_in($room);
       original = $passage:mk(room_a, "east", {"east", "e"}, "", true, room_b, "", {}, "", false, true);
-      replacement = $passage:mk(room_a, "portal", {"portal", "p"}, "", true, room_b, "", {}, "", false, true);
-      test_area:create_passage(room_a, room_b, original);
+      original = test_area:create_passage(room_a, room_b, original);
+      replacement = original:with_label_from(room_a, "portal"):with_aliases_from(room_a, {"portal", "p"});
       $root:grant_capability(room_a, {'dig_from}, $player, 'room);
       updated = this:_update_passage_as_player(test_area, room_a, room_b, replacement);
       $test_utils:assert_eq(updated, replacement, "capability update_passage should return the replacement passage");
@@ -381,8 +383,8 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_a = test_area:make_room_in($room);
       room_b = test_area:make_room_in($room);
       original = $passage:mk(room_a, "east", {"east", "e"}, "", true, room_b, "", {}, "", false, true);
-      replacement = $passage:mk(room_a, "portal", {"portal", "p"}, "", true, room_b, "", {}, "", false, true);
-      test_area:create_passage(room_a, room_b, original);
+      original = test_area:create_passage(room_a, room_b, original);
+      replacement = original:with_label_from(room_a, "portal"):with_aliases_from(room_a, {"portal", "p"});
       denied = false;
       try
         this:_update_passage_as_player(test_area, room_a, room_b, replacement);
@@ -504,7 +506,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_a = area_missing:make_room_in($room);
       room_b = area_missing:make_room_in($room);
       passage = $passage:mk(room_a, "north", {"north"}, "", true, room_b, "", {}, "", false, true);
-      area_missing:create_passage(room_a, room_b, passage);
+      passage = area_missing:create_passage(room_a, room_b, passage);
       $test_utils:assert_eq(room_a.location, area_missing, "remove fixture source should be in area");
       $test_utils:assert_eq(room_b.location, area_missing, "remove fixture target should be in area");
       $root:grant_capability(room_a, {'dig_from}, $player, 'room);
@@ -521,7 +523,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_c = from_missing:make_room_in($room);
       room_d = from_missing:make_room_in($room);
       passage2 = $passage:mk(room_c, "east", {"east"}, "", true, room_d, "", {}, "", false, true);
-      from_missing:create_passage(room_c, room_d, passage2);
+      passage2 = from_missing:create_passage(room_c, room_d, passage2);
       $root:grant_capability(from_missing, {'remove_passage}, $player, 'area);
       $player:moveto(room_c);
       result = $agent_building_tools:remove_passage(["source_room" -> room_c, "target_room" -> room_d], $player);
@@ -1040,8 +1042,8 @@ object HEADLESS_CAPABILITY_SCENARIOS
       to_cap = $root:grant_capability(room_b, {'dig_into}, $player, 'room);
       passage = $passage:mk(room_a, "north", {"north"}, "", true, room_b, "", {}, "", false, true);
       created = this:_create_passage_with_caps_as_player(area_cap, from_cap, to_cap, passage);
-      $test_utils:assert_eq(created, passage, "valid server-key grant should allow passage creation before revocation");
-      $test_utils:assert_eq(test_area:passage_for(room_a, room_b), passage, "passage should be registered before revocation");
+      $test_utils:assert_true(created.connection_id != "", "A valid grant creates an identified connection");
+      $test_utils:assert_eq(test_area:passage_for(room_a, room_b), created, "passage should be registered before revocation");
       $test_utils:assert_true(test_area:remove_passage(room_a, room_b), "setup should remove the first passage");
       $test_utils:assert_true($root:revoke_capability(test_area, $player, 'area), "revoke should remove stored create_passage grant");
       denied = false;

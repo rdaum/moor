@@ -1,0 +1,19 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); let passage = $passage:mk(#90103, "east", {"e"}, "", true, #90110, "west", {"w"}, "", true); passage.is_door = true; #90108:set_passage(#90103, #90110, passage); move(#90101, #90109); add_verb(#90101, {#90101, "rxd", "remote-close"}, {"any", "none", "none"}); return set_verb_code(#90101, "remote-close", {"player.runtime_probe = `#90103:close() ! E_PERM => E_PERM';"});
+0
+@programmer
+% remote-close east
+; return {player.runtime_probe, #90108:passages_from(#90103)[1].is_open};
+{E_PERM, true}
+@nonprogrammer
+% close east
+@wizard
+; return #90108:passage_for(#90103, #90110).is_open;
+false
+@nonprogrammer
+% open east
+@wizard
+; return #90108:passage_for(#90103, #90110).is_open;
+true

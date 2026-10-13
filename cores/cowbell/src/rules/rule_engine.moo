@@ -66,6 +66,10 @@ object RULE_ENGINE [
     if (typeof(trigger) == TYPE_SYM)
       trigger in {'on_take, 'on_put, 'on_get, 'on_drop, 'on_wear, 'on_remove} && (inputs['Item] = 'object);
       trigger in {'on_lock, 'on_unlock} && (inputs['Key] = 'object);
+      if (trigger in {'on_passage_open, 'on_passage_close, 'on_passage_lock, 'on_passage_unlock})
+        inputs = mapmerge(inputs, ['From -> 'object, 'To -> 'object, 'Passage -> 'any,
+          'Connection -> 'string, 'Direction -> 'string, 'Key -> 'object]);
+      endif
       trigger in {'on_enter, 'on_exit} && (inputs['Who] = 'object);
       trigger in {'on_consume, 'on_empty} && (inputs['Amount] = 'integer);
       trigger == 'on_fed && (inputs['Food] = 'object);

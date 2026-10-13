@@ -14,8 +14,72 @@ object ROOM [
   property acoustic_debug_log (owner: HACKER, flags: "rc") = {};
   property acoustic_neighbors (owner: HACKER, flags: "rc") = [];
   property engagements (owner: HACKER, flags: "rc") = [];
+  property passage_areas (owner: ARCH_WIZARD, flags: "r") = {};
 
   override description (owner: HACKER, flags: "rc") = "Parent prototype for all rooms in the system, defining room behavior and event broadcasting.";
+
+  method passages owner: ARCH_WIZARD
+    "Find connections at an endpoint, including stores outside its containing area.";
+    set_task_perms(caller_perms());
+    const {?room = this} = args;
+    valid(room) && isa(room, $room) || raise(E_TYPE);
+    let passages = {};
+    for area in (room.passage_areas)
+      if (valid(area) && isa(area, $area))
+        passages = {@passages, @$area:stored_passages_from(area, room)};
+      endif
+    endfor
+    return passages;
+  endmethod
+
+  method find_connection owner: ARCH_WIZARD
+    "Resolve an installed identity at this endpoint to {storing area, current passage}.";
+    set_task_perms(caller_perms());
+    const {room, identity} = args;
+    typeof(identity) == TYPE_STR && identity != "" || return {};
+    valid(room) && isa(room, $room) || return {};
+    for area in (room.passage_areas)
+      if (!valid(area) || !isa(area, $area))
+        continue;
+      endif
+      for passage in ($area:stored_passages_from(area, room))
+        if (passage.connection_id == identity)
+          return {area, passage};
+        endif
+      endfor
+    endfor
+    return {};
+  endmethod
+
+  method find_passage owner: ARCH_WIZARD
+    "Match a direction against all of a room's passages, rejecting ambiguous names.";
+    set_task_perms(caller_perms());
+    const {room, direction} = args;
+    typeof(direction) == TYPE_STR || raise(E_TYPE);
+    let matches = {};
+    for passage in ($room:passages(room))
+      if ($passage:allows_direction(passage, room) && passage:matches_command(room, direction))
+        matches = {@matches, passage};
+      endif
+    endfor
+    length(matches) <= 1 || raise(E_INVARG, "Several exits match '" + direction + "'. Use a more specific name.");
+    return length(matches) ? matches[1] | false;
+  endmethod
+
+  method passage_to owner: ARCH_WIZARD
+    "Select a connection to another room; parallel connections need an identity.";
+    set_task_perms(caller_perms());
+    const {room, destination, ?identity = ""} = args;
+    room == destination && return false;
+    let matches = {};
+    for passage in ($room:passages(room))
+      if (passage:other_room(room) == destination && (identity == "" || passage.connection_id == identity))
+        matches = {@matches, passage};
+      endif
+    endfor
+    length(matches) <= 1 || raise(E_INVARG, "Several passages connect those rooms. Choose a direction or connection identity.");
+    return length(matches) ? matches[1] | false;
+  endmethod
 
   method initialize owner: ARCH_WIZARD
     "Set sensible defaults for newly created rooms.";
@@ -147,6 +211,7 @@ object ROOM [
   method exitfunc owner: HACKER
     "Notify room contents of departure, then refresh room snapshot state.";
     {who} = args;
+    this:disengage_actor(who);
     "Defer expensive room fanout until after the move commits.";
     fork (0)
       for item in (this.contents)
@@ -196,10 +261,7 @@ object ROOM [
     const actor = caller_perms();
     actor == player || (valid(actor) && actor.wizard) || raise(E_PERM);
     set_task_perms(actor);
-    if (!valid(this.location) || !respond_to(this.location, 'handle_passage_command))
-      return false;
-    endif
-    return this.location:handle_passage_command(parsed);
+    return $area:handle_passage_command(parsed);
   endmethod
 
   method maybe_handle_command owner: ARCH_WIZARD
@@ -399,29 +461,27 @@ object ROOM [
   method exit_annotation owner: HACKER
     "Describe a registered passage and its ordinary command invocation.";
     const {direction} = args;
-    const area = this.location;
-    valid(area) && isa(area, $area) || return [];
-    const passage = area:find_passage_by_direction(this, direction);
+    const passage = $room:find_passage(this, direction);
     typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT} || return [];
     const destination = passage:other_room(this);
     valid(destination) || return [];
-    const identity = area:passage_link_id(this, destination);
+    const identity = passage.connection_id;
     identity != "" || return [];
     return ["kind" -> "command", "command" -> "go " + direction, "action" -> $player:command_action("go", direction), "exit" -> ["source" -> $url_utils:to_curie_str(this), "destination" -> $url_utils:to_curie_str(destination), "passage" -> identity]];
   endmethod
 
   method action_go owner: ARCH_WIZARD
-    "Action handler: make actor go in a direction from this room.";
-    {who, context, direction} = args;
-    who.location != this && return false;
-    "Get the area and find passage for this direction";
-    area = this.location;
-    !valid(area) && return false;
-    !respond_to(area, 'find_passage_by_direction) && return false;
-    passage = area:find_passage_by_direction(this, direction);
-    !passage && return false;
-    "Traverse the passage";
-    return passage:travel_from(who, this, []);
+    "Use a passage from this room for an authenticated actor; return whether movement completed.";
+    const principal = caller_perms();
+    const {who, context, direction} = args;
+    $root:check_actor(who, principal);
+    set_task_perms(principal);
+    who.location == this || return false;
+    const passage = $room:find_passage(this, direction);
+    typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT} || return false;
+    const destination = passage:other_room(this);
+    passage:travel_from(who, this, context);
+    return who.location == destination;
   endmethod
 
   method help_topics owner: ARCH_WIZARD
@@ -447,498 +507,52 @@ object ROOM [
     "Clean up passages when room is recycled.";
     const actor = caller_perms();
     actor == this.owner || (valid(actor) && actor.wizard) || raise(E_PERM);
-    const area = this.location;
-    if (valid(area) && respond_to(area, 'on_room_recycle))
-      `area:on_room_recycle(this) ! ANY';
-    endif
+    for area in (this.passage_areas)
+      if (valid(area))
+        area:on_room_recycle(this);
+      endif
+    endfor
   endmethod
 
   method notify_pre_exit owner: HACKER
-    "Notify contents before a player leaves (called by passage before departure message).";
-    {who} = args;
-    if (valid(who) && is_player(who))
-      "Clear any engagement record for this actor.";
-      this:disengage_actor(who);
-      "Notify contents (furniture, etc.) that someone is leaving.";
-      for thing in (this.contents)
-        if (thing != who)
-          `thing:on_location_exit(who) ! E_VERBNF => 0';
-        endif
-      endfor
-    endif
+    "Optional pre-move hook. Completed departure notifications belong to exitfunc.";
+    return true;
   endmethod
 
   verb unlock (any any any) owner: ARCH_WIZARD flags: "rxd"
-    "Unlock a passage, or defer to an object's unlock verb.";
-    "Usage: unlock <direction> [with <key>] OR unlock <object> OR unlock door";
-    direction = dobjstr;
-    if (!direction || direction == "")
-      player:inform_current($event:mk_error(player, "Unlock what?"));
-      return;
-    endif
-    "First check if this matches an object in scope with an unlock verb";
-    scope = {@player.contents, @this.contents};
-    target = $match:resolve_in_scope(direction, scope);
-    if (target == $ambiguous_match)
-      player:inform_current($event:mk_error(player, "I see more than one \"" + direction + "\" here."));
-      return;
-    endif
-    if (valid(target) && respond_to(target, 'unlock))
-      return target:unlock();
-    endif
-    "Get the area";
-    area = this.location;
-    if (!valid(area) || !isa(area, $area))
-      player:inform_current($event:mk_error(player, "This room is not in an area."));
-      return;
-    endif
-    "If 'door' was specified, find a door-type passage";
-    passage = 0;
-    if (direction == "door")
-      passages = area:passages_from(this);
-      for p in (passages)
-        unlock_rule = p:_value("unlock_rule", 0);
-        door_like = p:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-        if (door_like)
-          passage = p;
-          break;
-        endif
-      endfor
-    else
-      passage = area:find_passage_by_direction(this, direction);
-    endif
-    is_passage = typeof(passage) == TYPE_FLYWEIGHT || (typeof(passage) == TYPE_OBJ && valid(passage));
-    if (!is_passage)
-      direction_words = {"n", "north", "s", "south", "e", "east", "w", "west", "u", "up", "d", "down", "in", "out", "ne", "nw", "se", "sw"};
-      if (valid(target))
-        player:inform_current($event:mk_error(player, "You can't unlock that."));
-      elseif (iobjstr && iobjstr != "")
-        player:inform_current($event:mk_error(player, "I don't see \"" + direction + "\" here."));
-      elseif (direction == "door")
-        player:inform_current($event:mk_error(player, "There's no door here."));
-      elseif (direction in direction_words)
-        player:inform_current($event:mk_error(player, "There's no exit in that direction."));
-      else
-        player:inform_current($event:mk_error(player, "I don't see \"" + direction + "\" here."));
-      endif
-      return;
-    endif
-    unlock_rule = passage:_value("unlock_rule", 0);
-    door_like = passage:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-    if (!door_like)
-      player:inform_current($event:mk_error(player, "That exit can't be unlocked."));
-      return;
-    endif
-    "Check if it's locked";
-    if (!passage:_value("is_locked", false))
-      door_name = passage:door_name_for(this);
-      msg = "The " + door_name + " is already unlocked.";
-      player:inform_current($event:mk_info(player, msg));
-      return;
-    endif
-    "Find a key - either specified or auto-detect from inventory";
-    key = #-1;
-    to_room = passage:other_room(this);
-    if (iobjstr && iobjstr != "")
-      key = $match:resolve_in_scope(iobjstr, scope);
-      if (!valid(key))
-        player:inform_current($event:mk_error(player, "You don't have that."));
-        return;
-      endif
-    else
-      "Auto-detect key";
-      if (typeof(unlock_rule) == TYPE_FLYWEIGHT)
-        for item in (player.contents)
-          bindings = ['Accessor -> player, 'This -> to_room, 'Key -> item, 'Passage -> passage];
-          result = $rule_engine:evaluate(unlock_rule, bindings);
-          if (typeof(result) == TYPE_MAP && result['success])
-            key = item;
-            break;
-          endif
-          bindings = ['Accessor -> player, 'This -> this, 'Key -> item, 'Passage -> passage];
-          result = $rule_engine:evaluate(unlock_rule, bindings);
-          if (typeof(result) == TYPE_MAP && result['success])
-            key = item;
-            break;
-          endif
-        endfor
-      endif
-    endif
-    if (!valid(key))
-      player:inform_current($event:mk_error(player, "You don't have a key that fits this lock."));
-      return;
-    endif
-    "Verify the key works";
-    if (typeof(unlock_rule) == TYPE_FLYWEIGHT)
-      bindings = ['Accessor -> player, 'This -> to_room, 'Key -> key, 'Passage -> passage];
-      result = $rule_engine:evaluate(unlock_rule, bindings);
-      if (typeof(result) != TYPE_MAP || !result['success])
-        bindings = ['Accessor -> player, 'This -> this, 'Key -> key, 'Passage -> passage];
-        result = $rule_engine:evaluate(unlock_rule, bindings);
-        if (typeof(result) != TYPE_MAP || !result['success])
-          player:inform_current($event:mk_error(player, "That key doesn't fit this lock."));
-          return;
-        endif
-      endif
-    endif
-    "Unlock the passage";
-    new_passage = passage:with_locked(false);
-    try
-      area:update_passage(this, to_room, new_passage);
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "You don't have permission to change this passage."));
-      return;
-    endtry
-    door_name = passage:door_name_for(this);
-    unlock_msg = new_passage:_value("unlock_msg", 0);
-    if (unlock_msg)
-      player:inform_current($event:mk_info(player, unlock_msg));
-    else
-      msg = "You unlock the " + door_name + ".";
-      player:inform_current($event:mk_info(player, msg));
-    endif
-    "Announce to room";
-    announce_msg = player.name + " unlocks the " + door_name + ".";
-    event = $event:mk_narrative(player, announce_msg);
-    this:announce(event);
+    "Unlock an exit or a nearby object. A named key must be carried.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    return $room:door_command(this, 'unlock, player, dobjstr, iobjstr);
   endverb
 
   verb lock (any any any) owner: ARCH_WIZARD flags: "rxd"
-    "Lock a passage, or defer to an object's lock verb.";
-    "Usage: lock <direction> [with <key>] OR lock <object> OR lock door";
-    direction = dobjstr;
-    if (!direction || direction == "")
-      player:inform_current($event:mk_error(player, "Lock what?"));
-      return;
-    endif
-    "First check if this matches an object in scope with a lock verb";
-    scope = {@player.contents, @this.contents};
-    target = $match:resolve_in_scope(direction, scope);
-    if (target == $ambiguous_match)
-      player:inform_current($event:mk_error(player, "I see more than one \"" + direction + "\" here."));
-      return;
-    endif
-    if (valid(target) && respond_to(target, 'lock))
-      return target:lock();
-    endif
-    "Get the area";
-    area = this.location;
-    if (!valid(area) || !isa(area, $area))
-      player:inform_current($event:mk_error(player, "This room is not in an area."));
-      return;
-    endif
-    "If 'door' was specified, find a door-type passage";
-    passage = 0;
-    if (direction == "door")
-      passages = area:passages_from(this);
-      for p in (passages)
-        unlock_rule = p:_value("unlock_rule", 0);
-        door_like = p:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-        if (door_like)
-          passage = p;
-          break;
-        endif
-      endfor
-    else
-      passage = area:find_passage_by_direction(this, direction);
-    endif
-    is_passage = typeof(passage) == TYPE_FLYWEIGHT || (typeof(passage) == TYPE_OBJ && valid(passage));
-    if (!is_passage)
-      if (direction == "door")
-        player:inform_current($event:mk_error(player, "There's no door here."));
-      else
-        player:inform_current($event:mk_error(player, "There's no exit in that direction."));
-      endif
-      return;
-    endif
-    unlock_rule = passage:_value("unlock_rule", 0);
-    door_like = passage:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-    if (!door_like)
-      player:inform_current($event:mk_error(player, "That exit can't be locked."));
-      return;
-    endif
-    "Check if it's already locked";
-    if (passage:_value("is_locked", false))
-      door_name = passage:door_name_for(this);
-      msg = "The " + door_name + " is already locked.";
-      player:inform_current($event:mk_info(player, msg));
-      return;
-    endif
-    "Check if passage has a lock (unlock_rule)";
-    if (typeof(unlock_rule) != TYPE_FLYWEIGHT)
-      player:inform_current($event:mk_error(player, "That doesn't have a lock."));
-      return;
-    endif
-    "Find a key - either specified or auto-detect from inventory";
-    key = #-1;
-    to_room = passage:other_room(this);
-    if (iobjstr && iobjstr != "")
-      key = $match:resolve_in_scope(iobjstr, scope);
-      if (!valid(key))
-        player:inform_current($event:mk_error(player, "You don't have that."));
-        return;
-      endif
-    else
-      "Auto-detect key";
-      for item in (player.contents)
-        bindings = ['Accessor -> player, 'This -> to_room, 'Key -> item, 'Passage -> passage];
-        result = $rule_engine:evaluate(unlock_rule, bindings);
-        if (typeof(result) == TYPE_MAP && result['success])
-          key = item;
-          break;
-        endif
-        bindings = ['Accessor -> player, 'This -> this, 'Key -> item, 'Passage -> passage];
-        result = $rule_engine:evaluate(unlock_rule, bindings);
-        if (typeof(result) == TYPE_MAP && result['success])
-          key = item;
-          break;
-        endif
-      endfor
-    endif
-    if (!valid(key))
-      player:inform_current($event:mk_error(player, "You don't have a key that fits this lock."));
-      return;
-    endif
-    "Verify the key works";
-    bindings = ['Accessor -> player, 'This -> to_room, 'Key -> key, 'Passage -> passage];
-    result = $rule_engine:evaluate(unlock_rule, bindings);
-    if (typeof(result) != TYPE_MAP || !result['success])
-      bindings = ['Accessor -> player, 'This -> this, 'Key -> key, 'Passage -> passage];
-      result = $rule_engine:evaluate(unlock_rule, bindings);
-      if (typeof(result) != TYPE_MAP || !result['success])
-        player:inform_current($event:mk_error(player, "That key doesn't fit this lock."));
-        return;
-      endif
-    endif
-    "Close the door first if it's open, then lock it";
-    new_passage = passage;
-    if (passage:_value("is_open", true))
-      new_passage = new_passage:with_open(false);
-    endif
-    new_passage = new_passage:with_locked(true);
-    try
-      area:update_passage(this, to_room, new_passage);
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "You don't have permission to change this passage."));
-      return;
-    endtry
-    door_name = passage:door_name_for(this);
-    lock_msg = new_passage:_value("lock_msg", 0);
-    if (lock_msg)
-      player:inform_current($event:mk_info(player, lock_msg));
-    else
-      msg = "You lock the " + door_name + ".";
-      player:inform_current($event:mk_info(player, msg));
-    endif
-    "Announce to room";
-    announce_msg = player.name + " locks the " + door_name + ".";
-    event = $event:mk_narrative(player, announce_msg);
-    this:announce(event);
+    "Lock an exit or a nearby object. A named key must be carried.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    return $room:door_command(this, 'lock, player, dobjstr, iobjstr);
   endverb
 
-  verb open (any none none) owner: ARCH_WIZARD flags: "rxd"
-    "Open a closed door/passage, or defer to an object's open verb.";
-    "Usage: open <direction> OR open <object> OR open door";
-    direction = dobjstr;
-    if (!direction || direction == "")
-      player:inform_current($event:mk_error(player, "Open what?"));
-      return;
-    endif
-    "First check if this matches an object in scope with an open verb";
-    scope = {@player.contents, @this.contents};
-    target = $match:resolve_in_scope(direction, scope);
-    if (target == $ambiguous_match)
-      player:inform_current($event:mk_error(player, "I see more than one \"" + direction + "\" here."));
-      return;
-    endif
-    if (valid(target) && respond_to(target, 'open))
-      return target:open();
-    endif
-    "Get the area";
-    area = this.location;
-    if (!valid(area) || !isa(area, $area))
-      player:inform_current($event:mk_error(player, "This room is not in an area."));
-      return;
-    endif
-    "If 'door' was specified, find a door-type passage";
-    passage = 0;
-    if (direction == "door")
-      passages = area:passages_from(this);
-      for p in (passages)
-        unlock_rule = p:_value("unlock_rule", 0);
-        door_like = p:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-        if (door_like)
-          passage = p;
-          break;
-        endif
-      endfor
-    else
-      passage = area:find_passage_by_direction(this, direction);
-    endif
-    is_passage = typeof(passage) == TYPE_FLYWEIGHT || (typeof(passage) == TYPE_OBJ && valid(passage));
-    if (!is_passage)
-      if (direction == "door")
-        player:inform_current($event:mk_error(player, "There's no door here."));
-      else
-        player:inform_current($event:mk_error(player, "There's no exit in that direction."));
-      endif
-      return;
-    endif
-    unlock_rule = passage:_value("unlock_rule", 0);
-    door_like = passage:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-    if (!door_like)
-      player:inform_current($event:mk_error(player, "That exit can't be opened."));
-      return;
-    endif
-    "Check if it's already open";
-    if (passage:_value("is_open", true))
-      door_name = passage:door_name_for(this);
-      msg = "The " + door_name + " is already open.";
-      player:inform_current($event:mk_info(player, msg));
-      return;
-    endif
-    "Check if it's locked";
-    to_room = passage:other_room(this);
-    if (passage:_value("is_locked", false))
-      "Try to unlock it first - find a key";
-      key = #-1;
-      if (typeof(unlock_rule) == TYPE_FLYWEIGHT)
-        for item in (player.contents)
-          bindings = ['Accessor -> player, 'This -> to_room, 'Key -> item, 'Passage -> passage];
-          result = $rule_engine:evaluate(unlock_rule, bindings);
-          if (typeof(result) == TYPE_MAP && result['success])
-            key = item;
-            break;
-          endif
-          bindings = ['Accessor -> player, 'This -> this, 'Key -> item, 'Passage -> passage];
-          result = $rule_engine:evaluate(unlock_rule, bindings);
-          if (typeof(result) == TYPE_MAP && result['success])
-            key = item;
-            break;
-          endif
-        endfor
-      endif
-      if (!valid(key))
-        door_name = passage:door_name_for(this);
-        msg = "The " + door_name + " is locked.";
-        player:inform_current($event:mk_error(player, msg));
-        return;
-      endif
-      "Unlock it first";
-      passage = passage:with_locked(false);
-      door_name = passage:door_name_for(this);
-      unlock_msg = passage:_value("unlock_msg", 0);
-      if (unlock_msg)
-        player:inform_current($event:mk_info(player, unlock_msg));
-      else
-        msg = "You unlock the " + door_name + " with your key.";
-        player:inform_current($event:mk_info(player, msg));
-      endif
-    endif
-    "Open the passage";
-    new_passage = passage:with_open(true);
-    try
-      area:update_passage(this, to_room, new_passage);
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "You don't have permission to change this passage."));
-      return;
-    endtry
-    door_name = passage:door_name_for(this);
-    open_msg = new_passage:_value("open_msg", 0);
-    if (open_msg)
-      player:inform_current($event:mk_info(player, open_msg));
-    else
-      msg = "You open the " + door_name + ".";
-      player:inform_current($event:mk_info(player, msg));
-    endif
-    "Announce to room";
-    announce_msg = player.name + " opens the " + door_name + ".";
-    event = $event:mk_narrative(player, announce_msg);
-    this:announce(event);
+  verb open (any any any) owner: ARCH_WIZARD flags: "rxd"
+    "Open an exit or a nearby object. A named key must be carried.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    return $room:door_command(this, 'open, player, dobjstr, iobjstr);
   endverb
 
-  verb close (any none none) owner: ARCH_WIZARD flags: "rxd"
-    "Close an open door/passage, or defer to an object's close verb.";
-    "Usage: close <direction> OR close <object> OR close door";
-    direction = dobjstr;
-    if (!direction || direction == "")
-      player:inform_current($event:mk_error(player, "Close what?"));
-      return;
-    endif
-    "First check if this matches an object in scope with a close verb";
-    scope = {@player.contents, @this.contents};
-    target = $match:resolve_in_scope(direction, scope);
-    if (target == $ambiguous_match)
-      player:inform_current($event:mk_error(player, "I see more than one \"" + direction + "\" here."));
-      return;
-    endif
-    if (valid(target) && respond_to(target, 'close))
-      return target:close();
-    endif
-    "Get the area";
-    area = this.location;
-    if (!valid(area) || !isa(area, $area))
-      player:inform_current($event:mk_error(player, "This room is not in an area."));
-      return;
-    endif
-    "If 'door' was specified, find a door-type passage";
-    passage = 0;
-    if (direction == "door")
-      passages = area:passages_from(this);
-      for p in (passages)
-        unlock_rule = p:_value("unlock_rule", 0);
-        door_like = p:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-        if (door_like)
-          passage = p;
-          break;
-        endif
-      endfor
-    else
-      passage = area:find_passage_by_direction(this, direction);
-    endif
-    is_passage = typeof(passage) == TYPE_FLYWEIGHT || (typeof(passage) == TYPE_OBJ && valid(passage));
-    if (!is_passage)
-      if (direction == "door")
-        player:inform_current($event:mk_error(player, "There's no door here."));
-      else
-        player:inform_current($event:mk_error(player, "There's no exit in that direction."));
-      endif
-      return;
-    endif
-    unlock_rule = passage:_value("unlock_rule", 0);
-    door_like = passage:_value("is_door", false) || typeof(unlock_rule) == TYPE_FLYWEIGHT;
-    if (!door_like)
-      player:inform_current($event:mk_error(player, "That exit can't be closed."));
-      return;
-    endif
-    "Check if it's already closed";
-    if (!passage:_value("is_open", true))
-      door_name = passage:door_name_for(this);
-      msg = "The " + door_name + " is already closed.";
-      player:inform_current($event:mk_info(player, msg));
-      return;
-    endif
-    "Close the passage";
-    new_passage = passage:with_open(false);
-    to_room = passage:other_room(this);
-    try
-      area:update_passage(this, to_room, new_passage);
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "You don't have permission to change this passage."));
-      return;
-    endtry
-    door_name = passage:door_name_for(this);
-    close_msg = new_passage:_value("close_msg", 0);
-    if (close_msg)
-      player:inform_current($event:mk_info(player, close_msg));
-    else
-      msg = "You close the " + door_name + ".";
-      player:inform_current($event:mk_info(player, msg));
-    endif
-    "Announce to room";
-    announce_msg = player.name + " closes the " + door_name + ".";
-    event = $event:mk_narrative(player, announce_msg);
-    this:announce(event);
+  verb close (any any any) owner: ARCH_WIZARD flags: "rxd"
+    "Close an exit or a nearby object. A named key must be carried.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    return $room:door_command(this, 'close, player, dobjstr, iobjstr);
   endverb
 
   method command_hints owner: ARCH_WIZARD
@@ -946,6 +560,67 @@ object ROOM [
     "Returns list of maps: [{command -> 'press 1', description -> 'Go to floor 1'}, ...]";
     "Override in subclasses to expose room-specific commands handled by maybe_handle_command.";
     return {};
+  endmethod
+
+  method door_command owner: ARCH_WIZARD
+    "Resolve a local object or one passage, then use the shared checked operation.";
+    const principal = caller_perms();
+    const {room, operation, who, direction, ?key_name = ""} = args;
+    $root:check_actor(who, principal);
+    operation in {'open, 'close, 'lock, 'unlock} || raise(E_INVARG, "Unknown door operation.");
+    set_task_perms(principal);
+    who.location == room || raise(E_PERM, "You must be in that room to operate its doors.");
+    const inform = {message} => who:inform_current($event:mk_info(who, message));
+    direction != "" || return inform(tostr(operation):capitalize() + " what?");
+    if (key_name != "" && prepstr != "with")
+      return inform("Use '" + tostr(operation) + " EXIT with KEY'.");
+    endif
+    const scope = {@who.contents, @room.contents};
+    const target = $match:resolve_in_scope(direction, scope);
+    if (target == $ambiguous_match)
+      return inform("Several objects match '" + direction + "'. Use a more specific name.");
+    endif
+    if (valid(target) && target in scope && respond_to(target, operation))
+      return target:(operation)();
+    endif
+    let passage = false;
+    if (direction == "door")
+      const doors = {candidate for candidate in ($room:passages(room))
+        if ($passage:allows_direction(candidate, room)
+          && (candidate.is_door || typeof(candidate.unlock_rule) == TYPE_FLYWEIGHT))};
+      if (length(doors) > 1)
+        const names = {candidate:label_for(room) for candidate in (doors)};
+        return inform("Which door? Specify " + names:join(", ") + ".");
+      endif
+      passage = length(doors) ? doors[1] | false;
+    else
+      passage = $room:find_passage(room, direction);
+    endif
+    typeof(passage) == TYPE_FLYWEIGHT || return inform("There is no exit called '" + direction + "' here.");
+    let key = #-1;
+    if (key_name != "")
+      key = $match:resolve_in_scope(key_name, who.contents);
+      if (key == $ambiguous_match)
+        return inform("Several carried objects match that key. Use a more specific name.");
+      endif
+      valid(key) && key.location == who || return inform("You are not carrying that key.");
+    endif
+    const result = $passage:operate(passage, operation, who, room, key);
+    if (result['status] != 'applied)
+      inform(result['reason]);
+    endif
+    return result;
+  endmethod
+
+  method refresh_snapshots owner: ARCH_WIZARD
+    "Publish current room state after an authorized connection change.";
+    caller_perms().wizard || raise(E_PERM);
+    const {room} = args;
+    for viewer in (room.contents)
+      if (is_player(viewer))
+        viewer:emit_room_snapshot_state(viewer, room);
+      endif
+    endfor
   endmethod
 
   method engage_actor owner: ARCH_WIZARD
@@ -1000,6 +675,7 @@ object ROOM [
     "Return destinations reachable via transport objects in this room.";
     "Scans contents for objects implementing :transport_connections().";
     "Returns list of {destination_room, label, transport_object} tuples.";
+    set_task_perms(caller_perms());
     results = {};
     for item in (this.contents)
       if (!valid(item))

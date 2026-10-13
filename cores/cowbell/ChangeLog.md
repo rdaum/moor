@@ -8,6 +8,11 @@ Cowbell entries.
 
 ### Added
 
+- Rooms can react to completed passage door operations with `passage_open`, `passage_close`,
+  `passage_lock`, and `passage_unlock`. Both sides receive the event, with their own exit name.
+- Passages can connect rooms in different areas. Both ends discover the connection, and walking
+  routes can continue through the destination area's rooms. `@dig --allow-parallel` creates a
+  separate connection between already connected rooms.
 - `help pronouns` and `help messages` explain pronoun settings and message authoring, with command
   examples and sentences for each reader.
 - Players can enter custom pronouns with `@pronouns custom` or Meadow's account and profile editors.
@@ -36,6 +41,28 @@ Cowbell entries.
 
 - Ownership transfers include inherited properties with the `c` flag. A new room owner can save
   descriptions without a wizard repairing those property permissions.
+- Passage descriptions use explicit literal, inline Djot, or template syntax. Use
+  `@describe --literal`, `--djot`, or `--template` before the exit name. Braces in literal text stay
+  literal. Edits without a format flag preserve the selected syntax. New descriptions use sentence
+  mode and retain their spelling and punctuation; fragment mode remains an explicit option.
+- Ambient descriptions link the complete phrase without requiring a direction word. The narrative
+  also lists exit names. Structured descriptions retain formatting and substitutions in room prose.
+- `@edit-description` accepts passage directions and preserves their source syntax. Saving rechecks
+  editing authority and rejects conflicting descriptions or replacement connections. `@passage`
+  previews room prose and movement messages. Arrival and departure wording use their dedicated
+  fields, without reusing the ambient description.
+- Door commands share passage access rules with movement. Key-independent rules work without an
+  inventory item. An explicitly named key must be carried. Ambiguous `open door` commands ask for an
+  exit name. Successful operations refresh room panels on both sides.
+- Passage creation returns the installed value with its connection identity. Keep that value for
+  later edits. Updates preserve identity; replacement and reinstallation assign a new identity. A
+  room pair alone cannot select among parallel passages.
+- Existing worlds need their passage stores rebuilt after this update. As a wizard, call
+  `area:rebuild_passages()` for each area that stores passages. It checks the records before
+  conversion and returns the old relation as a backup. Old saved routes and exit links then expire.
+- Moving a room between areas preserves its connections. Area admission requires `add_room`
+  authority, including when the room moves through `moveto` directly. Passage creation checks the
+  rights at both endpoints; area ownership alone does not grant rights over a foreign room.
 - Relations define their own named fields. Rules and reaction steps reference a relation object or a
   reaction setting, so builders can reuse field names without sharing data. Queries can bind either
   side of a relation. Copies retain their chosen relation; change the setting to use a separate one.
@@ -108,6 +135,20 @@ Cowbell entries.
 
 ### Fixed
 
+- Passage configuration cannot modify the shared prototype through an ordinary caller. Configuring a
+  persistent passage requires its owner or a wizard; flyweight configuration remains a value
+  operation.
+- Description editors work for ordinary builders and save with their current permissions. A save
+  from another connection cannot use an existing editor session.
+- Passage edits preserve custom delegates, extension slots, contents, and door messages. Editing one
+  side cannot redirect the connection or change the other side without its required authority.
+- One-way passages reject reverse travel and reverse routes. Removed passages cannot move actors,
+  and saved open passage values cannot bypass current door state. Walking reports arrival only after
+  movement succeeds.
+- Room transfers and recycling keep exit discovery consistent at both endpoints. A rejected move
+  preserves engagement, and a completed departure sends one notification to room contents.
+- `@describe` and movement actions recognize passage flyweights. Named one-way exits do not require
+  an inferred return direction. Remote calls cannot operate another room's doors.
 - Reaction commands keep the line breaks in previews, status, and help output.
 - Empty `say` and `emote` commands ask for text instead of failing in the Djot parser. Inline
   authoring also accepts empty content.

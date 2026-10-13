@@ -100,7 +100,7 @@ object HEADLESS_BUILDER_COMMAND_SCENARIOS
       $test_utils:assert_false(dig_result, "@dig without source dig_from should return falsey");
       $test_utils:assert_false(test_area:passage_for(room_a, room_b), "denied @dig should not register a passage");
       passage = $passage:mk(room_a, "east", {"east"}, "", true, room_b, "", {}, "", false, true);
-      test_area:create_passage(room_a, room_b, passage);
+      passage = test_area:create_passage(room_a, room_b, passage);
       $root:grant_capability(room_a, {'dig_from}, #90102, 'room);
       undig_result = this:_dispatch_builder_dobj("@undig", "east");
       $test_utils:assert_false(undig_result, "@undig without area remove_passage should return falsey");

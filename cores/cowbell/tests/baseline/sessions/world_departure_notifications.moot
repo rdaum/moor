@@ -1,0 +1,17 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90108:set_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true)); let observer = $thing:create(); add_property(observer, "departures", 0, {#90100, "r"}); add_property(#90103, "observer", observer, {#90100, "r"}); add_verb(observer, {#90100, "rxd", "on_location_exit"}, {"this", "none", "this"}); set_verb_code(observer, "on_location_exit", {"this.departures = this.departures + 1;"}); move(observer, #90103); add_verb(#90110, {#90100, "rxd", "accept"}, {"this", "none", "this"}); set_verb_code(#90110, "accept", {"return false;"}); add_verb(observer, {#90102, "rxd", "try_travel"}, {"this", "none", "this"}); set_verb_code(observer, "try_travel", {"return `#90108:passage_for(#90103, #90110):travel_from(#90102, #90103, []) ! E_NACC => E_NACC';"}); #90103:engage_actor(#90102, observer); return true;
+true
+// A rejected native move must not emit a completed departure or clear engagement.
+; return #90103.observer:try_travel();
+E_NACC
+; suspend(1); return {#90103.observer.departures, #90103:get_engagement(#90102) == #90103.observer};
+{0, true}
+; delete_verb(#90110, "accept"); return true;
+true
+@nonprogrammer
+% east
+@wizard
+; suspend(1); return {#90103.observer.departures, #90103:get_engagement(#90102)};
+{1, #-1}

@@ -1,0 +1,52 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "A brass door.", true, #90110, "west", {}, "", true)); return true;
+true
+@programmer
+% @edit-description --djot east
+=A brass door.
+@event present:text/djot text-editor
+; player.runtime_probe = mapkeys(player.editing_sessions)[1]; $builder_features:receive_description_edit(player.runtime_probe, "A *brass* door."); return true;
+true
+=Description updated for Runtime Test Chamber.
+; $builder_features:receive_description_edit(player.runtime_probe, "A *bronze* door."); return true;
+true
+=Description updated for Runtime Test Chamber.
+@wizard
+; let p = $room:find_passage(#90103, "east"); #90108:update_passage(#90103, #90110, p:with_open(false)); return true;
+true
+@programmer
+; $builder_features:receive_description_edit(player.runtime_probe, "A *copper* door."); return true;
+true
+=Description updated for Runtime Test Chamber.
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {p.is_open, p.side_a_description, p.side_a_description_kind};
+{false, "A *copper* door.", 'djot_inline}
+; let p = $room:find_passage(#90103, "east"); #90108:update_passage(#90103, #90110, p:with_description_from(#90103, "Another edit.", 'literal)); return true;
+true
+@programmer
+; return `$builder_features:receive_description_edit(player.runtime_probe, "stale edit") ! E_INVARG => E_INVARG';
+E_INVARG
+; $builder_features:receive_description_edit(player.runtime_probe, 'close); return true;
+true
+% @edit-description east
+=Another edit.
+@event present:text/plain text-editor
+; player.runtime_probe = mapkeys(player.editing_sessions)[1]; return true;
+true
+@wizard
+; #90103:set_owner(#90100); return true;
+true
+@programmer
+; return `$builder_features:receive_description_edit(player.runtime_probe, "revoked edit") ! E_PERM => E_PERM';
+E_PERM
+@wizard
+; #90103:set_owner(#90101); #90108:remove_passage(#90103, #90110); #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "A replacement door.", true, #90110, "west", {}, "", true)); return true;
+true
+@programmer
+; return `$builder_features:receive_description_edit(player.runtime_probe, "wrong connection") ! E_INVARG => E_INVARG';
+E_INVARG
+@wizard
+; return $room:find_passage(#90103, "east").side_a_description;
+"A replacement door."

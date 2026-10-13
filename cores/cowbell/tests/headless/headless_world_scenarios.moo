@@ -151,8 +151,8 @@ object HEADLESS_WORLD_SCENARIOS
     const room_a = create($room, $arch_wizard, 2);
     const room_b = create($room, $arch_wizard, 2);
     try
-      const passage = <$passage, .side_a_room = room_a, .side_b_room = room_b, .is_open = true>;
-      area:set_passage(room_a, room_b, passage);
+      let passage = <$passage, .side_a_room = room_a, .side_b_room = room_b, .is_open = true>;
+      passage = area:set_passage(room_a, room_b, passage);
       $test_utils:assert_eq(length(area:passages()), 1, "fixture has a real passage");
       try
         this:_as_programmer("area_cleanup", area, room_a);
@@ -171,7 +171,7 @@ object HEADLESS_WORLD_SCENARIOS
     "Public passage construction does not authorize moving another owner's object.";
     const room_a = create($room, $arch_wizard, 2);
     const room_b = create($room, $arch_wizard, 2);
-    const victim = create($thing, $arch_wizard, 2);
+    const victim = create($actor, $arch_wizard, 2);
     try
       move(victim, room_a);
       try
@@ -211,10 +211,13 @@ object HEADLESS_WORLD_SCENARIOS
     try
       $test_utils:assert_false(this:call_as_programmer(owned_area, "passage_for", room_a, room_b),
         "The owner can query a new area's empty relation");
-      $test_utils:assert_eq(`this:call_as_programmer(foreign_area, "passage_for", room_a, room_b)
-        ! E_PERM => E_PERM', E_PERM, "Lookup retains the caller's relation read permissions");
-      const passage = <$passage, .side_a_room = room_a, .side_b_room = room_b, .is_open = true>;
-      this:call_as_programmer(owned_area, "set_passage", room_a, room_b, passage);
+      $test_utils:assert_false(this:call_as_programmer(foreign_area, "passage_for", room_a, room_b),
+        "Public connection discovery also works before a room has any passages");
+      let passage = <$passage, .side_a_room = room_a, .side_b_room = room_b, .is_open = true>;
+      $test_utils:assert_eq(`this:call_as_programmer(owned_area, "set_passage", room_a, room_b, passage)
+        ! E_PERM => E_PERM', E_PERM, "Area ownership does not grant authority over a foreign endpoint");
+      $root:grant_capability(room_b, {'dig_from, 'dig_into}, #90101, 'room);
+      passage = this:call_as_programmer(owned_area, "set_passage", room_a, room_b, passage);
       $test_utils:assert_eq(length(owned_area:passages()), 1, "owner can register passage");
       $test_utils:assert_eq(this:call_as_programmer(owned_area, "passage_for", room_a, room_b), passage,
         "The owner can query a registered passage");
@@ -222,7 +225,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_eq(length(owned_area:passages()), 0, "owner cleanup succeeds");
       $test_utils:assert_false(this:call_as_programmer(owned_area, "passage_for", room_a, room_b),
         "The owner sees no passage after its removal");
-      foreign_area:set_passage(room_a, room_b, passage);
+      passage = foreign_area:set_passage(room_a, room_b, passage);
       move(room_a, foreign_area);
       this:call_as_programmer(room_a, "destroy");
       $test_utils:assert_eq(length(foreign_area:passages()), 0, "actual room recycle cleans foreign area's member link");
@@ -326,18 +329,22 @@ object HEADLESS_WORLD_SCENARIOS
     "A real destination rejection propagates without moving the authorized traveler.";
     const from_room = create($room, #90100, 2);
     const to_room = create($room, #90100, 2);
-    const traveler = create($thing, #90101, 2);
+    const traveler = create($actor, #90101, 2);
+    const area = create($area, #90100, 2);
     try
       move(traveler, from_room);
+      const passage = area:create_passage(from_room, to_room,
+        $passage:mk(from_room, "east", {}, "", true, to_room, "west", {}, "", true));
       add_verb(to_room, {#90100, "rxd", "accept"}, {"this", "none", "this"});
       set_verb_code(to_room, "accept", {"return false;"});
-      const rejected = `this:_as_programmer("passage_move", traveler, from_room, to_room) ! E_NACC => E_NACC';
+      const rejected = `this:call_as_programmer(passage, "travel_from", traveler, from_room, []) ! E_NACC => E_NACC';
       $test_utils:assert_eq(rejected, E_NACC, "native destination rejection preserved");
       $test_utils:assert_eq(traveler.location, from_room, "rejection preserves actor location");
     finally
       recycle(traveler);
       recycle(from_room);
       recycle(to_room);
+      area:destroy();
     endtry
   endmethod
 
@@ -503,8 +510,8 @@ object HEADLESS_WORLD_SCENARIOS
     try
       move(source, area);
       move(destination, area);
-      const passage = $passage:mk(source, "east", {"e"}, "", false, destination, "west", {"w"}, "", false);
-      area:set_passage(source, destination, passage);
+      let passage = $passage:mk(source, "east", {"e"}, "", false, destination, "west", {"w"}, "", false);
+      passage = area:set_passage(source, destination, passage);
       const descriptor = source:exit_annotation("east");
       $test_utils:assert_eq(descriptor["command"], "go east", "Cowbell supplies the precise normal command");
       $test_utils:assert_eq(descriptor["exit"]["source"], $url_utils:to_curie_str(source), "source is explicit");
@@ -514,7 +521,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_eq(mapvalues(snapshot["annotations"])[1], descriptor, "pinned room uses the same command descriptor");
       area:update_passage(source, destination, passage:with_open(false));
       $test_utils:assert_eq(source:exit_annotation("east"), descriptor, "door state does not change identity");
-      area:set_passage(source, destination, passage);
+      passage = area:set_passage(source, destination, passage);
       $test_utils:assert_true(source:exit_annotation("east")["exit"]["passage"] != descriptor["exit"]["passage"], "replacement has a new semantic identity");
     finally
       recycle(source);
@@ -535,26 +542,26 @@ object HEADLESS_WORLD_SCENARIOS
       move(source, area);
       move(destination, area);
       move(who, source);
-      const passage = $passage:mk(source, "east", {}, "", false, destination, "west", {}, "", false);
-      area:set_passage(source, destination, passage);
+      let passage = $passage:mk(source, "east", {}, "", false, destination, "west", {}, "", false);
+      passage = area:set_passage(source, destination, passage);
       add_property(source, "test_destination", destination, {#90100, "r"});
       add_verb(source, {#90100, "rxd", "notify_pre_exit"}, {"this", "none", "this"});
       set_verb_code(source, "notify_pre_exit", {
         "const area = this.location; const destination = this.test_destination;",
-        "const passage = area:passage_for(this, destination);",
+        "let passage = area:passage_for(this, destination);",
         "area:update_passage(this, destination, passage:with_open(false)); suspend(0);"
       });
       const closed = this:call_as_test_player(area, "handle_passage_command", ['verb -> "go", 'dobjstr -> "east"]);
-      $test_utils:assert_false(closed, "a close during callback prevents traversal");
+      $test_utils:assert_true(closed, "A matched direction is handled even when its passage closes");
       $test_utils:assert_eq(who.location, source, "closing during callback preserves actor location");
       area:update_passage(source, destination, passage);
       set_verb_code(source, "notify_pre_exit", {
         "const area = this.location; const destination = this.test_destination;",
-        "const passage = area:passage_for(this, destination);",
+        "let passage = area:passage_for(this, destination);",
         "area:set_passage(this, destination, passage); suspend(0);"
       });
       const replaced = this:call_as_test_player(area, "handle_passage_command", ['verb -> "go", 'dobjstr -> "east"]);
-      $test_utils:assert_false(replaced, "replacement during callback prevents traversal");
+      $test_utils:assert_true(replaced, "A matched direction is handled even when its passage is replaced");
       $test_utils:assert_eq(who.location, source, "replacement during callback preserves actor location");
     finally
       move(who, prior_location);

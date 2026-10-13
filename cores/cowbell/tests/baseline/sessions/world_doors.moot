@@ -1,0 +1,45 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); let door = $passage:mk(#90103, "east", {"e"}, "", true, #90110, "west", {"w"}, "", true, false); door.is_door = true; door = door:with_locked(true):with_unlock_rule($rule_engine:parse_expression("input.From == #90103 AND input.To == #90110", 'from_here, $rule_engine:passage_scope())); #90108:create_passage(#90103, #90110, door); let other = $passage:mk(#90103, "stairs", {}, "", true, #90110, "landing", {}, "", true); other.is_door = true; #90108:create_passage(#90103, #90110, other, true); return true;
+true
+@nonprogrammer
+% open door
+=Which door? Specify east, stairs.
+% open
+=Open what?
+% open east
+=You unlock and open the east door.
+@event data:state room_snapshot
+@event text/plain utility
+% open east
+=The east door is already open.
+% close east
+=You close the east door.
+% unlock east
+=The east door is already unlocked.
+% lock east
+=You lock the east door.
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {p.is_open, p.is_locked, $room:find_passage(#90103, "stairs").is_open};
+{false, true, true}
+; const key = create($thing, #90100, 2); key.name = "brass key"; move(key, #90103); #90100.runtime_probe = key; let p = $room:find_passage(#90103, "east"); #90108:update_passage(#90103, #90110, p:with_unlock_rule($rule_engine:parse_expression("input.Key == " + toliteral(key), 'brass_key, $rule_engine:passage_scope()))); return true;
+true
+@nonprogrammer
+% unlock east with brass key
+=You are not carrying that key.
+% unlock east
+=You cannot unlock the east door.
+@wizard
+; move(#90100.runtime_probe, #90102); return true;
+true
+@nonprogrammer
+% unlock east with brass key
+=You unlock the east door.
+% lock east with brass key
+=You lock the east door.
+% open east with brass key
+=You unlock and open the east door.
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {p.is_open, p.is_locked};
+{true, false}

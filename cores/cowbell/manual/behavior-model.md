@@ -342,6 +342,30 @@ selected item without breaking a look or a contents search. Passage conditions u
 for their endpoints. A condition without `Key` runs once without an inventory search. A condition
 that uses `Key` tests carried items.
 
+`$passage:operate(passage, operation, actor, from_room, key, context)` runs the same checked door
+operation as the room commands. Operations are `open`, `close`, `lock`, and `unlock`. The optional
+key defaults to `#-1`, which selects a carried key when the rule needs one. An explicit key must be
+carried. The optional context preserves a reaction chain. The result has `status` (`applied` or
+`denied`) and a list of reason parts. An applied result also contains the updated `passage`. An
+already satisfied state is denied without firing another event.
+
+The operation authenticates the actor, checks local presence, and resolves the current installed
+connection. Locking, unlocking, and opening a locked door evaluate the passage's `unlock_rule`. The
+inputs are `Accessor`, `From`, `To`, and `Passage`, plus `Key` when the rule uses it. Providers run
+under the initiating principal. After callbacks, the operation rechecks the connection, actor, room
+owners, inventory, and selected key before changing the door.
+
+Completed door operations dispatch `on_passage_open`, `on_passage_close`, `on_passage_lock`, or
+`on_passage_unlock` on both endpoint rooms. They also request fresh room snapshots for both sides.
+`This` and `Location` identify the receiving room. `Actor`, `From`, and `To` identify the operator
+and the endpoints from their perspective. `Direction` names the exit in the receiving room.
+`Connection` contains the connection identity, `Passage` contains its resulting value, and `Key`
+identifies the selected key or `#-1`. Builder commands expose `Direction` as `exit`.
+
+`open_msg`, `close_msg`, `lock_msg`, and `unlock_msg` replace the operation's success message. Their
+bindings include the actor, the source room as `this_obj`, and the text values `direction` and
+`passage`. The source room receives one success message, including the actor.
+
 `$reaction:action_schemas()` supplies descriptions and named argument types. The supported actions
 include container operations, getting and dropping items, sitting and standing, and wearing and
 removing clothing. `perform_action(name, arguments, context)` returns a `status` of `applied`,

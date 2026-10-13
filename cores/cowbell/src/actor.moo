@@ -291,12 +291,13 @@ object ACTOR [
   endmethod
 
   method action_go owner: ARCH_WIZARD
-    "Action handler: make this actor go in a direction.";
-    set_task_perms(this.owner);
-    {who, context, direction} = args;
-    who != this && return false;
-    !valid(this.location) && return false;
-    "Delegate to room's action_go";
+    "Move this actor through a local passage under the invoking principal's authority.";
+    const principal = caller_perms();
+    const {who, context, direction} = args;
+    $root:check_actor(this, principal);
+    who == this || raise(E_INVARG, "The action actor does not match its receiver.");
+    set_task_perms(principal);
+    valid(this.location) || return false;
     return this.location:action_go(this, context, direction);
   endmethod
 

@@ -1,0 +1,37 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true)); return true;
+true
+@programmer
+% @describe --template east as An {direction} archway.
+=Set ambient description for 'east' passage.
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {p.side_a_description_kind, p.side_a_description};
+{'template, "An {direction} archway."}
+@programmer
+% @describe --template east as broken {template
+=Unclosed brace in template.
+@wizard
+; return $room:find_passage(#90103, "east").side_a_description;
+"An {direction} archway."
+@programmer
+% @describe --djot east as A *brass* door stands beside the fireplace.
+=Set ambient description for 'east' passage.
+@wizard
+; return $room:find_passage(#90103, "east").side_a_description_kind;
+'djot_inline
+@programmer
+% @describe --literal east as A door bears an unfinished {inscription.
+=Set ambient description for 'east' passage.
+@nonprogrammer
+% look
+~~Runtime Test Chamber
+=
+~~A room for isolated Cowbell runtime tests.
+=
+=A door bears an unfinished {inscription.
+=
+=An exit leads out east.
+@event data:state room_snapshot
+@event text/plain utility

@@ -103,6 +103,36 @@ Stop the reaction:
 place. An edit to an enabled reaction takes effect immediately. For several edits that must take
 effect together, disable the reaction first.
 
+## Respond when someone opens a passage door
+
+A passage connects two rooms. Its door is shared, but each room can have its own reactions. For this
+example, use a room you own with a door called `east`.
+
+```text
+@reaction here doorbell after passage_open
+@reaction here doorbell if exit is "east"
+@reaction here doorbell then announce "A brass bell rings."
+@reaction here doorbell check
+@reaction here doorbell enable
+close east
+open east
+```
+
+`here` selects your current room. The condition selects its east door, so another door does not ring
+the bell. Asking to open an already open door does not ring it again.
+
+The passage events are `passage_open`, `passage_close`, `passage_lock`, and `passage_unlock`. Both
+endpoint rooms receive each completed event. Each room's `exit` value is the name on that side: east
+in this room, for example, and west in the other room.
+
+`actor` is the person who operated the door. `from` is that person's room, and `to` is the other
+room. These two values stay the same for reactions on either side. `place` is the room with the
+reaction. `key` identifies the carried key used by the operation, or no object when no key was used.
+
+Opening a locked door checks its access rule, then unlocks and opens it together. This produces one
+`passage_open` event on each side. The separate `unlock` command produces `passage_unlock`. Denied
+operations produce no completed event.
+
 ## Name the participants
 
 Conditions and steps can use names supplied by the event:

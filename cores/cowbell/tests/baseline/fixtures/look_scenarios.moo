@@ -107,7 +107,7 @@ object LOOK_SCENARIOS
       item.integrated_description = "A bell hangs here";
       move(item, room);
       let input = room:look_self();
-      input.ambient_passages = {{"an east door", 'fragment, "east"}, {"light shines", 'sentence}};
+      input.ambient_passages = {{"an east door", 'fragment, "east"}, {"Light shines.", 'sentence}};
       input.actions = {{"ring bell", "Ring *bell*"}};
       const view = input:capture(#90102);
       const narrative = $document:render($look:narrative(view):resolve(#90102), 'text_plain)['body];
@@ -123,6 +123,67 @@ object LOOK_SCENARIOS
     finally
       recycle(item);
       recycle(room);
+    endtry
+    return true;
+  endmethod
+  method test_passage_description_formats_and_references owner: ARCH_WIZARD
+    "All supported source formats render for one viewer without inferring links from direction words.";
+    const area = create($area);
+    const room = create($room);
+    const destination = create($room);
+    try
+      move(room, area);
+      move(destination, area);
+      room.description = "A quiet hall.";
+      let passage = area:create_passage(room, destination,
+        $passage:mk(room, "in", {}, "", true, destination, "out", {}, "", true));
+      const descriptions = {
+        {"inside the hall, a brass door waits.", 'literal, "inside the hall, a brass door waits."},
+        {"A {brass} door waits.", 'literal, "A {brass} door waits."},
+        {"A *brass* door waits.", 'djot_inline, "A brass door waits."},
+        {"An {direction} door waits.", 'template, "An in door waits."},
+        {$sub_utils:compile("An {direction} arch waits."), 'literal, "An in arch waits."}
+      };
+      for example in (descriptions)
+        const {source, kind, expected} = example;
+        passage = area:update_passage(room, destination, passage:with_description_from(room, source, kind));
+        const view = room:look_self():capture(#90102);
+        const text = $document:render(view['description], 'text_plain)['body];
+        $test_utils:assert_true(index(text, expected) > 0, "Capture preserves the authored sentence and resolves its bindings");
+        const html = $document:render(view['description], 'text_html);
+        const links = mapvalues(html['annotations]);
+        $test_utils:assert_eq(length(links), 1, "The complete description has one exit reference");
+        $test_utils:assert_eq(links[1]["exit"]["passage"], passage.connection_id, "The reference identifies the installed connection");
+        const narrative = $document:render($look:narrative(view):resolve(#90102), 'text_plain)['body];
+        $test_utils:assert_true(index(narrative, "An exit leads out in.") > 0,
+          "The narrative retains an exit-name cue even without the direction word in its prose");
+        if (kind == 'djot_inline)
+          $test_utils:assert_true(index(html['body], "<strong>brass</strong>") > 0, "Djot emphasis survives HTML rendering");
+          $test_utils:assert_true(index($document:render(view['description], 'text_djot)['body], "*brass*") > 0,
+            "The same content retains emphasis in Djot");
+        endif
+      endfor
+      const phrase = $format.annotation:exit(room, "in", "brass door");
+      passage = area:update_passage(room, destination,
+        passage:with_description_from(room, {"A ", phrase, " stands beside the fireplace."}, 'literal));
+      const explicit = room:look_self():capture(#90102);
+      const references = mapvalues($document:render(explicit['description], 'text_html)['annotations]);
+      $test_utils:assert_eq(length(references), 1, "An authored reference is not wrapped in a second interactive reference");
+      const departure = $passage:movement_from(passage, #90102, room, destination):resolve(#90102);
+      $test_utils:assert_eq($document:render(departure, 'text_plain)['body], "You head in.",
+        "Movement wording does not reuse an ambient description or its formatting");
+      const phrased = passage:with_departure_phrase_from(room, "through the brass door");
+      const movement = $passage:movement_from(phrased, #90102, room, destination):resolve(#90102);
+      $test_utils:assert_eq($document:render(movement, 'text_plain)['body], "You head through the brass door.",
+        "The dedicated departure phrase controls movement and its preview");
+      const before = passage;
+      $test_utils:assert_raises(E_INVARG, passage, "with_description_from", {room, "# heading", 'djot_inline},
+        "Block syntax is rejected before saving inline exit prose");
+      $test_utils:assert_eq(area:passage_for(room, destination), before, "A rejected description preserves installed state");
+    finally
+      recycle(room);
+      recycle(destination);
+      area:destroy();
     endtry
     return true;
   endmethod

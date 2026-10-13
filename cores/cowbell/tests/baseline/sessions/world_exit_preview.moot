@@ -1,0 +1,12 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90103:set_owner(#90101); #90101.is_builder = true; #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {}, "", true, #90110, "west", {}, "", true):with_description_from(#90103, "A *brass* door.", 'djot_inline):with_departure_phrase_from(#90103, "through the brass door")); return true;
+true
+@programmer
+% @passage east
+~~Passage: east
+@event text/plain utility
+@wizard
+; const p = $room:find_passage(#90103, "east"); return {#90101.location == #90103, p.side_a_description, p.side_a_description_kind};
+{true, "A *brass* door.", 'djot_inline}

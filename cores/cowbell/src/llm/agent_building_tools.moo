@@ -19,7 +19,7 @@ object AGENT_BUILDING_TOOLS [
     tools = {@tools, $llm_agent_tool:mk("build_room", "Create a new room in an area. Areas are organizational containers that group rooms. IMPORTANT: The 'area' parameter must be an AREA object (like #38), NOT a room object. To build in the same area as an existing room, omit the area parameter or use 'here'.", ["type" -> "object", "properties" -> ["name" -> ["type" -> "string", "description" -> "Room name"], "area" -> ["type" -> "string", "description" -> "AREA object number to build in (like #38). MUST be an area, NOT a room. Use 'here' for current area, 'ether' for free-floating, or omit entirely to default to current area. NEVER pass a room object here."], "parent" -> ["type" -> "string", "description" -> "Parent room object reference (optional, default: $room)"]], "required" -> {"name"}], target_obj, "build_room")};
     tools = {@tools, $llm_agent_tool:mk("dig_passage", "Create a passage between two rooms. Can be one-way or bidirectional. ALWAYS use object numbers for room references.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location). Use object numbers like #12 or #50"], "direction" -> ["type" -> "string", "description" -> "Exit direction from source room (e.g. 'north', 'up', 'north,n' for aliases)"], "target_room" -> ["type" -> "string", "description" -> "Destination room object number (like #12 or #50). MUST use object number."], "return_direction" -> ["type" -> "string", "description" -> "Return direction (optional, will be inferred if omitted)"], "oneway" -> ["type" -> "boolean", "description" -> "True for one-way passage (default: false)"]], "required" -> {"direction", "target_room"}], target_obj, "dig_passage")};
     tools = {@tools, $llm_agent_tool:mk("remove_passage", "Remove/delete a passage between two rooms. Use this to fix duplicate exits or remove unwanted connections.", ["type" -> "object", "properties" -> ["source_room" -> ["type" -> "string", "description" -> "Source room object number (optional, defaults to actor's current location)"], "target_room" -> ["type" -> "string", "description" -> "Target room object number to remove passage to"]], "required" -> {"target_room"}], target_obj, "remove_passage")};
-    tools = {@tools, $llm_agent_tool:mk("set_passage_description", "Set the narrative description for a passage/exit. This description integrates into the room's look description when ambient mode is enabled.", ["type" -> "object", "properties" -> ["direction" -> ["type" -> "string", "description" -> "Direction/exit label (e.g. 'north', 'up')"], "description" -> ["type" -> "string", "description" -> "Narrative description for the passage (e.g. 'A dark archway opens to the north')"], "source_room" -> ["type" -> "string", "description" -> "Source room (optional, defaults to actor's current location)"], "ambient" -> ["type" -> "boolean", "description" -> "If true, description integrates into room description. If false, shows in exits list (default: true)"]], "required" -> {"direction", "description"}], target_obj, "set_passage_description")};
+    tools = {@tools, $llm_agent_tool:mk("set_passage_description", "Set the narrative description for a passage/exit. This description integrates into the room's look description when ambient mode is enabled.", ["type" -> "object", "properties" -> ["direction" -> ["type" -> "string", "description" -> "Direction/exit label (e.g. 'north', 'up')"], "description" -> ["type" -> "string", "description" -> "Narrative description for the passage (e.g. 'A dark archway opens to the north')"], "format" -> ["type" -> "string", "enum" -> {"literal", "djot", "template"}, "description" -> "Description syntax. Omit to preserve the current syntax."], "source_room" -> ["type" -> "string", "description" -> "Source room (optional, defaults to actor's current location)"], "ambient" -> ["type" -> "boolean", "description" -> "If true, description integrates into room description. If false, shows in exits list (default: true)"]], "required" -> {"direction", "description"}], target_obj, "set_passage_description")};
     tools = {@tools, $llm_agent_tool:mk("create_object", "Create a new object from a parent prototype.", ["type" -> "object", "properties" -> ["parent" -> ["type" -> "string", "description" -> "Parent object (e.g. '$thing', '$wearable')"], "name" -> ["type" -> "string", "description" -> "Primary name"], "aliases" -> ["type" -> "array", "items" -> ["type" -> "string"], "description" -> "Optional alias names"]], "required" -> {"parent", "name"}], target_obj, "create_object")};
     tools = {@tools, $llm_agent_tool:mk("recycle_object", "Permanently destroy an object. Cannot be undone.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to recycle"]], "required" -> {"object"}], target_obj, "recycle_object")};
     tools = {@tools, $llm_agent_tool:mk("rename_object", "Change an object's name and aliases.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to rename"], "name" -> ["type" -> "string", "description" -> "New name (can include aliases like 'name:alias1,alias2')"]], "required" -> {"object", "name"}], target_obj, "rename_object")};
@@ -43,7 +43,7 @@ object AGENT_BUILDING_TOOLS [
     "Analysis/inspection tools";
     tools = {@tools, $llm_agent_tool:mk("audit_owned", "List all objects owned by the actor.", ["type" -> "object", "properties" -> [], "required" -> {}], target_obj, "audit_owned")};
     tools = {@tools, $llm_agent_tool:mk("area_map", "Get a list of all rooms in the current area. Use this to see what locations already exist and understand the spatial layout.", ["type" -> "object", "properties" -> [], "required" -> {}], target_obj, "area_map")};
-    tools = {@tools, $llm_agent_tool:mk("find_route", "Find the route between two rooms in the same area. Shows step-by-step directions. Useful for understanding how rooms are connected.", ["type" -> "object", "properties" -> ["from_room" -> ["type" -> "string", "description" -> "Starting room (optional, defaults to actor's location)"], "to_room" -> ["type" -> "string", "description" -> "Destination room name or object number"]], "required" -> {"to_room"}], target_obj, "find_route")};
+    tools = {@tools, $llm_agent_tool:mk("find_route", "Find the route between connected rooms, including rooms in different areas. Shows step-by-step directions. Useful for understanding how rooms are connected.", ["type" -> "object", "properties" -> ["from_room" -> ["type" -> "string", "description" -> "Starting room (optional, defaults to actor's location)"], "to_room" -> ["type" -> "string", "description" -> "Destination room name or object number"]], "required" -> {"to_room"}], target_obj, "find_route")};
     tools = {@tools, $llm_agent_tool:mk("list_prototypes", "List available prototype objects that can be used as parents when creating objects. Shows $thing, $wearable, $room, etc. with descriptions of what each is for.", ["type" -> "object", "properties" -> [], "required" -> {}], target_obj, "list_prototypes")};
     tools = {@tools, $llm_agent_tool:mk("inspect_object", "Examine an object to see detailed information including name, description, parent, owner, location, and properties.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (name or object number)"]], "required" -> {"object"}], target_obj, "inspect_object")};
     "Rule tools";
@@ -170,10 +170,9 @@ object AGENT_BUILDING_TOOLS [
     const target_room = this:_resolve_object(target_spec, actor);
     typeof(target_room) == TYPE_OBJ || raise(E_INVARG, "Target room not found");
     valid(target_room) || raise(E_INVARG, "Target room no longer exists");
-    "Get area - both rooms must be in the same area";
+    "Use the source area as the connection store.";
     const area = source_room.location;
     valid(area) || raise(E_INVARG, "Source room is not in an area");
-    target_room.location == area || raise(E_INVARG, "Both rooms must be in the same area");
     "Check permissions";
     const from_cap = actor:find_capability_for(source_room, 'room);
     const from_target = typeof(from_cap) == TYPE_FLYWEIGHT ? from_cap | source_room;
@@ -190,11 +189,11 @@ object AGENT_BUILDING_TOOLS [
       return "Permission denied: " + $grant_utils:format_denial(target_room, 'room, {'dig_into});
     endtry
     "Create passage";
-    const passage = oneway_flag || !to_dirs ? $passage:mk(source_room, from_dirs[1], from_dirs, "", true, target_room, "", {}, "", false, true) | $passage:mk(source_room, from_dirs[1], from_dirs, "", true, target_room, to_dirs[1], to_dirs, "", true, true);
+    let passage = oneway_flag || !to_dirs ? $passage:mk(source_room, from_dirs[1], from_dirs, "", true, target_room, "", {}, "", false, true) | $passage:mk(source_room, from_dirs[1], from_dirs, "", true, target_room, to_dirs[1], to_dirs, "", true, true);
     "Register with area";
     const area_cap = actor:find_capability_for(area, 'area);
     const area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-    area_target:create_passage(from_target, to_target, passage);
+    passage = area_target:create_passage(from_target, to_target, passage);
     "Report";
     const msg = oneway_flag ? "Dug passage: " + from_dirs:join(",") + " to " + tostr(target_room) + " (one-way)." | !to_dirs ? "Dug passage: " + from_dirs:join(",") + " to " + tostr(target_room) + " (one-way - no return direction inferred)." | "Dug passage: " + from_dirs:join(",") + " | " + to_dirs:join(",") + " connecting to " + tostr(target_room) + ".";
     return msg;
@@ -232,7 +231,6 @@ object AGENT_BUILDING_TOOLS [
     valid(target_room) || raise(E_INVARG, "Target room no longer exists");
     const area = source_room.location;
     valid(area) || raise(E_INVARG, "Source room is not in an area");
-    target_room.location == area || raise(E_INVARG, "Both rooms must be in the same area");
     const passage = area:passage_for(source_room, target_room);
     typeof(passage) != TYPE_FLYWEIGHT && return "No passage found between " + tostr(source_room) + " and " + tostr(target_room) + ".";
     "Collect labels for reporting";
@@ -253,42 +251,30 @@ object AGENT_BUILDING_TOOLS [
     "Remove passage via area";
     const area_cap = actor:find_capability_for(area, 'area);
     const area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-    const result = area_target:remove_passage(from_target, target_room);
+    const result = area_target:remove_passage(from_target, target_room, passage.connection_id);
     const label_str = labels ? " (" + labels:join("/") + ")" | "";
     return result ? "Removed passage" + label_str + " between " + tostr(source_room) + " and " + tostr(target_room) + "." | "Failed to remove passage (may have already been removed).";
   endmethod
 
   method set_passage_description owner: ARCH_WIZARD
-    "Tool: Set description and ambient flag for a passage";
-    let ambient = 0;
-    let description = 0;
-    let direction = 0;
-    let source_spec = 0;
+    "Describe a passage with the same explicit formats and endpoint checks as builder commands.";
     const {args_map, actor} = args;
     $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
-    {direction, description, ambient, source_spec} = {args_map["direction"], args_map["description"], maphaskey(args_map, "ambient") ? args_map["ambient"] | true, maphaskey(args_map, "source_room") ? args_map["source_room"] | ""};
-    typeof(description) == TYPE_STR && ("{" in description || "}" in description) && (description = $sub_utils:compile(description));
-    const source_room = this:_resolve_object(source_spec, actor, actor.location);
-    typeof(source_room) == TYPE_OBJ || raise(E_INVARG, "Source room not found");
-    valid(source_room) || raise(E_INVARG, "Source room no longer exists");
-    const area = source_room.location;
-    valid(area) || raise(E_INVARG, "Source room is not in an area");
-    const passages = area:passages_from(source_room);
-    typeof(passages) != TYPE_LIST && return "No passages from " + tostr(source_room) + ".";
-    length(passages) == 0 && return "No passages from " + tostr(source_room) + ".";
-    const target_passage = area:find_passage_by_direction(source_room, direction);
-    typeof(target_passage) != TYPE_FLYWEIGHT && return "No passage found in direction '" + direction + "' from " + tostr(source_room) + ".";
-    const from_cap = actor:find_capability_for(source_room, 'room);
-    const from_target = typeof(from_cap) == TYPE_FLYWEIGHT ? from_cap | source_room;
-    try
-      from_target:check_can_dig_from();
-    except (E_PERM)
-      return "Permission denied: " + $grant_utils:format_denial(source_room, 'room, {'dig_from});
-    endtry
-    const new_passage = target_passage:with_description_from(source_room, description):with_ambient_from(source_room, ambient);
-    area:update_passage(source_room, target_passage:other_room(source_room), new_passage);
-    return "Set description for '" + direction + "' passage" + (ambient ? " (ambient - integrates into room description)" | " (explicit - shows in exits list)") + ".";
+    const direction = args_map["direction"];
+    const description = args_map["description"];
+    const room = this:_resolve_object(`args_map["source_room"] ! E_RANGE => ""', actor, actor.location);
+    valid(room) && isa(room, $room) || raise(E_INVARG, "Source room not found.");
+    const passage = $room:find_passage(room, direction);
+    typeof(passage) == TYPE_FLYWEIGHT || raise(E_INVARG, "No passage called '" + direction + "' here.");
+    const {area, current} = $room:find_connection(room, passage.connection_id);
+    let kind = maphaskey(args_map, "format") ? tosym(args_map["format"]) | current:description_kind_for(room);
+    kind == 'djot && (kind = 'djot_inline);
+    const ambient = `args_map["ambient"] ! E_RANGE => true';
+    const updated = current:with_description_from(room, description, kind):with_ambient_from(room, ambient);
+    const subject = $area:_subject_for(actor, room, 'room);
+    area:update_passage(subject, current:other_room(room), updated);
+    return "Set description for '" + direction + "' passage.";
   endmethod
 
   method create_object owner: ARCH_WIZARD
@@ -1319,18 +1305,19 @@ object AGENT_BUILDING_TOOLS [
       move(r2, area);
       move(actor, r1);
       passage = <$passage, .side_a_room = r1, .side_a_label = "east", .side_b_room = r2, .side_b_label = "west", .is_open = true>;
-      area:set_passage(r1, r2, passage);
+      passage = area:set_passage(r1, r2, passage);
       let invalid_template = false;
       try
-        this:set_passage_description(["direction" -> "east", "description" -> "broken {template", "source_room" -> r1], $arch_wizard);
+        this:set_passage_description(["direction" -> "east", "description" -> "broken {template", "format" -> "template", "source_room" -> r1], $arch_wizard);
       except (E_INVARG)
         invalid_template = true;
       endtry
       $test_utils:assert_true(invalid_template, "set_passage_description should reject malformed templates");
-      result = this:set_passage_description(["direction" -> "east", "description" -> "{nc} heads east.", "source_room" -> r1], $arch_wizard);
+      result = this:set_passage_description(["direction" -> "east", "description" -> "{nc} heads east.", "format" -> "template", "source_room" -> r1], $arch_wizard);
       $test_utils:assert_true(index(result, "Set description for 'east' passage") > 0, "set_passage_description should report success");
       updated_passage = area:passage_for(r1, r2);
-      $test_utils:assert_type(updated_passage.side_a_description, TYPE_LIST, "set_passage_description should store compiled templates");
+      $test_utils:assert_eq(updated_passage.side_a_description, "{nc} heads east.", "The tool retains editable source");
+      $test_utils:assert_eq(updated_passage.side_a_description_kind, 'template, "The tool stores the explicit format");
       map = this:area_map([], actor);
       $test_utils:assert_true(index(map, "Current Location: Tool Test Start") > 0, "area_map should include current room name: " + toliteral(map));
       $test_utils:assert_true(index(map, "Area: Tool Test Area") > 0, "area_map should include area name");

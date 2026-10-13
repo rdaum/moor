@@ -7,7 +7,7 @@ true
 @attach second wizard
 @wizard
 % @edit-description here
-@event present:text/djot text-editor
+@event present:text/plain text-editor
 @second
 @quiet
 @noevents

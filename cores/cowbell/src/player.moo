@@ -2517,16 +2517,14 @@ object PLAYER [
         player:inform_current($event:mk_error(player, "Error checking passage: " + tostr(e[2])));
         return;
       endtry
-      if (passage)
+      if (typeof(passage) in {TYPE_OBJ, TYPE_FLYWEIGHT})
         try
           traveled = passage:travel_from(this, current_room, ["verb" -> "go", "dobjstr" -> dest_str]);
         except e (ANY)
           player:inform_current($event:mk_error(player, "Error using passage: " + tostr(e[2])));
           return;
         endtry
-        if (traveled)
-          return;
-        endif
+        return;
       endif
     endif
     if (!valid(area) || !respond_to(area, 'find_path))
@@ -2536,7 +2534,7 @@ object PLAYER [
     "Build list of rooms and their names for matching";
     targets = {};
     keys = {};
-    for room in (area.contents)
+    for room in (area:rooms_from(current_room, false))
       if (!valid(room) || !respond_to(room, 'name))
         continue;
       endif
@@ -2667,7 +2665,7 @@ object PLAYER [
         this:action_clear_activity_task(this, current_task);
         return;
       endtry
-      if (!success)
+      if (!success || this.location != to_room)
         this:inform_connection(output_connection, $event:mk_error(this, "Something blocked your path - stopping."));
         this:action_clear_activity_task(this, current_task);
         return;
@@ -2748,12 +2746,6 @@ object PLAYER [
     area = current_room.location;
     if (!valid(area) || !respond_to(area, 'find_path))
       player:inform_current($event:mk_error(player, "You can't navigate from here."));
-      return;
-    endif
-    "Check target is in same area";
-    target_area = target_room.location;
-    if (target_area != area)
-      player:inform_current($event:mk_error(player, target:name() + " is in a different area - can't walk there."));
       return;
     endif
     "First try to find a walkable route (passages only, no transports)";
@@ -2845,11 +2837,6 @@ object PLAYER [
     "Check if we can navigate";
     if (!valid(current_area) || !respond_to(current_area, 'find_path))
       player:inform_current($event:mk_error(player, "You can't navigate from here."));
-      return;
-    endif
-    "Check if home is in the same area";
-    if (current_area != home_area)
-      player:inform_current($event:mk_error(player, "Your home is in a different area (" + `home_area:name() ! ANY => "unknown"' + "). You'll need to travel there manually."));
       return;
     endif
     "Find a walkable route to home";
@@ -3600,11 +3587,14 @@ object PLAYER [
     area = $area:create(true);
     room_a = $room:create(true);
     room_b = $room:create(true);
+    const bad_tuple = room_a < room_b ? {room_a, room_b, $thing} | {room_b, room_a, $thing};
     try
       move(room_a, area);
       move(room_b, area);
       move(this, room_a);
-      area:set_passage(room_a, room_b, $thing);
+      area.passages_rel:assert(bad_tuple);
+      room_a.passage_areas = {area};
+      room_b.passage_areas = {area};
       raised = false;
       try
         this:_look_passage("north");
@@ -3613,6 +3603,7 @@ object PLAYER [
       endtry
       $test_utils:assert_true(raised, "malformed passage records should raise");
     finally
+      area.passages_rel:retract(bad_tuple);
       valid(original_location) && move(this, original_location);
       $test_utils:destroy_if_valid(room_b);
       $test_utils:destroy_if_valid(room_a);
@@ -3626,10 +3617,13 @@ object PLAYER [
     area = $area:create(true);
     room_a = $room:create(true);
     room_b = $room:create(true);
+    const bad_tuple = room_a < room_b ? {room_a, room_b, $thing} | {room_b, room_a, $thing};
     try
       move(room_a, area);
       move(room_b, area);
-      area:set_passage(room_a, room_b, $thing);
+      area.passages_rel:assert(bad_tuple);
+      room_a.passage_areas = {area};
+      room_b.passage_areas = {area};
       raised = false;
       try
         this:_walk_path_options(area, room_a, room_b);
@@ -3638,6 +3632,7 @@ object PLAYER [
       endtry
       $test_utils:assert_true(raised, "malformed route records should raise");
     finally
+      area.passages_rel:retract(bad_tuple);
       $test_utils:destroy_if_valid(room_b);
       $test_utils:destroy_if_valid(room_a);
       $test_utils:destroy_if_valid(area);

@@ -9,6 +9,7 @@ object PASSAGE [
   readable: true
 
   property close_msg (owner: HACKER, flags: "rc") = 0;
+  property connection_id (owner: HACKER, flags: "rc") = "";
   property direction_abbrevs (owner: HACKER, flags: "rc") = [
     "d" -> "down",
     "down" -> "d",
@@ -37,6 +38,7 @@ object PASSAGE [
     "w" -> "west",
     "west" -> "w"
   ];
+  property is_door (owner: HACKER, flags: "rc") = false;
   property is_locked (owner: HACKER, flags: "rc") = 0;
   property is_open (owner: HACKER, flags: "rc") = true;
   property lock_msg (owner: HACKER, flags: "rc") = 0;
@@ -48,9 +50,11 @@ object PASSAGE [
   property side_a_arrive_msg (owner: HACKER, flags: "rc") = {};
   property side_a_departure_phrase (owner: HACKER, flags: "rc") = "";
   property side_a_description (owner: HACKER, flags: "rc") = "";
+  property side_a_description_kind (owner: HACKER, flags: "rc") = 'literal;
+  property side_a_enabled (owner: HACKER, flags: "rc") = true;
   property side_a_label (owner: HACKER, flags: "rc") = "";
   property side_a_leave_msg (owner: HACKER, flags: "rc") = {};
-  property side_a_prose_style (owner: HACKER, flags: "rc") = 'fragment;
+  property side_a_prose_style (owner: HACKER, flags: "rc") = 'sentence;
   property side_a_room (owner: HACKER, flags: "rc") = #-1;
   property side_b_aliases (owner: HACKER, flags: "rc") = {};
   property side_b_ambient (owner: HACKER, flags: "rc") = true;
@@ -58,18 +62,74 @@ object PASSAGE [
   property side_b_arrive_msg (owner: HACKER, flags: "rc") = {};
   property side_b_departure_phrase (owner: HACKER, flags: "rc") = "";
   property side_b_description (owner: HACKER, flags: "rc") = "";
+  property side_b_description_kind (owner: HACKER, flags: "rc") = 'literal;
+  property side_b_enabled (owner: HACKER, flags: "rc") = true;
   property side_b_label (owner: HACKER, flags: "rc") = "";
   property side_b_leave_msg (owner: HACKER, flags: "rc") = {};
-  property side_b_prose_style (owner: HACKER, flags: "rc") = 'fragment;
+  property side_b_prose_style (owner: HACKER, flags: "rc") = 'sentence;
   property side_b_room (owner: HACKER, flags: "rc") = #-1;
   property unlock_msg (owner: HACKER, flags: "rc") = 0;
   property unlock_rule (owner: HACKER, flags: "rc") = 0;
 
   override description (owner: HACKER, flags: "rc") = "Bidirectional passage configuration.";
 
+  override object_documentation (owner: HACKER, flags: "rc") = {
+    "# Passage descriptions",
+    "A passage connects two rooms. Each side has its own name, aliases, description, and movement wording.",
+    "Use @describe east as A brass door stands beside the fireplace. to describe your east exit. You need permission to edit that side.",
+    "@describe --literal east as TEXT treats punctuation and braces as text. --djot selects inline Djot. --template selects message substitutions.",
+    "For example: @describe --template east as An arch leads {direction}. The direction binding contains this side's exit name.",
+    "Template bindings also include the reader as actor, this room as this_obj and from_room, and the destination as to_room.",
+    "Without a format flag, edits preserve the current syntax. New passages use literal text.",
+    "@edit-description east opens the source editor. A removed connection, changed description, or lost editing permission prevents a stale save.",
+    "@passage east shows the source and previews the room prose, departure message, and arrival message without moving anyone.",
+    "Sentence descriptions retain their spelling and punctuation. @set-passage east style fragment joins a short phrase into a You see sentence.",
+    "The complete ambient phrase links to its exit. Explicit document references can link a selected phrase instead. Direction names remain listed separately.",
+    "@set-passage east departure through the brass door controls departure wording. The arrival setting describes arrival on this side.",
+    "Ambient descriptions do not supply movement wording. Use the dedicated phrases or side_a_leave_msg, side_b_leave_msg, side_a_arrive_msg, and side_b_arrive_msg.",
+    "For MOO code, with_description_from(room, source, kind) validates and retains source. Kinds are literal, djot_inline, and template. Omit kind to preserve it.",
+    "Literal mode also accepts explicit inline document content and compiled substitution lists. mk preserves these values; it does not turn them into empty text."
+  };
+
+  method allows_direction owner: HACKER
+    "Whether a passage permits movement from this endpoint, independently of door state.";
+    const {passage, room} = args;
+    if (room == passage.side_a_room)
+      return passage.side_a_enabled;
+    elseif (room == passage.side_b_room)
+      return passage.side_b_enabled;
+    endif
+    return false;
+  endmethod
+
+  method command_names owner: HACKER
+    "Return validated, nonempty names for one side of a passage.";
+    const {passage, room} = args;
+    const prefix = room == passage.side_a_room ? "side_a_" | "side_b_";
+    const label = passage.(prefix + "label");
+    const aliases = passage.(prefix + "aliases");
+    typeof(label) == TYPE_STR && typeof(aliases) == TYPE_LIST || raise(E_TYPE);
+    let names = label != "" ? {label:trim()} | {};
+    for alias in (aliases)
+      typeof(alias) == TYPE_STR && alias:trim() != "" || raise(E_INVARG, "Exit names must be nonempty text.");
+      names = setadd(names, alias:trim());
+    endfor
+    return names;
+  endmethod
+
   method message_bindings owner: HACKER
     "Describe the participants and example values supplied to each editable message.";
     const {property} = args;
+    if (tostr(property) in {"open_msg", "close_msg", "lock_msg", "unlock_msg"})
+      let bindings = $sub_utils:standard_bindings("The person operating the door.");
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where the person stands.",
+        'example -> 'location];
+      bindings['direction] = ['kind -> 'text, 'description -> "The exit name on that side.",
+        'example -> "east"];
+      bindings['passage] = ['kind -> 'text, 'description -> "The door name on that side.",
+        'example -> "east door"];
+      return bindings;
+    endif
     if (tostr(property) in {"side_a_arrive_msg", "side_b_arrive_msg", "side_a_leave_msg", "side_b_leave_msg"})
       let bindings = $sub_utils:standard_bindings("The person travelling.");
       bindings['this_obj] = ['kind -> 'object, 'description -> "The room receiving this message.",
@@ -106,12 +166,14 @@ object PASSAGE [
     elseif (typeof(aliases_b) != TYPE_LIST)
       aliases_b = {};
     endif
-    description_a = typeof(description_a) == TYPE_STR ? description_a | "";
-    description_b = typeof(description_b) == TYPE_STR ? description_b | "";
+    $passage:authored_description(description_a, 'literal);
+    $passage:authored_description(description_b, 'literal);
     ambient_a = ambient_a ? true | false;
     ambient_b = ambient_b ? true | false;
     is_open = is_open ? true | false;
-    return <this, .side_a_room = room_a, .side_a_label = label_a, .side_a_aliases = aliases_a, .side_a_description = description_a, .side_a_ambient = ambient_a, .side_a_leave_msg = {}, .side_a_arrive_msg = {}, .side_a_prose_style = 'fragment, .side_a_departure_phrase = "", .side_a_arrival_phrase = "", .side_b_room = room_b, .side_b_label = label_b, .side_b_aliases = aliases_b, .side_b_description = description_b, .side_b_ambient = ambient_b, .side_b_leave_msg = {}, .side_b_arrive_msg = {}, .side_b_prose_style = 'fragment, .side_b_departure_phrase = "", .side_b_arrival_phrase = "", .is_open = is_open>;
+    const enabled_a = label_a != "" || length(aliases_a) > 0;
+    const enabled_b = label_b != "" || length(aliases_b) > 0;
+    return <this, .side_a_enabled = enabled_a, .side_b_enabled = enabled_b, .side_a_room = room_a, .side_a_label = label_a, .side_a_aliases = aliases_a, .side_a_description = description_a, .side_a_ambient = ambient_a, .side_a_leave_msg = {}, .side_a_arrive_msg = {}, .side_a_prose_style = 'sentence, .side_a_departure_phrase = "", .side_a_arrival_phrase = "", .side_b_room = room_b, .side_b_label = label_b, .side_b_aliases = aliases_b, .side_b_description = description_b, .side_b_ambient = ambient_b, .side_b_leave_msg = {}, .side_b_arrive_msg = {}, .side_b_prose_style = 'sentence, .side_b_departure_phrase = "", .side_b_arrival_phrase = "", .is_open = is_open>;
   endmethod
 
   method _value owner: HACKER
@@ -209,31 +271,19 @@ object PASSAGE [
     return this:_value(prop, default);
   endmethod
 
-  method configure owner: HACKER
-    {room_a, label_a, aliases_a, description_a, ambient_a, room_b, label_b, aliases_b, description_b, ambient_b} = args;
-    typeof(room_a) == TYPE_OBJ && typeof(room_b) == TYPE_OBJ || raise(E_TYPE);
-    this.side_a_room = room_a;
-    this.side_a_label = typeof(label_a) == TYPE_STR ? label_a | "";
-    if (typeof(aliases_a) == TYPE_LIST)
-      this.side_a_aliases = aliases_a;
-    elseif (typeof(aliases_a) == TYPE_STR && aliases_a)
-      this.side_a_aliases = {aliases_a};
-    else
-      this.side_a_aliases = {};
+  method configure owner: ARCH_WIZARD
+    "Configure a value, or an owned passage object, after validating both descriptions.";
+    const principal = caller_perms();
+    if (typeof(this) == TYPE_OBJ)
+      principal == this.owner || (valid(principal) && principal.wizard) || raise(E_PERM);
     endif
-    this.side_a_description = typeof(description_a) == TYPE_STR ? description_a | "";
-    this.side_a_ambient = ambient_a ? true | false;
-    this.side_b_room = room_b;
-    this.side_b_label = typeof(label_b) == TYPE_STR ? label_b | "";
-    if (typeof(aliases_b) == TYPE_LIST)
-      this.side_b_aliases = aliases_b;
-    elseif (typeof(aliases_b) == TYPE_STR && aliases_b)
-      this.side_b_aliases = {aliases_b};
-    else
-      this.side_b_aliases = {};
-    endif
-    this.side_b_description = typeof(description_b) == TYPE_STR ? description_b | "";
-    this.side_b_ambient = ambient_b ? true | false;
+    set_task_perms(principal);
+    const fields = flyslots($passage:mk(@args));
+    for name in (mapkeys(fields))
+      this.(name) = fields[name];
+    endfor
+    this.side_a_description_kind = 'literal;
+    this.side_b_description_kind = 'literal;
     return this;
   endmethod
 
@@ -326,86 +376,43 @@ object PASSAGE [
   endmethod
 
   method travel_from owner: ARCH_WIZARD
-    "Traverse a passage using current policies and return command-handled status.";
+    "Traverse a registered connection using current state; return whether movement completed.";
     const {traveler, from_room, parsed} = args;
     const actor = caller_perms();
     valid(traveler) && valid(actor) || raise(E_INVARG);
-    actor == traveler || actor == traveler.owner || actor.wizard || raise(E_PERM);
+    $root:check_actor(traveler, actor);
+    set_task_perms(actor);
     valid(traveler) || return false;
     valid(from_room) || return false;
     traveler.location == from_room || return false;
+    const registration = $room:find_connection(from_room, this.connection_id);
+    length(registration) || return false;
+    const current = registration[2];
+    current.side_a_room == this.side_a_room && current.side_b_room == this.side_b_room || return false;
+    this = current;
+    $passage:allows_direction(this, from_room) || return false;
     this:_value("is_open", true) || return this:_notify_blocked(traveler, from_room);
     const access_state = {this.is_locked, this.unlock_rule, traveler.contents};
-    const area = from_room.location;
-    const registration = valid(area) && isa(area, $area) ? area:passage_link_id(from_room, this:other_room(from_room)) | "";
     this:check_unlock(traveler, from_room) || return this:_notify_locked(traveler, from_room);
     const to_room = this:other_room(from_room);
     valid(to_room) || return false;
-    "Get passage metadata";
-    const from_label = this:label_for(from_room);
-    const to_label = this:label_for(to_room);
     "Notify room contents before departure (e.g., stand up from furniture)";
     `from_room:notify_pre_exit(traveler) ! E_VERBNF => 0';
     "Actually move the traveler before any expensive presentation work.";
     "Pre-exit callbacks may suspend or change the actor's location.";
     traveler.location == from_room || return false;
     "Callbacks may yield; normal travel must not use a replaced passage or outdated access state.";
-    if (registration != "")
-      valid(area) && from_room.location == area || return false;
-      area:passage_link_id(from_room, to_room) == registration && area:passage_for(from_room, to_room) == this || return false;
-    endif
+    const after_callback = $room:find_connection(from_room, this.connection_id);
+    length(after_callback) && equal(after_callback[2], this) || return false;
     this.is_open && {this.is_locked, this.unlock_rule, traveler.contents} == access_state || return false;
     set_task_perms(actor);
     this:_move_actor(traveler, to_room);
     "Render and announce movement asynchronously after the move commits.";
     fork (0)
-      let departure = 0;
-      let arrival = 0;
-      let desc_lower = "";
-      "Render departure event";
-      const from_side = from_room == this:_side_lookup('a, 'room) ? 'a | 'b;
-      const leave_msg = this:_side_lookup(from_side, 'leave_msg);
-      if (typeof(leave_msg) == TYPE_LIST && length(leave_msg) > 0)
-        departure = this:movement_event(traveler, from_room, to_room,
-          from_label, to_label, leave_msg, false);
-      else
-        let from_description = this:description_for(from_room);
-        const departure_phrase = this:departure_phrase_for(from_room);
-        if (!departure_phrase || departure_phrase == "" && typeof(from_description) == TYPE_STR)
-          desc_lower = from_description:lowercase();
-          if (desc_lower:starts_with("through "))
-            from_description = from_description[9..length(from_description)];
-          endif
-        endif
-        departure = `traveler:mk_departure_event(from_room, from_label, from_description, to_room, departure_phrase) ! E_VERBNF => 0';
-      endif
-      if (typeof(departure) == TYPE_FLYWEIGHT)
-        departure = departure:with_audience('narrative);
-        `from_room:announce(departure) ! ANY => 0';
-      endif
-      "Render arrival event";
-      const to_side = to_room == this:_side_lookup('a, 'room) ? 'a | 'b;
-      const arrive_msg = this:_side_lookup(to_side, 'arrive_msg);
-      if (typeof(arrive_msg) == TYPE_LIST && length(arrive_msg) > 0)
-        arrival = this:movement_event(traveler, from_room, to_room,
-          from_label, to_label, arrive_msg, true);
-      else
-        let to_description = this:description_for(to_room);
-        const arrival_phrase = this:arrival_phrase_for(to_room);
-        if (!arrival_phrase || arrival_phrase == "" && typeof(to_description) == TYPE_STR)
-          desc_lower = to_description:lowercase();
-          if (desc_lower:starts_with("from "))
-            to_description = to_description[6..length(to_description)];
-          elseif (desc_lower:starts_with("through "))
-            to_description = to_description[9..length(to_description)];
-          endif
-        endif
-        arrival = `traveler:mk_arrival_event(to_room, to_label, to_description, from_room, arrival_phrase) ! E_VERBNF => 0';
-      endif
-      if (typeof(arrival) == TYPE_FLYWEIGHT)
-        arrival = arrival:with_audience('narrative);
-        `to_room:announce(arrival) ! ANY => 0';
-      endif
+      const departure = $passage:movement_from(this, traveler, from_room, to_room, false):with_audience('narrative);
+      const arrival = $passage:movement_from(this, traveler, from_room, to_room, true):with_audience('narrative);
+      from_room:announce(departure);
+      to_room:announce(arrival);
     endfork
     return true;
   endmethod
@@ -431,8 +438,10 @@ object PASSAGE [
       door_name = this:door_name_for(from_room);
       message = "The " + door_name + " is closed.";
     endif
-    player:inform_current($event:mk_error(player, message));
-    return true;
+    if (respond_to(player, 'inform_current))
+      player:inform_current($event:mk_error(player, message));
+    endif
+    return false;
   endmethod
 
   method expand_direction_aliases owner: HACKER
@@ -467,9 +476,42 @@ object PASSAGE [
     return {label, description, ambient, prose_style};
   endmethod
 
+  method configuration owner: ARCH_WIZARD
+    "Capture supported fields and extension slots without invoking passage overrides.";
+    set_task_perms(caller_perms());
+    const {passage} = args;
+    let fields = typeof(passage) == TYPE_FLYWEIGHT ? flyslots(passage) | [];
+    for name in ({"connection_id", "is_open", "is_locked", "is_door", "unlock_rule", "locked_msg",
+        "open_msg", "close_msg", "lock_msg", "unlock_msg"})
+      fields[tosym(name)] = passage.(name);
+    endfor
+    for side in ({"a", "b"})
+      for attribute in ({"room", "enabled", "label", "aliases", "description", "description_kind", "ambient", "leave_msg",
+          "arrive_msg", "prose_style", "departure_phrase", "arrival_phrase"})
+        const name = "side_" + side + "_" + attribute;
+        fields[tosym(name)] = passage.(name);
+      endfor
+    endfor
+    return fields;
+  endmethod
+
   method _extract_all owner: HACKER
-    "Extract all passage properties into a map. Internal helper for transformer verbs.";
-    return ['room_a -> this:_side_lookup('a, 'room), 'room_b -> this:_side_lookup('b, 'room), 'label_a -> this:_side_lookup('a, 'label), 'label_b -> this:_side_lookup('b, 'label), 'aliases_a -> this:_side_lookup('a, 'aliases), 'aliases_b -> this:_side_lookup('b, 'aliases), 'desc_a -> this:_side_lookup('a, 'description), 'desc_b -> this:_side_lookup('b, 'description), 'ambient_a -> this:_side_lookup('a, 'ambient), 'ambient_b -> this:_side_lookup('b, 'ambient), 'leave_msg_a -> this:_side_lookup('a, 'leave_msg), 'leave_msg_b -> this:_side_lookup('b, 'leave_msg), 'arrive_msg_a -> this:_side_lookup('a, 'arrive_msg), 'arrive_msg_b -> this:_side_lookup('b, 'arrive_msg), 'prose_style_a -> this:_side_lookup('a, 'prose_style), 'prose_style_b -> this:_side_lookup('b, 'prose_style), 'departure_phrase_a -> this:_side_lookup('a, 'departure_phrase), 'departure_phrase_b -> this:_side_lookup('b, 'departure_phrase), 'arrival_phrase_a -> this:_side_lookup('a, 'arrival_phrase), 'arrival_phrase_b -> this:_side_lookup('b, 'arrival_phrase), 'is_open -> this:_value("is_open", true), 'is_locked -> this:_value("is_locked", false), 'is_door -> this:_value("is_door", false), 'unlock_rule -> this:_value("unlock_rule", 0), 'locked_msg -> this:_value("locked_msg", "")];
+    "Capture a value for editing, preserving its delegate, contents, and extension slots.";
+    const fields = $passage:configuration(this);
+    let props = ['prototype -> typeof(this) == TYPE_FLYWEIGHT ? this.delegate | this,
+      'fields -> fields, 'contents -> typeof(this) == TYPE_FLYWEIGHT ? flycontents(this) | {}];
+    for name in ({'is_open, 'is_locked, 'is_door, 'unlock_rule, 'locked_msg,
+        'open_msg, 'close_msg, 'lock_msg, 'unlock_msg})
+      props[name] = fields[name];
+    endfor
+    for side in ({"a", "b"})
+      for attribute in ({"room", "label", "aliases", "description", "description_kind", "ambient", "leave_msg",
+          "arrive_msg", "prose_style", "departure_phrase", "arrival_phrase"})
+        const key = (attribute == "description" ? "desc" | attribute) + "_" + side;
+        props[tosym(key)] = fields[tosym("side_" + side + "_" + attribute)];
+      endfor
+    endfor
+    return props;
   endmethod
 
   method with_label_from owner: HACKER
@@ -488,29 +530,58 @@ object PASSAGE [
     return this:_mk_from_props(props);
   endmethod
 
+  method description_kind_for owner: HACKER
+    "Return the selected source format on one connected side.";
+    const {room} = args;
+    room in {this.side_a_room, this.side_b_room} || raise(E_INVARG, "Room is not connected.");
+    return room == this.side_a_room ? this.side_a_description_kind | this.side_b_description_kind;
+  endmethod
+
+  method description_bindings owner: HACKER
+    "Declare the reader, endpoint rooms, and exit name available to passage descriptions.";
+    let bindings = $sub_utils:standard_bindings("The person looking at the exit.");
+    for name in ({'this_obj, 'dobj, 'from_room})
+      bindings[name] = ['kind -> 'object, 'description -> "The room being described.", 'example -> 'location];
+    endfor
+    bindings['to_room] = ['kind -> 'object, 'description -> "The room reached through this exit.",
+      'example -> 'to_room];
+    for name in ({'direction, 'passage})
+      bindings[name] = ['kind -> 'text, 'description -> "The exit name on this side.", 'example -> "east"];
+    endfor
+    return bindings;
+  endmethod
+
+  method authored_description owner: HACKER
+    "Validate explicitly selected passage source and return inline content. Never infer templates.";
+    const {source, kind} = args;
+    kind in {'literal, 'djot_inline, 'template}
+      || raise(E_INVARG, "Passage descriptions use literal, djot_inline, or template syntax.");
+    if (kind == 'template)
+      return $sub_utils:compile(source, $passage:description_bindings());
+    elseif (kind == 'djot_inline)
+      return $format.djot:inline(source);
+    endif
+    return $format:inlines({source});
+  endmethod
+
+  method description_content owner: ARCH_WIZARD
+    "Read one side's description as inline content under the caller's authority.";
+    set_task_perms(caller_perms());
+    const {passage, room} = args;
+    room in {passage.side_a_room, passage.side_b_room} || raise(E_INVARG, "Room is not connected.");
+    const prefix = room == passage.side_a_room ? "side_a_" | "side_b_";
+    return $passage:authored_description(passage.(prefix + "description"), passage.(prefix + "description_kind"));
+  endmethod
+
   method with_description_from owner: HACKER
-    "Update the description visible from a given room. Returns new passage flyweight.";
-    {room, description} = args;
-    typeof(room) == TYPE_OBJ || raise(E_TYPE);
-    "Allow strings or precompiled lists (with $sub flyweights)";
-    if (typeof(description) == TYPE_STR && ("{" in description || "}" in description))
-      try
-        description = $sub_utils:compile(description);
-      except e (ANY)
-        message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-        raise(E_INVARG, "Description template compilation failed: " + message);
-      endtry
-    elseif (typeof(description) != TYPE_STR && typeof(description) != TYPE_LIST)
-      raise(E_TYPE);
-    endif
-    side = this:side_for(room);
-    side == 'none && raise(E_INVARG, "Room not connected by this passage");
-    props = this:_extract_all();
-    if (side == 'a)
-      props['desc_a] = description;
-    else
-      props['desc_b] = description;
-    endif
+    "Validate and retain one side's source. An omitted format preserves the side's current choice.";
+    const {room, description, ?kind = this:description_kind_for(room)} = args;
+    room in {this.side_a_room, this.side_b_room} || raise(E_INVARG, "Room is not connected.");
+    $passage:authored_description(description, kind);
+    let props = this:_extract_all();
+    const side = room == this.side_a_room ? "a" | "b";
+    props[tosym("desc_" + side)] = description;
+    props[tosym("description_kind_" + side)] = kind;
     return this:_mk_from_props(props);
   endmethod
 
@@ -556,6 +627,26 @@ object PASSAGE [
     props = this:_extract_all();
     props['is_open] = is_open ? true | false;
     return this:_mk_from_props(props);
+  endmethod
+
+  method movement_from owner: ARCH_WIZARD
+    "Build actual or preview movement wording from dedicated messages and phrases, never ambient prose.";
+    set_task_perms(caller_perms());
+    const {passage, actor, from_room, to_room, ?arriving = false} = args;
+    const source_side = from_room == passage.side_a_room ? "side_a_" | "side_b_";
+    const target_side = to_room == passage.side_a_room ? "side_a_" | "side_b_";
+    const from_label = passage.(source_side + "label");
+    const to_label = passage.(target_side + "label");
+    const value = passage.((arriving ? target_side | source_side) + (arriving ? "arrive_msg" | "leave_msg"));
+    const parts = typeof(value) == TYPE_LIST ? value | (typeof(value) == TYPE_FLYWEIGHT
+      || (typeof(value) == TYPE_STR && value != "") ? {value} | {});
+    if (length(parts))
+      return passage:movement_event(actor, from_room, to_room, from_label, to_label, parts, arriving);
+    endif
+    if (arriving)
+      return actor:mk_arrival_event(to_room, to_label, "", from_room, passage.(target_side + "arrival_phrase"));
+    endif
+    return actor:mk_departure_event(from_room, from_label, "", to_room, passage.(source_side + "departure_phrase"));
   endmethod
 
   method movement_event owner: ARCH_WIZARD
@@ -610,9 +701,21 @@ object PASSAGE [
   endmethod
 
   method _mk_from_props owner: HACKER
-    "Construct a passage flyweight from a props map. Internal helper for transformer verbs.";
-    {props} = args;
-    return <$passage, .side_a_room = props['room_a], .side_a_label = props['label_a], .side_a_aliases = props['aliases_a], .side_a_description = props['desc_a], .side_a_ambient = props['ambient_a], .side_a_leave_msg = props['leave_msg_a], .side_a_arrive_msg = props['arrive_msg_a], .side_a_prose_style = props['prose_style_a], .side_a_departure_phrase = props['departure_phrase_a], .side_a_arrival_phrase = props['arrival_phrase_a], .side_b_room = props['room_b], .side_b_label = props['label_b], .side_b_aliases = props['aliases_b], .side_b_description = props['desc_b], .side_b_ambient = props['ambient_b], .side_b_leave_msg = props['leave_msg_b], .side_b_arrive_msg = props['arrive_msg_b], .side_b_prose_style = props['prose_style_b], .side_b_departure_phrase = props['departure_phrase_b], .side_b_arrival_phrase = props['arrival_phrase_b], .is_open = props['is_open], .is_locked = props['is_locked], .is_door = props['is_door], .unlock_rule = props['unlock_rule], .locked_msg = props['locked_msg]>;
+    "Rebuild an edited passage without dropping messages or custom behavior.";
+    const {props} = args;
+    let fields = props['fields];
+    for name in ({'is_open, 'is_locked, 'is_door, 'unlock_rule, 'locked_msg,
+        'open_msg, 'close_msg, 'lock_msg, 'unlock_msg})
+      fields[name] = props[name];
+    endfor
+    for side in ({"a", "b"})
+      for attribute in ({"room", "label", "aliases", "description", "description_kind", "ambient", "leave_msg",
+          "arrive_msg", "prose_style", "departure_phrase", "arrival_phrase"})
+        const key = (attribute == "description" ? "desc" | attribute) + "_" + side;
+        fields[tosym("side_" + side + "_" + attribute)] = props[tosym(key)];
+      endfor
+    endfor
+    return toflyweight(props['prototype], fields, props['contents]);
   endmethod
 
   method with_prose_style_from owner: HACKER
@@ -691,24 +794,135 @@ object PASSAGE [
   endverb
 
   method check_unlock owner: ARCH_WIZARD
-    "Check a locked passage's policy with explicit From and To rooms and optional carried Key.";
+    "Check traversal with the same policy inputs and carried-key rules as door operations.";
     set_task_perms(caller_perms());
     const {who, from_room} = args;
-    !this:_value("is_locked", false) && return true;
-    const rule = this:_value("unlock_rule", 0);
-    rule == 0 && return false;
-    const to_room = this:other_room(from_room);
-    valid(to_room) || return false;
-    let inputs = ['Accessor -> who, 'From -> from_room, 'To -> to_room, 'Passage -> this];
+    !this.is_locked && return true;
+    return $passage:policy_access(this, who, from_room)['allowed];
+  endmethod
+
+  method policy_access owner: ARCH_WIZARD
+    "Evaluate the passage rule once per eligible key, or once without a key when it is unused.";
+    set_task_perms(caller_perms());
+    const {passage, who, from_room, ?key = #-1} = args;
+    const denied = ['allowed -> false, 'key -> #-1];
+    const rule = passage.unlock_rule;
+    typeof(rule) == TYPE_FLYWEIGHT || return denied;
+    if (key != #-1 && (!valid(key) || key.location != who))
+      return denied;
+    endif
+    const destination = from_room == passage.side_a_room ? passage.side_b_room | passage.side_a_room;
+    let inputs = ['Accessor -> who, 'From -> from_room, 'To -> destination, 'Passage -> passage];
     const references = $condition:references(rule.condition);
     if (!('Key in references['input]))
-      return $rule_engine:evaluate(rule, inputs)['success];
+      return ['allowed -> $rule_engine:evaluate(rule, inputs)['success], 'key -> key];
     endif
-    for key in (who.contents)
-      inputs['Key] = key;
-      $rule_engine:evaluate(rule, inputs)['success] && return true;
+    const candidates = key == #-1 ? who.contents | {key};
+    for candidate in (candidates)
+      if (!valid(candidate) || candidate.location != who)
+        continue;
+      endif
+      inputs['Key] = candidate;
+      if ($rule_engine:evaluate(rule, inputs)['success])
+        return ['allowed -> valid(candidate) && candidate.location == who, 'key -> candidate];
+      endif
     endfor
-    return false;
+    return denied;
+  endmethod
+
+  method _door_access owner: ARCH_WIZARD
+    "Run rule providers with the initiating principal's authority, not mutation authority.";
+    const source = callers()[1];
+    source[4] == $passage && source[2] == "operate" || raise(E_PERM);
+    const {passage, who, from_room, key, principal} = args;
+    set_task_perms(principal);
+    return $passage:policy_access(passage, who, from_room, key);
+  endmethod
+
+  method operate owner: ARCH_WIZARD
+    "Open, close, lock, or unlock one installed connection for an authenticated local actor.";
+    const principal = caller_perms();
+    const {requested, operation, who, from_room, ?key = #-1, ?reaction_context = []} = args;
+    $root:check_actor(who, principal);
+    operation in {'open, 'close, 'lock, 'unlock} || raise(E_INVARG, "Unknown door operation.");
+    const denied = {reason} => ['status -> 'denied, 'reason -> {reason}];
+    who.location == from_room || return denied("You must be beside that door.");
+    const found = $room:find_connection(from_room, requested.connection_id);
+    length(found) || return denied("That passage is no longer connected.");
+    const {area, passage} = found;
+    (passage.side_a_room == requested.side_a_room && passage.side_b_room == requested.side_b_room)
+      || return denied("That passage leads somewhere else now.");
+    $passage:allows_direction(passage, from_room) || return denied("There is no exit on this side.");
+    (passage.is_door || typeof(passage.unlock_rule) == TYPE_FLYWEIGHT)
+      || return denied("That exit is not a door.");
+    const label = $passage:door_label(passage, from_room);
+    const state = operation == 'open ? passage.is_open | (operation == 'close ? !passage.is_open
+      | (operation == 'lock ? passage.is_locked | !passage.is_locked));
+    const state_name = ['open -> "open", 'close -> "closed", 'lock -> "locked", 'unlock -> "unlocked"][operation];
+    state && return denied("The " + label + " is already " + state_name + ".");
+    if (key != #-1 && (!valid(key) || key.location != who))
+      return denied("You are not carrying that key.");
+    endif
+    const custody = {who.owner, who.location, who.contents, from_room.owner,
+      passage.side_a_room.owner, passage.side_b_room.owner, area.owner};
+    const needs_access = operation in {'lock, 'unlock} || (operation == 'open && passage.is_locked);
+    let access = ['allowed -> true, 'key -> key];
+    if (needs_access)
+      access = $passage:_door_access(passage, who, from_room, key, principal);
+      access['allowed] || return denied(key == #-1 ? "You cannot " + tostr(operation) + " the " + label + "."
+        | "That key does not permit this operation.");
+    endif
+    $root:check_actor(who, principal);
+    const current = $room:find_connection(from_room, passage.connection_id);
+    length(current) && equal(current[2], passage)
+      || return denied("The passage changed. Try again.");
+    equal(custody, {who.owner, who.location, who.contents, from_room.owner,
+      passage.side_a_room.owner, passage.side_b_room.owner, area.owner})
+      || return denied("The room, actor, or carried items changed. Try again.");
+    const used_key = access['key];
+    if (used_key != #-1 && (!valid(used_key) || used_key.location != who))
+      return denied("You are no longer carrying that key.");
+    endif
+    let updated = passage;
+    if (operation == 'open)
+      updated.is_open = true;
+      updated.is_locked = false;
+    elseif (operation == 'close)
+      updated.is_open = false;
+    elseif (operation == 'lock)
+      updated.is_open = false;
+      updated.is_locked = true;
+    else
+      updated.is_locked = false;
+    endif
+    updated = area:_do_create_passage(passage.side_a_room, passage.side_b_room, updated, passage, true);
+    const destination = from_room == passage.side_a_room ? passage.side_b_room | passage.side_a_room;
+    let context = ['Actor -> who, 'From -> from_room, 'To -> destination, 'Passage -> updated,
+      'Connection -> updated.connection_id, 'Key -> used_key,
+      '_reaction_chain -> `reaction_context['_reaction_chain] ! E_RANGE => {}'];
+    for room in ({from_room, destination})
+      context['Location] = room;
+      context['Direction] = room == passage.side_a_room ? passage.side_a_label | passage.side_b_label;
+      $reaction:_dispatch(room, tosym("on_passage_" + tostr(operation)), context);
+    endfor
+    for room in ({from_room, destination})
+      $room:refresh_snapshots(room);
+    endfor
+    set_task_perms(principal);
+    const custom = updated.(tostr(operation) + "_msg");
+    let parts = typeof(custom) == TYPE_LIST ? custom | (typeof(custom) == TYPE_FLYWEIGHT
+      || (typeof(custom) == TYPE_STR && custom != "") ? {custom} | {});
+    if (!length(parts))
+      const action = operation == 'open && passage.is_locked ? "unlock and open" | tostr(operation);
+      const other_action = operation == 'open && passage.is_locked ? "unlocks and opens" | tostr(operation) + "s";
+      parts = {<$sub, .type = 'actor, .capitalize = true>, " ",
+        <$sub, .type = 'self_alt, .for_self = action, .for_others = other_action>, " the ", label, "."};
+    endif
+    const event = $event:mk_info(who, @parts):with_this(from_room)
+      :with_text_binding('direction, from_room == passage.side_a_room ? passage.side_a_label | passage.side_b_label)
+      :with_text_binding('passage, label);
+    from_room:announce(event);
+    return ['status -> 'applied, 'reason -> {}, 'passage -> updated];
   endmethod
 
   verb _notify_locked (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -721,8 +935,10 @@ object PASSAGE [
       door_name = this:door_name_for(from_room);
       message = "The " + door_name + " is locked.";
     endif
-    player:inform_current($event:mk_error(player, message));
-    return true;
+    if (respond_to(player, 'inform_current))
+      player:inform_current($event:mk_error(player, message));
+    endif
+    return false;
   endverb
 
   verb with_open_msg (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -757,26 +973,39 @@ object PASSAGE [
     return this:_mk_from_props(props);
   endverb
 
-  method door_name_for owner: ARCH_WIZARD
-    "Return a display name for this passage when used as a door.";
-    "If the passage has open/locked state, it's a door - return 'door'.";
-    "Otherwise return the directional label.";
-    {from_room} = args;
-    "Check if this passage acts as a door (has is_open property)";
-    is_door = this:_value("is_open", "not_set") != "not_set";
-    if (is_door)
-      return "door";
-    endif
-    "Not a door, use the directional label";
-    return this:label_for(from_room);
+  method door_name_for owner: HACKER
+    "Name the selected side so feedback distinguishes multiple doors.";
+    const {from_room} = args;
+    return $passage:door_label(this, from_room);
   endmethod
 
-  method test_with_description_from_reports_template_errors owner: HACKER
-    "Unit test: passage description updates reject malformed substitution templates.";
-    passage = this:mk($room, "east", {"east"}, "", true, $room, "west", {"west"}, "", true);
-    $test_utils:assert_raises(E_INVARG, passage, "with_description_from", {$room, "broken {template"}, "with_description_from should reject malformed templates");
-    updated = passage:with_description_from($room, "{the direction}");
-    $test_utils:assert_type(updated.side_a_description, TYPE_LIST, "valid substitution descriptions should be compiled");
+  method door_label owner: HACKER
+    "Name a door from stored side fields without calling its custom delegate.";
+    const {passage, from_room} = args;
+    const label = from_room == passage.side_a_room ? passage.side_a_label | passage.side_b_label;
+    if (label:lowercase() in {"north", "south", "east", "west", "northeast", "northwest",
+        "southeast", "southwest", "up", "down", "in", "out"})
+      return label + " door";
+    endif
+    return label != "" ? label | "door";
+  endmethod
+
+  method test_description_formats_are_explicit owner: HACKER
+    "Literal braces stay text; explicit templates validate their available bindings before an edit.";
+    const passage = this:mk($room, "east", {}, "", true, $root, "west", {}, "", true);
+    const literal = passage:with_description_from($room, "broken {template", 'literal);
+    $test_utils:assert_eq(literal.side_a_description, "broken {template", "Braces do not imply a template");
+    $test_utils:assert_raises(E_INVARG, passage, "with_description_from", {$room, "broken {template", 'template},
+      "An explicit malformed template is rejected");
+    $test_utils:assert_raises(E_INVARG, passage, "with_description_from", {$room, "{unknown_binding}", 'template},
+      "An explicit template cannot name an unavailable binding");
+    const source = "a {direction} door";
+    const authored = passage:with_description_from($room, source, 'template);
+    $test_utils:assert_eq(authored.side_a_description, source, "Template source stays editable");
+    $test_utils:assert_eq(authored.side_a_description_kind, 'template, "The syntax is explicit");
+    const parts = $sub_utils:compile(source);
+    const structured = this:mk($room, "east", {}, parts, true, $root, "west", {}, "", true);
+    $test_utils:assert_eq(structured.side_a_description, parts, "Construction retains structured descriptions");
     return true;
   endmethod
 endobject

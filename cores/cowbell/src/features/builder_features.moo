@@ -454,8 +454,8 @@ object BUILDER_FEATURES [
       !valid(current_room) && raise(E_INVARG, "You must be in a room to dig passages.");
       area = current_room.location;
       !valid(area) && raise(E_INVARG, "Your current room is not in an area.");
-      "Find target room - only accept iobj if it's actually in this area";
-      if (typeof(iobj) == TYPE_OBJ && valid(iobj) && iobj in area.contents)
+      "Resolve local names or an explicit room reference in another area.";
+      if (typeof(iobj) == TYPE_OBJ && valid(iobj) && isa(iobj, $room))
         target_room = iobj;
       else
         target_room = $match:resolve_in_scope(iobjstr, area.contents);
@@ -570,14 +570,6 @@ object BUILDER_FEATURES [
           raise(E_INVARG, "A passage between here and " + tostr(target_room) + " already exists. Use --allow-parallel to create another.");
         endif
       endif
-      "Dry-run mode: report planned operation and stop before mutation";
-      if (dry_run)
-        mode_str = is_oneway ? "one-way" | "bidirectional";
-        flags_str = allow_parallel ? "--allow-parallel" | "(no extra flags)";
-        preview = "Dry-run OK: " + mode_str + " passage from " + from_dir:join(",") + (is_oneway ? "" | " | " + to_dir:join(",")) + " to " + tostr(target_room) + " " + flags_str + ".";
-        player:inform_current($event:mk_info(player, preview));
-        return true;
-      endif
       "Create the passage flyweight";
       if (is_oneway)
         passage = $passage:mk(current_room, from_dir[1], from_dir, "", true, target_room, "", {}, "", false, true);
@@ -587,7 +579,17 @@ object BUILDER_FEATURES [
       "Register with area using capability if we have one";
       area_cap = player:find_capability_for(area, 'area);
       area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-      area_target:create_passage(from_room_target, to_room_target, passage);
+      $root:_check_permissions_as(area_target, player, 'create_passage);
+      $area:_check_endpoints(player, from_room_target, to_room_target, passage);
+      "Dry-run mode: report planned operation and stop before mutation";
+      if (dry_run)
+        mode_str = is_oneway ? "one-way" | "bidirectional";
+        flags_str = allow_parallel ? "--allow-parallel" | "(no extra flags)";
+        preview = "Dry-run OK: " + mode_str + " passage from " + from_dir:join(",") + (is_oneway ? "" | " | " + to_dir:join(",")) + " to " + tostr(target_room) + " " + flags_str + ".";
+        player:inform_current($event:mk_info(player, preview));
+        return true;
+      endif
+      passage = area_target:create_passage(from_room_target, to_room_target, passage, allow_parallel);
       "Report success";
       if (is_oneway)
         message = "Dug passage: " + from_dir:join(",") + " to " + tostr(target_room) + " (one-way).";
@@ -639,7 +641,6 @@ object BUILDER_FEATURES [
           endif
         endif
         !valid(target_room) && raise(E_INVARG, "No passage or room found matching '" + input + "'.");
-        target_room.location != area && raise(E_INVARG, "Target room must be in the same area.");
         passage = area:passage_for(current_room, target_room);
       endif
       "Look up passage (can be flyweight or $passage object)";
@@ -683,7 +684,7 @@ object BUILDER_FEATURES [
       "Remove passage via area using capability if we have one";
       area_cap = player:find_capability_for(area, 'area);
       area_target = typeof(area_cap) == TYPE_FLYWEIGHT ? area_cap | area;
-      result = area_target:remove_passage(from_room_target, target_room);
+      result = area_target:remove_passage(from_room_target, target_room, passage.connection_id);
       "Report success";
       if (result)
         label_str = length(labels) > 0 ? " (" + labels:join("/") + ")" | "";
@@ -765,8 +766,8 @@ object BUILDER_FEATURES [
     endfor
     !from_dirs && raise(E_INVARG, "Missing direction aliases.");
     "Infer opposite direction";
-    to_dirs = this:_infer_opposite_directions(from_dirs);
-    !to_dirs && raise(E_INVARG, "Can't infer opposite direction for '" + dir_spec + "'. Use 'dir|returndir' syntax.");
+    to_dirs = is_oneway ? {} | this:_infer_opposite_directions(from_dirs);
+    !is_oneway && !to_dirs && raise(E_INVARG, "Can't infer opposite direction for '" + dir_spec + "'. Use 'dir|returndir' syntax.");
     "Expand standard aliases";
     from_dirs = $passage:expand_direction_aliases(from_dirs);
     to_dirs = $passage:expand_direction_aliases(to_dirs);
@@ -879,7 +880,7 @@ object BUILDER_FEATURES [
 
   verb "@describe" (any any any) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object> as <description> -- Set object description.";
-    "Prefix the object with --djot or --literal to select the description syntax.";
+    "Prefix the object or exit with --djot or --literal. Passage descriptions also accept --template.";
     caller != player && raise(E_PERM);
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
@@ -889,15 +890,7 @@ object BUILDER_FEATURES [
     endif
     try
       "Try to match as object first, then fall through to passage matching on ordinary not-found errors.";
-      let description_kind = false;
-      let target_spec = dobjstr;
-      if (target_spec:starts_with("--djot "))
-        description_kind = 'djot_blocks;
-        target_spec = target_spec[8..$];
-      elseif (target_spec:starts_with("--literal "))
-        description_kind = 'literal;
-        target_spec = target_spec[11..$];
-      endif
+      const {target_spec, description_kind} = $builder_features:description_target(dobjstr);
       target_obj = false;
       try
         target_obj = $match:match_object(target_spec, player);
@@ -921,9 +914,8 @@ object BUILDER_FEATURES [
         return 1;
       else
         "Not an object - try to match as a passage direction";
-        typeof(description_kind) != TYPE_SYM
-          || raise(E_INVARG, "Content type selection requires an object description");
-        result = this:_do_describe_passage(dobjstr, iobjstr);
+        result = this:_do_describe_passage(target_spec, iobjstr,
+          description_kind == 'djot_blocks ? 'djot_inline | description_kind);
         if (result)
           return 1;
         else
@@ -937,47 +929,120 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
+  method description_target owner: HACKER
+    "Parse an optional description format flag without interpreting the source text.";
+    const {text} = args;
+    for entry in ({{"--djot ", 'djot_blocks}, {"--literal ", 'literal}, {"--template ", 'template}})
+      if (text:starts_with(entry[1]))
+        return {text[length(entry[1]) + 1..$]:trim(), entry[2]};
+      endif
+    endfor
+    return {text:trim(), false};
+  endmethod
+
   verb "@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"
-    "HINT: <object> -- Open multi-line editor for object description.";
-    caller != player && raise(E_PERM);
+    "Edit an object's or passage's source. Optional --literal, --djot, and passage --template select syntax.";
+    caller == player || raise(E_PERM);
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
-    if (!dobjstr)
-      player:inform_current($event:mk_error(player, $format.code:mk("@edit-description <object>")));
-      return;
-    endif
     try
-      target_obj = $match:match_object(dobjstr, player);
-      if (!valid(target_obj))
-        raise(E_INVARG, "I don't see that here.");
+      const {spec, requested_kind} = $builder_features:description_target(dobjstr);
+      length(spec) || raise(E_INVARG, "Use @edit-description OBJECT_OR_DIRECTION.");
+      let target = `$match:match_object(spec, player) ! E_INVARG, E_PROPNF => #-1';
+      let identity = "";
+      let source;
+      let old_kind;
+      let title;
+      if (typeof(target) == TYPE_OBJ && valid(target))
+        $root:_check_permissions_as(target, player, 'set_description);
+        source = target.description;
+        old_kind = target.description_kind;
+        title = target.name;
+      else
+        target = player.location;
+        const passage = $room:find_passage(target, spec);
+        typeof(passage) == TYPE_FLYWEIGHT || raise(E_INVARG, "No object or exit called '" + spec + "' here.");
+        $area:_check_room_right(player, $area:_subject_for(player, target, 'room), 'dig_from);
+        identity = passage.connection_id;
+        source = passage:description_for(target);
+        old_kind = passage:description_kind_for(target);
+        title = passage:label_for(target) + " at " + target.name;
       endif
-      if (!player.wizard && target_obj.owner != player)
-        raise(E_PERM, "You don't own that.");
+      typeof(source) == TYPE_STR
+        || raise(E_INVARG, "This description is built in code. Use @describe to replace it with editable text.");
+      let kind = typeof(requested_kind) == TYPE_SYM ? requested_kind | old_kind;
+      identity != "" && kind == 'djot_blocks && (kind = 'djot_inline);
+      if (identity == "")
+        kind in {'literal, 'djot_blocks} || raise(E_INVARG, "Object descriptions use --literal or --djot.");
       endif
-      current_desc = `target_obj.description ! E_PROPNF => ""';
-      editor_title = "Edit Description: " + target_obj.name;
-      conn = connection();
-      session_id = player:start_edit_session(target_obj, "set_description", {conn});
-      present(conn, session_id, "text/djot", "text-editor", current_desc, {{"object", $url_utils:to_curie_str($builder_features)}, {"verb", "receive_description_edit"}, {"title", editor_title}, {"text_mode", "string"}, {"session_id", session_id}});
-    except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+      const conn = connection();
+      const state = ['connection -> conn, 'passage -> identity, 'format -> kind,
+        'original -> source, 'original_format -> old_kind];
+      const session_id = player:start_edit_session(target, "edit_description", state);
+      const content_type = kind in {'djot_blocks, 'djot_inline} ? "text/djot" | "text/plain";
+      $builder_features:_present_description_editor(player, session_id, source, title, content_type);
+    except problem (E_INVARG, E_PERM, E_TYPE)
+      player:inform_current($event:mk_error(player, problem[2]));
     endtry
   endverb
 
+  method _present_description_editor owner: ARCH_WIZARD
+    "Present only on the authenticated editor's bound connection; presentation needs native authority.";
+    const principal = caller_perms();
+    const {who, session_id, source, title, content_type} = args;
+    principal == who || (valid(principal) && principal.wizard) || raise(E_PERM);
+    const session = who.editing_sessions[session_id];
+    session['verb] == "edit_description" || raise(E_PERM);
+    const conn = session['args]['connection];
+    conn in {entry[1] for entry in (connections(who))} || raise(E_PERM);
+    present(conn, session_id, content_type, "text-editor", source,
+      {{"object", $url_utils:to_curie_str($builder_features)}, {"verb", "receive_description_edit"},
+      {"title", "Edit Description: " + title}, {"text_mode", "string"}, {"session_id", session_id}});
+  endmethod
+
   method receive_description_edit owner: ARCH_WIZARD
-    "Callback for text-editor when editing descriptions.";
-    {session_id, content} = args;
+    "Save under the editor's current authority, rejecting replacement exits and conflicting source edits.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(player);
+    const {session_id, content} = args;
+    const session = player:get_edit_session(session_id);
+    session['verb] == "edit_description" || raise(E_PERM);
+    const state = session['args];
+    const conn = state['connection];
+    const request_conn = `connection() ! E_INVARG => #-1';
+    request_conn == #-1 || request_conn == conn || raise(E_PERM);
+    request_conn == #-1 || conn in {entry[1] for entry in (connections(player))} || raise(E_PERM);
     if (content == 'close)
       player:end_edit_session(session_id);
       return;
     endif
-    session = player:get_edit_session(session_id);
-    target_obj = session['target];
-    conn = session['args][1];
-    target_obj:set_description(content);
-    obj_name = `target_obj.name ! ANY => tostr(target_obj)';
-    player:inform_connection(conn, $event:mk_info(player, "Description updated for " + obj_name + "."));
+    typeof(content) == TYPE_STR || raise(E_TYPE, "Description source must be text.");
+    const target = session['target];
+    valid(target) || raise(E_INVARG, "The edited object no longer exists.");
+    if (state['passage] == "")
+      $root:_check_permissions_as(target, player, 'set_description);
+      equal(target.description, state['original]) && target.description_kind == state['original_format]
+        || raise(E_INVARG, "The description changed while this editor was open. Reopen it before saving.");
+      target:set_description(content, state['format]);
+    else
+      const found = $room:find_connection(target, state['passage]);
+      length(found) || raise(E_INVARG, "The edited passage is no longer connected. Reopen the editor.");
+      const {area, passage} = found;
+      const subject = $area:_subject_for(player, target, 'room);
+      equal(passage:description_for(target), state['original])
+        && passage:description_kind_for(target) == state['original_format]
+        || raise(E_INVARG, "The description changed while this editor was open. Reopen it before saving.");
+      const updated = passage:with_description_from(target, content, state['format]);
+      equal(player:get_edit_session(session_id), session) || raise(E_PERM, "The editing session changed.");
+      area:update_passage(subject, passage:other_room(target), updated);
+    endif
+    let saved = session;
+    saved['args]['original] = content;
+    saved['args]['original_format] = state['format];
+    player.editing_sessions[session_id] = saved;
+    player:inform_connection(conn, $event:mk_info(player, "Description updated for " + target.name + "."));
   endmethod
 
   method _do_describe_object owner: ARCH_WIZARD
@@ -989,44 +1054,22 @@ object BUILDER_FEATURES [
   endmethod
 
   method _do_describe_passage owner: ARCH_WIZARD
-    "Internal helper to set passage description with elevated permissions. Returns false if passage not found.";
+    "Describe one local connection using the builder's endpoint authority. Return false if absent.";
     caller == this || raise(E_PERM);
     set_task_perms(player);
-    {direction, description_str} = args;
-    direction = direction:trim();
-    description = description_str:trim();
-    !description && raise(E_INVARG, "Description cannot be blank.");
-    "Get current room - this is the player";
-    current_room = player.location;
-    if (!valid(current_room))
-      return false;
-    endif
-    "Get area";
-    area = current_room.location;
-    if (!valid(area))
-      return false;
-    endif
-    "Find passage matching the direction";
-    passages = area:passages_from(current_room);
-    if (!passages || length(passages) == 0)
-      return false;
-    endif
-    "Find passage matching the direction";
-    target_passage = area:find_passage_by_direction(current_room, direction);
-    if (!target_passage)
-      return false;
-    endif
-    "Check permissions";
-    cap = player:find_capability_for(current_room, 'room);
-    room_target = typeof(cap) == TYPE_FLYWEIGHT ? cap | current_room;
-    room_target:check_can_dig_from();
-    "Update passage description and set ambient flag";
-    new_passage = target_passage:with_description_from(current_room, description);
-    new_passage = new_passage:with_ambient_from(current_room, true);
-    other_room = target_passage:other_room(current_room);
-    area:update_passage(current_room, other_room, new_passage);
-    message = "Set ambient description for '" + direction + "' passage: \"" + description + "\"";
-    player:inform_current($event:mk_info(player, message));
+    const {direction, source, ?kind = false} = args;
+    const description = source:trim();
+    length(description) || raise(E_INVARG, "Description cannot be blank.");
+    const room = player.location;
+    valid(room) && isa(room, $room) || return false;
+    const passage = $room:find_passage(room, direction:trim());
+    typeof(passage) == TYPE_FLYWEIGHT || return false;
+    const {area, current} = $room:find_connection(room, passage.connection_id);
+    const subject = $area:_subject_for(player, room, 'room);
+    const format = typeof(kind) == TYPE_SYM ? kind | current:description_kind_for(room);
+    const updated = current:with_description_from(room, description, format):with_ambient_from(room, true);
+    area:update_passage(subject, current:other_room(room), updated);
+    player:inform_current($event:mk_info(player, "Set ambient description for '", direction, "' passage."));
     return true;
   endmethod
 
@@ -1926,29 +1969,43 @@ object BUILDER_FEATURES [
   endmethod
 
   verb "@passage @passage-info @pinfo" (any none none) owner: ARCH_WIZARD flags: "rd"
-    "Show detailed passage information for a direction.";
-    caller != player && raise(E_PERM);
+    "Inspect an exit's configuration and preview its room prose and movement messages.";
+    caller == player || raise(E_PERM);
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
-    !argstr || !dobjstr && return player:inform_current($event:mk_error(player, $format.code:mk("@passage DIRECTION")));
     try
-      direction = dobjstr:trim();
-      current_room = player.location;
-      !valid(current_room) && raise(E_INVARG, "You must be in a room.");
-      area = current_room.location;
-      !valid(area) && raise(E_INVARG, "Your current room is not in an area.");
-      passage = area:find_passage_by_direction(current_room, direction);
-      typeof(passage) != TYPE_FLYWEIGHT && typeof(passage) != TYPE_OBJ && raise(E_INVARG, "No passage found in direction '" + direction + "'.");
-      other_room = passage:other_room(current_room);
-      !valid(other_room) && raise(E_INVARG, "That passage does not connect to a valid destination from here.");
-      "Build info table";
-      rows = {{"Direction", passage:label_for(current_room)}, {"Aliases", passage:aliases_for(current_room):join(", ")}, {"Description", passage:description_for(current_room) || "(none)"}, {"Prose Style", tostr(passage:prose_style_for(current_room))}, {"Departure Phrase", passage:departure_phrase_for(current_room) || "(none)"}, {"Arrival Phrase", passage:arrival_phrase_for(current_room) || "(none)"}, {"", ""}, {"Destination", other_room.name + " (" + tostr(other_room) + ")"}, {"Return Direction", passage:label_for(other_room) || "(one-way)"}, {"Return Aliases", (passage:aliases_for(other_room) || {}):join(", ")}, {"Return Description", passage:description_for(other_room) || "(none)"}, {"", ""}, {"Open", passage.is_open ? "yes" | "no"}, {"Locked", `passage.is_locked ! E_PROPNF => false' ? "yes" | "no"}};
-      table = $format.table:mk({"Property", "Value"}, rows);
-      content = $format.block:mk($format.title:mk("Passage: " + direction, 3), table);
+      const direction = dobjstr:trim();
+      length(direction) || raise(E_INVARG, "Use @passage DIRECTION.");
+      const room = player.location;
+      const passage = $room:find_passage(room, direction);
+      typeof(passage) == TYPE_FLYWEIGHT || raise(E_INVARG, "No exit called '" + direction + "' here.");
+      const destination = passage:other_room(room);
+      const source = passage:description_for(room);
+      const label = passage:label_for(room);
+      const rows = {
+        {"Direction", label}, {"Aliases", passage:aliases_for(room):join(", ")},
+        {"Description source", typeof(source) == TYPE_STR ? source | toliteral(source)},
+        {"Description syntax", tostr(passage:description_kind_for(room))},
+        {"In room prose", passage.(room == passage.side_a_room ? "side_a_ambient" | "side_b_ambient") ? "yes" | "no"},
+        {"Prose style", tostr(passage:prose_style_for(room))},
+        {"Departure phrase", passage:departure_phrase_for(room)},
+        {"Arrival phrase", passage:arrival_phrase_for(room)},
+        {"Destination", destination.name + " (" + tostr(destination) + ")"},
+        {"Return direction", $passage:allows_direction(passage, destination) ? passage:label_for(destination) | "one-way"},
+        {"Open", passage.is_open ? "yes" | "no"}, {"Locked", passage.is_locked ? "yes" | "no"}
+      };
+      const context = $event:mk_look(player):with_dobj(room);
+      const prose = $look:_ambient({{$passage:description_content(passage, room),
+        passage:prose_style_for(room), label, destination}}, [label -> room:exit_annotation(label)], context, player);
+      const departure = $passage:movement_from(passage, player, room, destination, false):resolve(player);
+      const arrival = $passage:movement_from(passage, player, room, destination, true):resolve(player);
+      const content = $format.block:mk($format.title:mk("Passage: " + label, 3),
+        $format.table:mk({"Property", "Value"}, rows), $format.title:mk("Room prose", 4), @prose,
+        $format.title:mk("Leaving this room", 4), @flycontents(departure),
+        $format.title:mk("Arriving at the other room", 4), @flycontents(arrival));
       player:inform_current($event:mk_info(player, content));
-    except e (ANY)
-      message = typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, message));
+    except problem (E_INVARG, E_PERM, E_TYPE)
+      player:inform_current($event:mk_error(player, problem[2]));
     endtry
   endverb
 
@@ -1958,7 +2015,7 @@ object BUILDER_FEATURES [
     player.is_builder || raise(E_PERM, "Builder features required.");
     set_task_perms(player);
     if (!argstr || length(args) < 3)
-      lines = {"@set-passage DIRECTION PROPERTY VALUE", "", "Properties:", "  description DESC   - Ambient description (include direction word for links!)", "  departure PHRASE   - e.g., 'through the door'", "  arrival PHRASE     - e.g., 'from the kitchen'", "  style sentence|fragment", "  aliases A,B,C", "  is_door true|false - Enable/disable door operations (open/close/lock/unlock)"};
+      lines = {"@set-passage DIRECTION PROPERTY VALUE", "", "Properties:", "  description DESC   - Ambient description (links the complete phrase)", "  departure PHRASE   - e.g., 'through the door'", "  arrival PHRASE     - e.g., 'from the kitchen'", "  style sentence|fragment", "  aliases A,B,C", "  is_door true|false - Enable/disable door operations (open/close/lock/unlock)"};
       return player:inform_current($event:mk_info(player, $format.block:mk(@lines)));
     endif
     try
@@ -2410,7 +2467,8 @@ object BUILDER_FEATURES [
     const {word, scope, who, ?expected = 'any} = args;
     const aliases = ["this" -> 'This, "actor" -> maphaskey(scope['input], 'Actor) ? 'Actor | 'Accessor,
       "place" -> 'Location, "item" -> maphaskey(scope['input], 'Item) ? 'Item | 'Dobj,
-      "key" -> 'Key, "food" -> 'Food, "who" -> 'Who, "from" -> 'From, "to" -> 'To];
+      "key" -> 'Key, "food" -> 'Food, "who" -> 'Who, "from" -> 'From, "to" -> 'To,
+      "exit" -> 'Direction, "connection" -> 'Connection, "passage" -> 'Passage];
     if (maphaskey(aliases, word) && maphaskey(scope['input], aliases[word]))
       return ['kind -> 'input, 'name -> aliases[word]];
     endif
@@ -2663,7 +2721,8 @@ object BUILDER_FEATURES [
     const name = expression['name];
     if (expression['kind] == 'input)
       const aliases = ['This -> "this", 'Actor -> "actor", 'Accessor -> "actor", 'Location -> "place",
-        'Item -> "item", 'Dobj -> "item", 'Key -> "key", 'Food -> "food", 'Who -> "who", 'From -> "from", 'To -> "to"];
+        'Item -> "item", 'Dobj -> "item", 'Key -> "key", 'Food -> "food", 'Who -> "who", 'From -> "from", 'To -> "to",
+        'Direction -> "exit", 'Connection -> "connection", 'Passage -> "passage"];
       return `aliases[name] ! E_RANGE => tostr(name)';
     endif
     return tostr(name);
