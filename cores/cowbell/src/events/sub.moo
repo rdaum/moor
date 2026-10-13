@@ -296,6 +296,9 @@ object SUB [
       endif
       binding['kind] == 'object || raise(E_INVARG, "Use content_binding for structured content");
     endif
+    if (kind == 'capitalize)
+      return {$document_template:mk('capitalize, $format:inlines({this.content}))};
+    endif
     typeof(viewer) == TYPE_OBJ && valid(viewer)
       || raise(E_INVARG, "This substitution needs a viewer");
     if (kind == 'self_alt)
@@ -365,6 +368,12 @@ object SUB [
       endif
     endif
     return $format:literal_inline(capitalize ? text:capitalize() | text);
+  endmethod
+
+  method capitalize owner: HACKER
+    "Capitalize the first character of resolved content while preserving its document structure.";
+    const {content} = args;
+    return <$sub, .type = 'capitalize, .content = content>;
   endmethod
 
   method content_binding owner: HACKER

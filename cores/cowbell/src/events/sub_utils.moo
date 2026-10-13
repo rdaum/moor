@@ -15,13 +15,6 @@ object SUB_UTILS [
     {"An ", 4, "ac"},
     {"The ", 5, "thec"}
   };
-  property pronoun_map (owner: HACKER, flags: "rc") = [
-    "object" -> "o",
-    "pos_adj" -> "p",
-    "pos_noun" -> "q",
-    "reflexive" -> "r",
-    "subject" -> "s"
-  ];
   property token_map (owner: HACKER, flags: "rc") = [
     "be" -> {"verb_be", {}},
     "be_dobj" -> {"verb_be_dobj", {}},
@@ -73,274 +66,263 @@ object SUB_UTILS [
     "t" -> {"t", {}},
     "tc" -> {"tc", {}}
   ];
-  property typemap (owner: HACKER, flags: "rc") = [
-    'actor -> "n",
-    'this -> "t",
-    'dobj -> "d",
-    'iobj -> "i",
-    'object -> "o",
-    'verb_be -> "be",
-    'verb_have -> "have",
-    'location -> "l",
-    'subject -> "s",
-    'reflexive -> "r",
-    'pos_adj -> "p",
-    'pos_noun -> "q",
-    'verb_look -> "look"
-  ];
-  property verb_map (owner: HACKER, flags: "rc") = ["verb_be" -> "be", "verb_have" -> "have", "verb_look" -> "look"];
 
   override description (owner: HACKER, flags: "rc") = "Compiler and utilities for $sub template language.";
   override object_documentation (owner: HACKER, flags: "rc") = {
-    "# $sub_utils - Template Compiler",
+    "# Message templates",
     "",
-    "## Overview",
+    "A message template describes one event from each participant's point of view.",
+    "For example, {nc} {wave|waves}. gives the actor \"You wave.\" and observers \"Alex waves.\"",
+    "Use @set-message OBJECT.PROPERTY TEMPLATE to edit a message property.",
+    "Use @messages OBJECT to inspect its messages. Commands require authoring permission.",
     "",
-    "Compiles human-readable template strings into $sub flyweight content lists,",
-    "and can decompile back to templates. Useful for builders creating passage messages",
-    "and event content.",
+    "## Names and pronouns",
     "",
-    "## Template Syntax",
+    "{n} selects the actor, {d} the direct object, {i} the indirect object,",
+    "{t} this object, and {l} the event's location. Add c to capitalize a name: {nc}.",
+    "Names become \"you\" when they refer to the viewer.",
     "",
-    "Templates are strings with `{...}` tokens that get replaced with $sub flyweights.",
+    "{s}, {o}, {p}, {q}, and {r} select subject, object, possessive adjective,",
+    "possessive noun, and reflexive pronouns. For they/them: they, them, their, theirs, themselves.",
+    "Add c to capitalize: {sc}. Add _dobj or _iobj to select another participant: {sc_dobj}.",
+    "{be}, {have}, and {look} agree with the actor's pronouns.",
+    "Their _dobj and _iobj forms select those participants' pronouns.",
+    "A name can need a different verb: \"Alex is\" but \"They are.\"",
     "",
-    "### Bindings",
+    "## Articles and bindings",
     "",
-    "```",
-    "{actor}       # Actor name (from context)",
-    "{direction}   # Any binding name from context",
-    "{passage_desc}",
-    "```",
+    "{a d} inserts an object name with a/an. {the d} inserts it with the.",
+    "{A d} and {The d} capitalize the phrase; {the dc} capitalizes just the name.",
+    "These tokens include the name. Do not add another {d} after them.",
+    "Proper names and \"you\" omit articles. Plurals and uncountable nouns omit a/an.",
+    "A thing's indefinite_article property can override the spelling-based guess with \"a\" or \"an\".",
     "",
-    "### Name Substitutions",
+    "Other identifiers select named event bindings: {direction}, {from_room}, or {relic}.",
+    "Names start with a letter or underscore, followed by letters, digits, underscores, or hyphens.",
+    "The event producer determines which bindings exist. Unknown names fail during resolution.",
+    "Articles require object bindings. Use {direction} for a direction supplied as text.",
+    "{bind s} selects a binding literally named s instead of the subject pronoun token.",
+    "{content detail} inserts an explicitly supplied content binding.",
+    "Binding text stays literal: braces, HTML, and Djot in that text are not interpreted.",
     "",
-    "```",
-    "{n}   # Actor name",
-    "{nc}  # Capitalized actor name",
-    "{d}   # Direct object",
-    "{i}   # Indirect object",
-    "{l}   # Location",
-    "{t}   # This object",
-    "```",
+    "## Alternatives, capitalization, and literal punctuation",
     "",
-    "Add `c` for capitalized: `{nc}`, `{dc}`, etc.",
+    "{left|right} selects left for the actor and right for everyone else.",
+    "It selects a perspective, not grammatical agreement. Both branches preserve their whitespace.",
+    "Branches may contain substitutions or further alternatives:",
     "",
-    "### Pronouns",
+    "{You see {d}|{nc} sees {d}}",
     "",
-    "```",
-    "{s}       # Actor subject pronoun (he/she/they)",
-    "{o}       # Actor object pronoun (him/her/them)",
-    "{p}       # Actor possessive adjective (his/her/their)",
-    "{q}       # Actor possessive noun (his/hers/theirs)",
-    "{r}       # Actor reflexive (himself/herself/themself)",
-    "{s_dobj}  # Direct object pronouns (same suffixes available)",
-    "{s_iobj}  # Indirect object pronouns",
-    "```",
+    "Only the selected branch resolves. An empty branch inserts nothing.",
+    "Use {cap CONTENT} to capitalize the first character of resolved content:",
+    "{cap {direction}} or {cap {you|they}}.",
     "",
-    "### Verb Conjugation",
+    "Quote literal punctuation with backslash: \\{, \\}, \\|, and \\\\.",
+    "A pipe outside braces can also appear literally. Other backslashes remain unchanged.",
+    "Unclosed braces, stray closing braces, and empty tokens are errors.",
     "",
-    "```",
-    "{be}         # \"are\" / \"is\"",
-    "{have}       # \"have\" / \"has\"",
-    "{look}       # \"look\" / \"looks\"",
-    "{be_dobj}    # Conjugation for direct object",
-    "{be_iobj}    # Conjugation for indirect object",
-    "```",
+    "## Programming interface",
     "",
-    "### Articles",
+    "$sub_utils:compile(text) returns a list of literal strings and $sub values.",
+    "Pass the list into an event, then resolve that event for each viewer.",
+    "$sub_utils:decompile(content) returns an editable template with the same meaning.",
+    "It supports strings, substitution tokens, and nested lists of those values.",
+    "Other content raises an error instead of being converted to misleading text.",
+    "Use an explicit content binding for formatted or computed content.",
     "",
-    "```",
-    "{a direction}    # Indefinite article: \"a\" or \"an\"",
-    "{the direction}  # Definite article: \"the\"",
-    "{a d}            # Indefinite article for direct object",
-    "{the dc}         # Definite article for capitalized direct object",
-    "{a i}            # Indefinite article for indirect object",
-    "{The i}          # Capitalized article for indirect object",
-    "```",
-    "",
-    "Articles can use any binding name or substitution abbreviation:",
-    "- `d` / `dc` = direct object",
-    "- `i` / `ic` = indirect object",
-    "- `l` / `lc` = location",
-    "- `t` / `tc` = this object",
-    "- `n` / `nc` = actor",
-    "",
-    "Articles check the binding's is_proper_noun() and is_plural() properties.",
-    "Returns empty if proper noun (a) or if proper noun (the).",
-    "",
-    "### Self-Alternation",
-    "",
-    "```",
-    "{feel|feels}     # \"feel\" to actor, \"feels\" to others",
-    "{your|their}     # \"your\" to actor, \"their\" to others",
-    "```",
-    "",
-    "Can be nested with other substitutions:",
-    "```",
-    "{tired|exhausted} {get|gets} you down.",
-    "# Actor: \"tired get you down.\"",
-    "# Others: \"exhausted gets you down.\"",
-    "```",
-    "",
-    "## Functions",
-    "",
-    "### compile(template_string) \u2192 list",
-    "",
-    "Parses a template string and returns a list of strings and $sub flyweights.",
-    "",
-    "### decompile(content_list) \u2192 string",
-    "",
-    "Reconstructs a template string from a compiled content list.",
-    "",
-    "## Examples",
-    "",
-    "```moo",
-    "template = \"{nc} heads {the direction}.\";",
-    "content = $sub_utils:compile(template);",
-    "# Returns: {",
-    "#   $sub:nc(),",
-    "#   \" heads \",",
-    "#   $sub:the('direction),",
-    "#   \".\"",
-    "# }",
-    "```",
-    ""
+    "Templates allow up to 65536 characters, 2048 tokens, and 16 brace levels.",
+    "The scanner also limits text and delimiter pieces to 8192.",
+    "Document resolution has separate limits and checks the caller's access permissions."
   };
 
   method compile owner: HACKER
-    "Parse a bounded template into strings and substitution tokens.";
+    "Compile nested substitutions, preserving literal text and branch whitespace.";
+    "Backslash quotes braces, pipes, and backslashes. Other backslashes stay literal.";
     const {template} = args;
-    typeof(template) != TYPE_STR && raise(E_TYPE, "template must be string");
-    const len = length(template);
-    len > 65536 && raise(E_INVARG, "Template exceeds 65536 characters.");
-    let content = {};
-    let pos = 1;
+    typeof(template) == TYPE_STR || raise(E_TYPE, "template must be string");
+    length(template) <= 65536 || raise(E_INVARG, "Template exceeds 65536 characters.");
+    const lexemes = pcre_match(template, "\\\\[{}|\\\\]|[{}|]|[^{}|\\\\]+|\\\\", true, true);
+    length(lexemes) <= 8192 || raise(E_INVARG, "Template exceeds 8192 text and delimiter pieces.");
+    let stack = {};
+    let parts = {};
+    let left = false;
     let tokens = 0;
-    while (pos <= len)
-      const token_start = index(template, "{", 0, pos - 1);
-      if (!token_start)
-        content = {@content, template[pos..$]};
-        break;
-      endif
-      if (token_start > pos)
-        content = {@content, template[pos..token_start - 1]};
-      endif
-      let depth = 1;
-      let scan_pos = token_start + 1;
-      let token_end = 0;
-      tokens = tokens + 1;
-      tokens > 2048 && raise(E_INVARG, "Template exceeds 2048 tokens.");
-      while (scan_pos <= len)
-        const next_open = index(template, "{", 0, scan_pos - 1);
-        const next_close = index(template, "}", 0, scan_pos - 1);
-        if (!next_close)
-          break;
+    for lexeme in (lexemes)
+      let text = lexeme["0"]["match"];
+      if (text == "{")
+        tokens = tokens + 1;
+        tokens <= 2048 || raise(E_INVARG, "Template exceeds 2048 tokens.");
+        length(stack) < 16 || raise(E_INVARG, "Template nesting exceeds 16 levels.");
+        stack = {@stack, {parts, left}};
+        parts = {};
+        left = false;
+      elseif (text == "}")
+        length(stack) || raise(E_INVARG, "Unexpected closing brace in template.");
+        const token = this:_finish_token(parts, left);
+        {parts, left} = stack[$];
+        stack = stack[1..$ - 1];
+        parts = {@parts, token};
+      elseif (text == "|" && length(stack))
+        typeof(left) != TYPE_LIST || raise(E_INVARG, "Alternation requires exactly two branches.");
+        left = parts;
+        parts = {};
+      else
+        if (length(text) == 2 && text[1] == "\\")
+          text = text[2];
         endif
-        if (next_open && next_open < next_close)
-          depth = depth + 1;
-          depth > 16 && raise(E_INVARG, "Template nesting exceeds 16 levels.");
-          tokens = tokens + 1;
-          tokens > 2048 && raise(E_INVARG, "Template exceeds 2048 tokens.");
-          scan_pos = next_open + 1;
+        if (length(parts) && typeof(parts[$]) == TYPE_STR)
+          parts[$] = parts[$] + text;
         else
-          depth = depth - 1;
-          if (depth == 0)
-            token_end = next_close;
-            break;
-          endif
-          scan_pos = next_close + 1;
+          parts = {@parts, text};
         endif
-      endwhile
-      if (!token_end)
-        raise(E_INVARG, "Unclosed brace in template at position " + tostr(token_start));
       endif
-      const token = template[token_start + 1..token_end - 1]:trim();
-      !token && raise(E_INVARG, "Empty substitution token.");
-      content = {@content, this:_parse_token(token)};
-      pos = token_end + 1;
-    endwhile
-    return content;
+    endfor
+    !stack || raise(E_INVARG, "Unclosed brace in template.");
+    return parts;
+  endmethod
+
+  method _finish_token owner: HACKER
+    "Build one token after its nested tokens have been compiled.";
+    const {parts, left} = args;
+    if (typeof(left) == TYPE_LIST)
+      return $sub:self_alt(left, parts);
+    endif
+    if (length(parts) && typeof(parts[1]) == TYPE_STR && index(parts[1], "cap ", 1) == 1)
+      return $sub:capitalize({parts[1][5..$], @parts[2..$]});
+    endif
+    (length(parts) == 1 && typeof(parts[1]) == TYPE_STR)
+      || raise(E_INVARG, "Expected a token name, cap content, or two alternatives.");
+    return this:_parse_token(parts[1]);
+  endmethod
+
+  method _binding_name owner: HACKER
+    "Require a binding identifier with letters, digits, underscores, or hyphens.";
+    const {name} = args;
+    length(pcre_match(name, "^[A-Za-z_][A-Za-z0-9_-]*$", true, false))
+      || raise(E_INVARG, "Invalid binding name: " + name);
+    return tosym(name);
   endmethod
 
   method _parse_token owner: HACKER
-    "Parse a single {token} and return corresponding $sub flyweight.";
-    {token_content} = args;
-    token_content = token_content:trim();
-    "Self-alternation (contains |)";
-    pipe_index = index(token_content, "|");
-    if (pipe_index)
-      parts = token_content:split("|");
-      length(parts) != 2 && raise(E_INVARG, "Self-alternation must have exactly 2 parts: " + token_content);
-      return $sub:self_alt(parts[1]:trim(), parts[2]:trim());
-    endif
-    "Articles from property";
+    "Parse an atomic token; nesting and alternatives are handled by compile.";
+    const {raw} = args;
+    const token = raw:trim();
+    length(token) || raise(E_INVARG, "Empty substitution token.");
     for pattern in (this.article_patterns)
-      {prefix, skip, method} = pattern;
-      if (strcmp(token_content[1..min(length(prefix), length(token_content))], prefix) == 0)
-        binding_name = tosym(token_content[skip..$]:trim());
-        return $sub:(method)(binding_name);
+      const {prefix, skip, method} = pattern;
+      if (index(token, prefix, 1) == 1)
+        return $sub:(method)(this:_binding_name(token[skip..$]:trim()));
       endif
     endfor
-    "Direct dispatch from property";
-    if (maphaskey(this.token_map, token_content))
-      {method, method_args} = this.token_map[token_content];
+    if (index(token, "bind ", 1) == 1)
+      return $sub:binding(this:_binding_name(token[6..$]:trim()));
+    elseif (index(token, "content ", 1) == 1)
+      return $sub:content_binding(this:_binding_name(token[9..$]:trim()));
+    endif
+    if (maphaskey(this.token_map, token))
+      const {method, method_args} = this.token_map[token];
       return $sub:(method)(@method_args);
     endif
-    "Fallback: treat as binding";
-    return $sub:binding(tosym(token_content));
+    return $sub:binding(this:_binding_name(token));
   endmethod
 
   method decompile owner: HACKER
-    "Reconstruct template string from compiled content list.";
-    {content} = args;
-    typeof(content) != TYPE_LIST && raise(E_TYPE, "content must be list");
-    result = "";
-    for item in (content)
-      result = result + (typeof(item) == TYPE_STR ? item | typeof(item) == TYPE_FLYWEIGHT ? this:_reconstruct_token(item) | tostr(item));
-    endfor
+    "Write an editable template, or reject content the template language cannot represent.";
+    const {content} = args;
+    typeof(content) == TYPE_LIST || raise(E_TYPE, "content must be list");
+    const names = this:_token_names();
+    let pending = {{content, 0, false}};
+    let result = "";
+    let count = 0;
+    while (pending)
+      const {value, depth, raw} = pending[$];
+      pending = pending[1..$ - 1];
+      count = count + 1;
+      (depth <= 48 && count <= 32768) || raise(E_INVARG, "Content exceeds template limits.");
+      if (raw)
+        result = result + value;
+      elseif (typeof(value) == TYPE_STR)
+        result = result + this:_escape(value);
+      elseif (typeof(value) == TYPE_LIST)
+        length(value) <= 8192 || raise(E_INVARG, "Too many template entries.");
+        for i in [1..length(value)]
+          pending = {@pending, {value[$ - i + 1], depth + 1, false}};
+        endfor
+      elseif (typeof(value) == TYPE_FLYWEIGHT && value.delegate == $sub)
+        if (value.type == 'capitalize)
+          pending = {@pending, {"}", depth, true}, {value.content, depth + 1, false},
+            {"{cap ", depth, true}};
+        elseif (value.type == 'self_alt)
+          const cap = `value.capitalize ! E_PROPNF => false';
+          pending = {@pending, {cap ? "}}" | "}", depth, true},
+            {value.for_others, depth + 1, false}, {"|", depth, true},
+            {value.for_self, depth + 1, false}, {cap ? "{cap {" | "{", depth, true}};
+        else
+          result = result + this:_reconstruct_token(value, names);
+        endif
+      else
+        raise(E_INVARG, "This content cannot be represented by a substitution template.");
+      endif
+      length(result) <= 65536 || raise(E_INVARG, "Template exceeds 65536 characters.");
+    endwhile
+    "Check the source against the same bounds as hand-written templates.";
+    this:compile(result);
     return result;
   endmethod
 
+  method _escape owner: HACKER
+    "Quote literal delimiters so substituted content never becomes template syntax.";
+    const {text} = args;
+    let escaped = strsub(text, "\\", "\\\\", 1);
+    for delimiter in ({"{", "}", "|"})
+      escaped = strsub(escaped, delimiter, "\\" + delimiter, 1);
+    endfor
+    return escaped;
+  endmethod
+
+  method _token_names owner: HACKER
+    "Derive reverse spellings once per decompile from the compiler's vocabulary.";
+    let names = [];
+    for name in (mapkeys(this.token_map))
+      const {method, method_args} = this.token_map[name];
+      const token = $sub:(method)(@method_args);
+      const capitalize = `token.capitalize ! E_PROPNF => false';
+      names[tostr(token.type) + (capitalize ? ":c" | ":")] = name;
+    endfor
+    return names;
+  endmethod
+
   method _reconstruct_token owner: HACKER
-    "Reconstruct {token} syntax from a flyweight.";
-    {fw} = args;
-    typeof(fw) != TYPE_FLYWEIGHT && raise(E_TYPE, "must be flyweight");
-    token_type = fw.type;
-    !token_type && return "{?}";
-    capitalize = `fw.capitalize ! E_PROPNF => false';
-    token_type == 'self_alt && return "{" + tostr(fw.for_self) + "|" + tostr(fw.for_others) + "}";
-    if (token_type == 'article_a)
-      prefix = capitalize ? "A" | "a";
-      return "{" + prefix + " " + tostr(fw.binding_name) + "}";
+    "Reconstruct a supported substitution without discarding capitalization or nested content.";
+    const {fw, names} = args;
+    (typeof(fw) == TYPE_FLYWEIGHT && fw.delegate == $sub) || raise(E_TYPE, "Expected a $sub token.");
+    const kind = fw.type;
+    const capitalize = `fw.capitalize ! E_PROPNF => false';
+    let token = "";
+    if (kind in {'article_a, 'article_the})
+      const prefix = kind == 'article_a ? "a" | "the";
+      const name = tostr(fw.binding_name);
+      this:_binding_name(name);
+      const suffix = `fw.capitalize_binding ! E_PROPNF => false' ? "c" | "";
+      if (suffix)
+        fw.binding_name in {'n, 'd, 'i, 't, 'l}
+          || raise(E_INVARG, "Unsupported capitalized article binding.");
+      endif
+      return "{" + (capitalize ? prefix:capitalize() | prefix) + " " + name + suffix + "}";
+    elseif (kind in {'binding, 'content_binding})
+      const name = tostr(fw.binding_name);
+      this:_binding_name(name);
+      let prefix = kind == 'content_binding ? "content " | "";
+      kind == 'binding && maphaskey(this.token_map, name) && (prefix = "bind ");
+      token = "{" + prefix + name + "}";
+    else
+      const key = tostr(kind) + (capitalize ? ":c" | ":");
+      if (maphaskey(names, key))
+        return "{" + names[key] + "}";
+      endif
+      length(token) || raise(E_INVARG, "Unknown substitution: " + tostr(kind));
     endif
-    if (token_type == 'article_the)
-      prefix = capitalize ? "The" | "the";
-      return "{" + prefix + " " + tostr(fw.binding_name) + "}";
-    endif
-    if (token_type == 'binding)
-      name_str = tostr(fw.binding_name);
-      return "{" + (capitalize ? name_str:capitalize() | name_str) + "}";
-    endif
-    "Map type symbols back to token names";
-    if (maphaskey(this.typemap, token_type))
-      base = this.typemap[token_type];
-      return "{" + base + (capitalize ? "c" | "") + "}";
-    endif
-    "Object-specific versions (dobj_*, iobj_*)";
-    token_str = tostr(token_type);
-    if (token_str:starts_with("dobj_"))
-      base = token_str[6..$];
-      maphaskey(this.verb_map, base) && return "{" + this.verb_map[base] + "_dobj}";
-      suffix = capitalize ? "c_dobj" | "_dobj";
-      maphaskey(this.pronoun_map, base) && return "{" + this.pronoun_map[base] + suffix + "}";
-    endif
-    if (token_str:starts_with("iobj_"))
-      base = token_str[6..$];
-      maphaskey(this.verb_map, base) && return "{" + this.verb_map[base] + "_iobj}";
-      suffix = capitalize ? "c_iobj" | "_iobj";
-      maphaskey(this.pronoun_map, base) && return "{" + this.pronoun_map[base] + suffix + "}";
-    endif
-    return "{?" + token_str + "?}";
+    return capitalize ? "{cap " + token + "}" | token;
   endmethod
 
   method test_compile_simple_binding owner: HACKER
@@ -370,8 +352,8 @@ object SUB_UTILS [
     $test_utils:assert_eq(length(result), 1, "self-alt should compile to one token");
     $test_utils:assert_type(result[1], TYPE_FLYWEIGHT, "self-alt token should be a flyweight");
     $test_utils:assert_eq(result[1].type, 'self_alt, "self-alt token type");
-    $test_utils:assert_eq(result[1].for_self, "tired", "self-alt self text");
-    $test_utils:assert_eq(result[1].for_others, "exhausted", "self-alt other text");
+    $test_utils:assert_eq(result[1].for_self, {"tired"}, "self-alt self text");
+    $test_utils:assert_eq(result[1].for_others, {"exhausted"}, "self-alt other text");
     return true;
   endmethod
 
@@ -404,22 +386,28 @@ object SUB_UTILS [
     return true;
   endmethod
 
-  verb test_compile_nested (this none none) owner: ARCH_WIZARD flags: "rxd"
-    "Test compilation of nested braces.";
-    template = "Look at {the {adj} key}.";
-    result = this:compile(template);
-    "Expected: 'Look at ', FW(article_the, binding='{adj} key'), '.'";
-    "Note: The current parser treats the inner content as a raw string binding name because _parse_token doesnt recursively compile.";
-    "However, the key improvement is that it DOESNT choke on the inner braces.";
-    $test_utils:assert_eq(length(result), 3, "nested template should compile to three parts");
-    $test_utils:assert_eq(result[1], "Look at ", "nested template prefix");
-    $test_utils:assert_type(result[2], TYPE_FLYWEIGHT, "nested article token should be a flyweight");
-    "The binding name should capture the full inner content including braces";
-    "If the parser stopped at the first }, it would be '{adj'";
-    binding = tostr(result[2].binding_name);
-    $test_utils:assert_eq(binding, "{adj} key", "nested binding should preserve inner braces");
+  method test_compile_nested owner: HACKER
+    "Nested alternatives resolve only the chosen branches, including their participant tokens.";
+    const actor = $thing:create(true);
+    actor.name = "alex";
+    const item = $thing:create(true);
+    item.name = "pebble";
+    for example in ({{"{You see {d}|{nc} sees {d}}", "You see pebble", "Alex sees pebble"},
+      {"{you {take|takes} {d}|{nc} {take|takes} {d}}", "you take pebble", "Alex takes pebble"},
+      {"{ safe |{missing}}", " safe ", false}, {"{|other}", "", "other"}})
+      const event = $event:mk_test(actor, @this:compile(example[1])):with_dobj(item);
+      $test_utils:assert_eq(strcmp($document:render(event:resolve(actor), 'text_plain)['body],
+        example[2]), 0, "actor: " + example[1]);
+      if (typeof(example[3]) == TYPE_STR)
+        $test_utils:assert_eq(strcmp($document:render(event:resolve(player), 'text_plain)['body],
+          example[3]), 0, "observer: " + example[1]);
+      endif
+    endfor
+    for invalid in ({"{the {adj} key}", "{a|b|c}", "stray }", "{unclosed"})
+      $test_utils:assert_raises(E_INVARG, this, "compile", {invalid}, invalid);
+    endfor
     return true;
-  endverb
+  endmethod
 
   verb test_compile_properties (this none none) owner: ARCH_WIZARD flags: "rxd"
     "Test property-based map lookups.";
@@ -453,8 +441,44 @@ object SUB_UTILS [
     $test_utils:assert_raises(E_INVARG, this, "compile", {"x":repeat(65537)}, "source limit");
     $test_utils:assert_raises(E_INVARG, this, "compile", {"{n}":repeat(2049)}, "token limit");
     $test_utils:assert_raises(E_INVARG, this, "compile", {"{":repeat(17) + "n" + "}":repeat(17)}, "nesting limit");
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"|":repeat(8193)}, "delimiter limit");
+    const deepest = "{cap ":repeat(15) + "{n}" + "}":repeat(15);
+    $test_utils:assert_eq(this:decompile(this:compile(deepest)), deepest, "nesting boundary roundtrip");
     $test_utils:assert_eq(this:compile(""), {}, "empty messages are valid");
     $test_utils:assert_eq(this:compile("plain text"), {"plain text"}, "literal messages are valid");
+    return true;
+  endmethod
+
+  method test_template_roundtrips owner: HACKER
+    "Editing compiled templates preserves both perspectives, literal delimiters, and capitalization.";
+    const actor = $thing:create(true);
+    actor.name = "éloïse";
+    const item = $thing:create(true);
+    item.name = "apple";
+    const samples = {{"literal {n} | \\ end"}, {"plain ", this:compile("{nc}")[1]},
+      {$sub:bindingc('direction)}, {$sub:binding('s)}, {$sub:the('dc)},
+      {$sub:self_altc("you", {"they see ", $sub:d()})},
+      {$sub:self_alt({$sub:nc(), " | ", $sub:d()}, {$sub:thec('d), " is here"})},
+      {$sub:content_binding('detail)}};
+    for content in (samples)
+      const edited = this:compile(this:decompile(content));
+      const original = $event:mk_test(actor, @content):with_dobj(item)
+        :with_text_binding('direction, "north"):with_text_binding('s, "literal subject")
+        :with_content_binding('detail, $format.code:inline("{literal}"));
+      const rebuilt = $event:mk_test(actor, @edited):with_dobj(item)
+        :with_text_binding('direction, "north"):with_text_binding('s, "literal subject")
+        :with_content_binding('detail, $format.code:inline("{literal}"));
+      for viewer in ({actor, player})
+        for format in ({'text_plain, 'text_html, 'text_djot})
+          const expected = $document:render(original:resolve(viewer), format);
+          const actual = $document:render(rebuilt:resolve(viewer), format);
+          $test_utils:assert_true(equal(actual, expected), "roundtrip: " + this:decompile(content));
+        endfor
+      endfor
+    endfor
+    $test_utils:assert_raises(E_INVARG, this, "decompile", {{$format.code:inline("code")}},
+      "format nodes need explicit content bindings");
+    $test_utils:assert_raises(E_INVARG, this, "decompile", {{123}}, "do not stringify unsupported values");
     return true;
   endmethod
 

@@ -93,6 +93,12 @@ Cowbell entries.
 
 ### Fixed
 
+- Nested message alternatives now resolve their substitutions and preserve branch whitespace. Escape
+  literal braces, pipes, and backslashes with a backslash. Stray closing braces are errors.
+- Displayed message templates preserve capitalization, nested alternatives, and literal punctuation
+  when edited again. Unsupported content raises an error instead of producing misleading text. Use
+  `{cap CONTENT}`, `{bind NAME}`, and `{content NAME}` for explicit operations.
+
 - Capitalized substitutions handle Unicode initials, including accented names, without changing the
   rest of the name.
 
