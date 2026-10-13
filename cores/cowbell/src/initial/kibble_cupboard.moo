@@ -8,11 +8,8 @@ object KIBBLE_CUPBOARD [
   owner: ARCH_WIZARD
   readable: true
 
-  property kibble_taken_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_take, .when = <RULE, .name = 'kibble_check, .body = {{'isa, {'var, 'Item}, CAT_KIBBLE}}, .variables = {'Item}, .head = 'kibble_check>, .effects = {{'trigger, HENRI, 'on_kibble_taken}}, .fired_at = 0>;
-  property waft_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_open, .when = 0, .effects = {
-      {'announce, "A waft of kibble-scented air escapes from the cupboard."},
-      {'trigger, HENRI, 'on_cupboard_open}
-    }, .fired_at = 0>;
+  property kibble_taken_reaction (owner: HACKER, flags: "r") = 0;
+  property waft_reaction (owner: HACKER, flags: "r") = 0;
 
   override aliases (owner: ARCH_WIZARD, flags: "rc") = {"cupboard", "cabinet", "wooden cupboard"};
   override close_msg (owner: ARCH_WIZARD, flags: "rc") = {
@@ -82,5 +79,18 @@ object KIBBLE_CUPBOARD [
   method fact_is_portable owner: ARCH_WIZARD
     "Cupboards are not portable.";
     return false;
+  endmethod
+
+  method initialize owner: ARCH_WIZARD
+    "Install this object's reactions through the same owner-authorized API used by builders.";
+    const principal = caller_perms();
+    principal == this.owner || principal.wizard || raise(E_PERM);
+    set_task_perms(principal);
+    pass(@args);
+    $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_take, .when = <$rule, .name = 'kibble_check, .body = {{'isa, {'var, 'Item}, $cat_kibble}}, .variables = {'Item}, .head = 'kibble_check>, .effects = {{'trigger, $henri, 'on_kibble_taken}}, .fired_at = 0>);
+    $reaction:install(this, "waft_reaction", <$reaction, .enabled = true, .trigger = 'on_open, .when = 0, .effects = {
+      {'announce, "A waft of kibble-scented air escapes from the cupboard."},
+      {'trigger, $henri, 'on_cupboard_open}
+    }, .fired_at = 0>);
   endmethod
 endobject

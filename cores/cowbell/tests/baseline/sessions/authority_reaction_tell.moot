@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 @wizard
-; add_property(#90101, "delivery_reaction", $reaction:mk('delivery, 0, {{'tell, 'Guest, "{nc} sent a reaction."}}), {#90101, "r"}); add_verb(#90102, {#90102, "rxd", "authority-reaction-probe"}, {"this", "none", "this"}); set_verb_code(#90102, "authority-reaction-probe", {"#90101:fire_trigger('delivery, ['Actor -> #90101, 'Guest -> this]); return true;"}); return true;
+; $reaction:install(#90101, "delivery_reaction", $reaction:mk('delivery, 0, {{'tell, 'Guest, "{nc} sent a reaction."}})); add_verb(#90102, {#90102, "rxd", "authority-reaction-probe"}, {"this", "none", "this"}); set_verb_code(#90102, "authority-reaction-probe", {"return `#90101:fire_trigger('delivery, ['Actor -> #90101, 'Guest -> this]) ! E_PERM => E_PERM';"}); return true;
 true
-; return #90102:("authority-reaction-probe")();
+; return #90102:("authority-reaction-probe")() == E_PERM;
+true
+@nonprogrammer
+@quiet
+@programmer
+; #90101:fire_trigger('delivery, ['Actor -> #90101, 'Guest -> #90102]); return true;
 true
 @nonprogrammer
 @text RUNTIME_PROGRAMMER sent a reaction.

@@ -37,12 +37,12 @@ object HENRI [
     <SUB, .capitalize = false, .type = 'actor>,
     ", radiating offended dignity. \"This is MY couch.\""
   };
-  property couch_intruder_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_couch_intruder, .when = 0, .effects = {{'announce, 'couch_intruder_msg}}, .fired_at = 0>;
+  property couch_intruder_reaction (owner: HACKER, flags: "r") = 0;
   property cupboard_open_msg (owner: HACKER, flags: "r") = {
     <SUB, .capitalize = true, .type = 'dobj>,
     "'s ears swivel like radar dishes toward the cupboard."
   };
-  property cupboard_open_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_cupboard_open, .when = 0, .effects = {{'announce, 'cupboard_open_msg}}, .fired_at = 0>;
+  property cupboard_open_reaction (owner: HACKER, flags: "r") = 0;
   property feed_denied_msg (owner: HACKER, flags: "r") = {
     <SUB, .capitalize = true, .type = 'actor>,
     " turns ",
@@ -74,7 +74,7 @@ object HENRI [
       <SUB, .capitalize = true, .type = 'dobj>,
       " forgets to be grouchy for a moment, whiskers twitching with anticipation."
     }}>;
-  property kibble_taken_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_kibble_taken, .when = 0, .effects = {{'action, 'stand, COUCH}, {'announce, 'kibble_taken_msg_bag}}, .fired_at = 0>;
+  property kibble_taken_reaction (owner: HACKER, flags: "r") = 0;
   property look_self_msg_bag (owner: HACKER, flags: "rc") = <MSG_BAG, {{
       <SUB, .capitalize = true, .type = 'actor>,
       " glares at you with an expression that clearly says 'This is all ",
@@ -93,8 +93,8 @@ object HENRI [
       " gives you a look that manages to convey both disdain and resignation about their current living conditions."
     }}>;
   property mood (owner: HACKER, flags: "rc") = "sleepy";
-  property on_pet_grouchy_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_pet, .when = <RULE, .name = 'grouchy_rule, .body = {{'is_grouchy, {'var, 'This}}}, .variables = {'This}, .head = 'grouchy_rule>, .effects = {{'announce, 'pet_grouchy_msg}}, .fired_at = 0>;
-  property on_pet_playful_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = 'on_pet, .when = <RULE, .name = 'playful_rule, .body = {{'is_playful, {'var, 'This}}}, .variables = {'This}, .head = 'playful_rule>, .effects = {{'announce, 'pet_playful_msg}}, .fired_at = 0>;
+  property on_pet_grouchy_reaction (owner: HACKER, flags: "r") = 0;
+  property on_pet_playful_reaction (owner: HACKER, flags: "r") = 0;
   property pet_denied_msg_bag (owner: HACKER, flags: "rc") = <MSG_BAG, {"{nc} hisses and swats at {p_dobj} hand before {dobj} can touch him.", "{nc} lets out a low growl and bares {p} teeth at {dobj}.", "{nc} backs away with a suspicious glare, clearly warning {dobj} to keep {p} distance.", "{nc} flexes {p} claws menacingly as {dobj} approaches, a silent but clear threat."}>;
   property pet_grouchy_msg (owner: HACKER, flags: "r") = {
     <SUB, .capitalize = true, .type = 'dobj>,
@@ -199,11 +199,7 @@ object HENRI [
     <SUB, .capitalize = false, .type = 'dobj_pos_adj>,
     " capacity for outrage and slumps into a resigned loaf."
   };
-  property sleepy_threshold_reaction (owner: HACKER, flags: "r") = <REACTION, .enabled = true, .trigger = {'when, 'pets_received, 'ge, 4}, .when = 0, .effects = {
-      {'set, 'mood, "sleepy"},
-      {'announce, 'sleepy_threshold_msg},
-      {'action, 'sit, COUCH}
-    }, .fired_at = 0>;
+  property sleepy_threshold_reaction (owner: HACKER, flags: "r") = 0;
 
   override aliases (owner: HACKER, flags: "rc") = {"cat", "grouchy cat"};
   override description (owner: HACKER, flags: "rc") = "A sleek black cat with piercing green eyes and an air of perpetual annoyance. His fur is immaculately groomed despite the construction dust, and he holds himself with the offended dignity of a creature who knows he deserves better accommodations. He occasionally flicks his tail in irritation, as if to emphasize his displeasure with the current state of affairs.";
@@ -357,9 +353,7 @@ object HENRI [
   verb "pet stroke" (this none none) owner: HACKER flags: "rxd"
     "Handle petting Henri - uses rule system to determine if allowed";
     "Increment pets counter (attempts count towards his resignation)";
-    old_pets = this.pets_received;
-    this.pets_received = old_pets + 1;
-    this:_check_thresholds('pets_received, old_pets, this.pets_received, ['Actor -> player]);
+    $reaction:change(this, 'pets_received, 'increment, 1, ['Actor -> player]);
     "Check access via rule";
     access_check = this:can_be_petted(player);
     if (!access_check['allowed])
@@ -781,5 +775,23 @@ object HENRI [
     "Called by room when a player enters. Auto-start behaviors if needed.";
     {who} = args;
     this:_maybe_start_behaviours();
+  endmethod
+
+  method initialize owner: ARCH_WIZARD
+    "Install this object's reactions through the same owner-authorized API used by builders.";
+    const principal = caller_perms();
+    principal == this.owner || principal.wizard || raise(E_PERM);
+    set_task_perms(principal);
+    pass(@args);
+    $reaction:install(this, "couch_intruder_reaction", <$reaction, .enabled = true, .trigger = 'on_couch_intruder, .when = 0, .effects = {{'announce, 'couch_intruder_msg}}, .fired_at = 0>);
+    $reaction:install(this, "cupboard_open_reaction", <$reaction, .enabled = true, .trigger = 'on_cupboard_open, .when = 0, .effects = {{'announce, 'cupboard_open_msg}}, .fired_at = 0>);
+    $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_kibble_taken, .when = 0, .effects = {{'action, 'stand, $couch}, {'announce, 'kibble_taken_msg_bag}}, .fired_at = 0>);
+    $reaction:install(this, "on_pet_grouchy_reaction", <$reaction, .enabled = true, .trigger = 'on_pet, .when = <$rule, .name = 'grouchy_rule, .body = {{'is_grouchy, {'var, 'This}}}, .variables = {'This}, .head = 'grouchy_rule>, .effects = {{'announce, 'pet_grouchy_msg}}, .fired_at = 0>);
+    $reaction:install(this, "on_pet_playful_reaction", <$reaction, .enabled = true, .trigger = 'on_pet, .when = <$rule, .name = 'playful_rule, .body = {{'is_playful, {'var, 'This}}}, .variables = {'This}, .head = 'playful_rule>, .effects = {{'announce, 'pet_playful_msg}}, .fired_at = 0>);
+    $reaction:install(this, "sleepy_threshold_reaction", <$reaction, .enabled = true, .trigger = {'when, 'pets_received, 'ge, 4}, .when = 0, .effects = {
+      {'set, 'mood, "sleepy"},
+      {'announce, 'sleepy_threshold_msg},
+      {'action, 'sit, $couch}
+    }, .fired_at = 0>);
   endmethod
 endobject
