@@ -213,6 +213,20 @@ object SYSOBJ [
     `user.last_connected = time() ! E_PROPNF, E_PERM';
   endmethod
 
+  method do_action owner: ARCH_WIZARD
+    "Handle an untrusted client action as the authenticated player. Unsupported actions do not run.";
+    const {action} = args;
+    const principal = caller_perms();
+    $root:check_actor(player, principal);
+    set_task_perms(principal);
+    if (typeof(action) == TYPE_MAP && `action["kind"] ! E_RANGE => ""' == "command"
+        && "exit" in mapkeys(action) && "command" in mapkeys(action))
+      return $room:use_exit_action(player, action["command"], action["exit"]);
+    endif
+    player:inform_current($event:mk_info(player, "This action is not supported. Look again for current actions."));
+    return false;
+  endmethod
+
   method do_command owner: ARCH_WIZARD
     "Custom command handler which is capable of handling ambiguous object matches by attempting to find matching verb candidates.";
     "...This code should only be run as a server task, but we'll let wizards poke at it...";

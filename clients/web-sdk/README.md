@@ -33,6 +33,16 @@ a consumer narrows them. Malformed binary buffers can throw during FlatBuffer ac
 decoding; callers must catch those failures at the transport boundary. Meadow discards invalid
 live/history payloads and retains history pagination metadata independently of accepted events.
 
+## Structured actions
+
+Use `encodeAction(payload)` to retain an action's context when sending it through a connected
+WebSocket or `SseSessionTransport`. The result is a binary frame. The core must provide a
+`do_action(payload)` handler that validates the action as the authenticated player.
+
+Action payloads are untrusted JSON objects, limited to 16 KiB. They do not grant permissions. A core
+can use captured identities to reject links whose target has changed since the client displayed
+them. Send typed commands as ordinary strings.
+
 ## 2.0 Development
 
 This package is a private npm workspace during the 2.0 development cycle. Install dependencies and

@@ -16,6 +16,15 @@ object HEADLESS_PASSAGE_SCENARIOS
     return target:(operation)(@arguments);
   endmethod
 
+  method test_exit_actions_authenticate_the_actor owner: ARCH_WIZARD
+    "A reference to a passage does not grant control of another player.";
+    const before = #90102.location;
+    $test_utils:assert_eq(`this:_as_programmer($room, "use_exit_action", #90102, "go east", [])
+      ! E_PERM => E_PERM', E_PERM, "Foreign players cannot be supplied as the actor");
+    $test_utils:assert_eq(#90102.location, before, "Rejected actions leave the actor in place");
+    return true;
+  endmethod
+
   method test_configure_cannot_mutate_the_shared_prototype owner: ARCH_WIZARD
     "A public convenience constructor cannot reconfigure the world's shared passage prototype.";
     const before = $passage:configuration($passage);

@@ -1,0 +1,58 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); let p = $passage:mk(#90103, "east", {}, "", false, #90110, "west", {}, "", false); p.is_door = true; #90108:create_passage(#90103, #90110, p); #90102.runtime_probe = #90103:exit_annotation("east"); add_verb(#90102, {#90100, "rxd", "use-test-exit"}, {"none", "none", "none"}); set_verb_code(#90102, "use-test-exit", {"set_task_perms(player); return #0:do_action(this.runtime_probe);"}); return true;
+true
+// Replacing a connection with the same endpoints expires its earlier link.
+; let p = #90108:passage_for(#90103, #90110); #90108:set_passage(#90103, #90110, p); return true;
+true
+@nonprogrammer
+% use-test-exit
+=That exit has changed or is no longer here. Look again.
+@wizard
+; return #90102.location == #90103;
+true
+// A link from a different source cannot select this room's east exit.
+; let d = #90103:exit_annotation("east"); let ref = d["exit"]; ref["source"] = "oid:90110"; d["exit"] = ref; #90102.runtime_probe = d; return true;
+true
+@nonprogrammer
+% use-test-exit
+=That exit has changed or is no longer here. Look again.
+@wizard
+// Valid identity does not authorize a different destination or arbitrary command.
+; let d = #90103:exit_annotation("east"); d["exit"]["destination"] = "oid:90109"; #90102.runtime_probe = d; return true;
+true
+@nonprogrammer
+% use-test-exit
+=That exit has changed or is no longer here. Look again.
+@wizard
+; let d = #90103:exit_annotation("east"); d["command"] = "say this must not run"; #90102.runtime_probe = d; return true;
+true
+@nonprogrammer
+% use-test-exit
+=That exit has changed or is no longer here. Look again.
+// Door state is checked when used, even though its identity remains the same.
+@wizard
+; #90102.runtime_probe = #90103:exit_annotation("east"); let p = #90108:passage_for(#90103, #90110); #90108:update_passage(#90103, #90110, p:with_open(false)); return true;
+true
+@nonprogrammer
+% use-test-exit
+~~closed
+@wizard
+; return #90102.location == #90103;
+true
+; #90102.runtime_probe = #90103:exit_annotation("east"); return true;
+true
+@nonprogrammer
+% use-test-exit
+=You open the east door.
+@wizard
+; return #90102.location == #90103 && #90108:passage_for(#90103, #90110).is_open;
+true
+; #90102.runtime_probe = #90103:exit_annotation("east"); return true;
+true
+@nonprogrammer
+% use-test-exit
+@wizard
+; return #90102.location == #90110;
+true

@@ -18,6 +18,25 @@ import { describe, expect, it, vi } from "vitest";
 import { AnnotationCommandReview } from "./AnnotationCommandReview";
 
 describe("annotation command review", () => {
+    it("retains the captured exit identity when submitting a command", async () => {
+        const submit = vi.fn(() => true);
+        const annotation = {
+            kind: "command" as const,
+            command: "go east",
+            exit: { source: "oid:12", destination: "oid:13", passage: "original-door" },
+        };
+        render(
+            <AnnotationCommandReview
+                annotation={annotation}
+                position={{ x: 0, y: 0 }}
+                onSubmit={submit}
+                onClose={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Go" }));
+        await waitFor(() => expect(submit).toHaveBeenCalledExactlyOnceWith("go east", annotation));
+    });
+
     it("sends exactly the supplied command only on confirmation", async () => {
         const submit = vi.fn(() => true);
         const close = vi.fn();

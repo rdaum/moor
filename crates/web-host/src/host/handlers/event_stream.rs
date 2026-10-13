@@ -15,6 +15,7 @@
 
 use crate::host::{
     WebHost,
+    actions::action_request,
     auth::{extract_auth_token_header, extract_client_credentials},
     web_host::WsHostError,
 };
@@ -363,25 +364,39 @@ pub async fn session_command_handler(
         Ok(token) => token,
         Err(status) => return status.into_response(),
     };
-    let command = match std::str::from_utf8(&body) {
-        Ok(command) => command.trim().to_owned(),
-        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    let mode = InvocationMode::Connected {
+        client_token: client.client_token.clone(),
     };
-    match client
-        .rpc
-        .client_call(
-            client.client_id,
-            ClientRequest::Command {
-                auth_token,
-                handler_object: host.handler_object,
-                command,
-                mode: InvocationMode::Connected {
-                    client_token: client.client_token,
-                },
-            },
-        )
-        .await
-    {
+    let request = if headers
+        .get("content-type")
+        .and_then(|h| h.to_str().ok())
+        .is_some_and(|h| {
+            h.split(';')
+                .next()
+                .is_some_and(|t| t.trim() == "application/json")
+        }) {
+        match action_request(
+            &body,
+            host.handler_object,
+            auth_token,
+            client.client_token.clone(),
+        ) {
+            Ok(request) => request,
+            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        }
+    } else {
+        let command = match std::str::from_utf8(&body) {
+            Ok(command) => command.trim().to_owned(),
+            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        };
+        ClientRequest::Command {
+            auth_token,
+            handler_object: host.handler_object,
+            command,
+            mode,
+        }
+    };
+    match client.rpc.client_call(client.client_id, request).await {
         Ok(ClientReply::TaskSubmitted { .. }) => StatusCode::ACCEPTED.into_response(),
         Ok(_) => StatusCode::BAD_GATEWAY.into_response(),
         Err(error) => rpc_status(error).into_response(),
@@ -447,6 +462,7 @@ mod tests {
     struct Runtime {
         id: Uuid,
         requests: Mutex<Vec<EventStreamRequest>>,
+        invocations: Mutex<Vec<ClientRequest>>,
         events: Mutex<Vec<Arc<[u8]>>>,
         denied: bool,
         subscription_closed: bool,
@@ -458,6 +474,17 @@ mod tests {
             _: Uuid,
             request: ClientRequest,
         ) -> Result<ClientReply, RpcError> {
+            if matches!(
+                &request,
+                ClientRequest::Command { .. } | ClientRequest::InvokeVerb { .. }
+            ) {
+                self.invocations.lock().unwrap().push(request);
+                return if self.denied {
+                    Err(RpcError::Daemon(RpcMessageError::PermissionDenied))
+                } else {
+                    Ok(ClientReply::TaskSubmitted { task_id: 1 })
+                };
+            }
             let ClientRequest::EventStream { request, .. } = request else {
                 panic!("unexpected request")
             };
@@ -551,6 +578,7 @@ mod tests {
         Arc::new(Runtime {
             id: Uuid::new_v4(),
             requests: Mutex::new(vec![]),
+            invocations: Mutex::new(vec![]),
             events: Mutex::new(vec![]),
             denied: false,
             subscription_closed: false,
@@ -569,6 +597,82 @@ mod tests {
         )
         .unwrap()
         .into()
+    }
+
+    #[tokio::test]
+    async fn session_commands_keep_action_context_and_plain_text_distinct() {
+        let runtime = runtime();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-moor-auth-token", "actor".parse().unwrap());
+        headers.insert(
+            "content-type",
+            "application/json; charset=utf-8".parse().unwrap(),
+        );
+        let body = br#"{"kind":"command","command":"go east","exit":{"passage":"captured"}}"#;
+        let response = session_command_handler(
+            State(host(runtime.clone())),
+            client(runtime.clone()),
+            headers.clone(),
+            Bytes::from_static(body),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        headers.insert("content-type", "text/plain".parse().unwrap());
+        let response = session_command_handler(
+            State(host(runtime.clone())),
+            client(runtime.clone()),
+            headers,
+            Bytes::from_static(b" go west "),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let invocations = runtime.invocations.lock().unwrap();
+        assert_eq!(invocations.len(), 2);
+        let ClientRequest::InvokeVerb {
+            verb,
+            args,
+            mode: InvocationMode::Connected { client_token },
+            ..
+        } = &invocations[0]
+        else {
+            panic!("action must invoke the connected handler")
+        };
+        assert_eq!(*verb, moor_var::Symbol::mk("do_action"));
+        assert_eq!(
+            args[0],
+            moor_var::json::json_to_var(&serde_json::from_slice(body).unwrap(), false)
+        );
+        assert_eq!(client_token, &ClientToken("token".into()));
+        assert!(
+            matches!(&invocations[1], ClientRequest::Command { command, .. } if command == "go west")
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_actions_do_not_fall_back_to_commands() {
+        let runtime = runtime();
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        let response = session_command_handler(
+            State(host(runtime.clone())),
+            client(runtime.clone()),
+            headers.clone(),
+            Bytes::from_static(b"{}"),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        headers.insert("x-moor-auth-token", "actor".parse().unwrap());
+        for body in [b"go east".as_slice(), b"null", b"[]", b"{"] {
+            let response = session_command_handler(
+                State(host(runtime.clone())),
+                client(runtime.clone()),
+                headers.clone(),
+                Bytes::copy_from_slice(body),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+        assert!(runtime.invocations.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

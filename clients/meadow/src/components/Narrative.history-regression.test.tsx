@@ -13,6 +13,7 @@
 import { act, render } from "@testing-library/react";
 import { createRef, useSyncExternalStore } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { actionBody } from "../../../web-sdk/src/actions";
 import { installMockWebHostFetch } from "../../../web-sdk/src/testing/mock-http-host";
 import type { Transcript } from "../lib/transcript";
 import { Narrative, NarrativeMessage, NarrativeRef } from "./Narrative";
@@ -75,6 +76,25 @@ async function fetchMockHistory(): Promise<NarrativeMessage[]> {
 describe("Narrative history merge regressions", () => {
     afterEach(() => {
         // no-op cleanup handled per-test by restore()
+    });
+
+    it("sends captured action context while keeping typed commands as text", () => {
+        installMatchMediaMock();
+        const narrativeRef = createRef<NarrativeRef>();
+        const send = vi.fn<(message: string | Uint8Array | ArrayBuffer) => boolean>(() => true);
+        render(<Narrative ref={narrativeRef} visible={true} connectionStatus="connected" onSendMessage={send} />);
+        const annotation = {
+            kind: "command" as const,
+            command: "go east",
+            exit: { source: "oid:12", destination: "oid:13", passage: "door" },
+        };
+        act(() => {
+            expect(narrativeRef.current!.submitCommand("go east", annotation)).toBe(true);
+            expect(narrativeRef.current!.submitCommand("go west")).toBe(true);
+        });
+        const frame = send.mock.calls[0][0] as Uint8Array<ArrayBuffer>;
+        expect(JSON.parse(new TextDecoder().decode(actionBody(frame)))).toEqual(annotation);
+        expect(send.mock.calls[1]).toEqual(["go west"]);
     });
 
     it("keeps chronological order when historical backfill overlaps live messages", async () => {

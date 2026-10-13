@@ -27,7 +27,7 @@ interface Props {
     position: { x: number; y: number };
     authToken?: string | null;
     revision?: number;
-    onSubmit: (command: string) => boolean;
+    onSubmit: (command: string, context?: CommandAnnotation) => boolean;
     onClose: () => void;
 }
 interface Draft {
@@ -140,7 +140,9 @@ export function AnnotationCommandReview(
             }
             setInvalid(checked);
             if (Object.keys(checked).length) return;
-            if (!onSubmit(annotationCommand(annotation, drafts))) {
+            const command = annotationCommand(annotation, drafts);
+            const sent = annotation.exit ? onSubmit(command, annotation) : onSubmit(command);
+            if (!sent) {
                 setError("Not connected. Reconnect before running this command.");
                 return;
             }

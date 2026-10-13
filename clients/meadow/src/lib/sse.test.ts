@@ -19,6 +19,7 @@ import { RequestInputEvent } from "@moor/schema/generated/moor-rpc/request-input
 import { TaskSuspendedEvent } from "@moor/schema/generated/moor-rpc/task-suspended-event";
 import { Builder } from "flatbuffers";
 import { afterEach, expect, it, vi } from "vitest";
+import { encodeAction } from "../../../web-sdk/src/actions";
 import { readSse, type SseResumeState, SseSessionTransport } from "../../../web-sdk/src/sse";
 
 const streamId = "11111111-1111-1111-1111-111111111111";
@@ -120,6 +121,28 @@ it("parses split UTF-8 frames, CRLF, comments, and multiple data lines", async (
     const events = [];
     for await (const event of readSse(input)) events.push(event);
     expect(events).toEqual([{ id: "x", event: "delivery", data: "hé\ntwo" }]);
+});
+
+it("sends structured actions with their context instead of using them as prompt replies", async () => {
+    const f = fixture();
+    await vi.waitFor(() => expect(f.transport.readyState).toBe(1));
+    f.resume.inputRequests.push("prompt");
+    const action = {
+        kind: "command",
+        command: "go east",
+        exit: { source: "oid:12", destination: "oid:13", passage: "door" },
+    };
+    f.transport.send(encodeAction(action));
+    expect(f.requests).not.toContain("/v1/session/command");
+    expect(f.resume.inputRequests).toEqual(["prompt"]);
+    f.transport.send("the prompt answer");
+    await vi.waitFor(() => expect(f.requests).toContain("/v1/session/command"));
+    const request = f.fetcher.mock.calls.find(([path]) => path === "/v1/session/command")![1]!;
+    expect(request.headers).toMatchObject({ "Content-Type": "application/json", "X-Moor-Client-Token": "token" });
+    expect(JSON.parse(new TextDecoder().decode(request.body as Uint8Array))).toEqual(action);
+    const reply = f.fetcher.mock.calls.find(([path]) => path === "/v1/session/input/prompt")![1]!;
+    expect(reply.body).toBe("the prompt answer");
+    expect(f.resume.inputRequests).toEqual([]);
 });
 
 it("delivers the exact FlatBuffer without a payload GET and ACKs only after processing", async () => {

@@ -12,6 +12,7 @@
 //
 
 import type { NarrativeContentType } from "@moor/web-sdk";
+import { encodeAction, type SemanticAnnotation } from "@moor/web-sdk";
 import type { WsEventMetadata as EventMetadata } from "@moor/web-sdk";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { CommandDraft, decodeDraft, draftEcho, plainDraft, serializeDraft } from "../lib/command-draft";
@@ -75,7 +76,7 @@ interface NarrativeProps {
 }
 
 export interface NarrativeRef {
-    submitCommand: (command: string) => boolean;
+    submitCommand: (command: string, context?: Extract<SemanticAnnotation, { kind: "command" }>) => boolean;
     addNarrativeContent: (
         content: string | string[],
         contentType?: NarrativeContentType,
@@ -465,11 +466,14 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
         return true;
     }, [onSendMessage, addMessage, addToHistory]);
 
-    const submitCommand = useCallback((command: string) => {
-        if (!handleSendMessage(command)) return false;
+    const submitCommand = useCallback((command: string, context?: Extract<SemanticAnnotation, { kind: "command" }>) => {
+        if (context) {
+            if (!onSendMessage(encodeAction({ ...context, command }))) return false;
+            if (getCommandEchoEnabled()) addMessage(command, "input_echo");
+        } else if (!handleSendMessage(command)) return false;
         addToHistory(plainDraft(command));
         return true;
-    }, [handleSendMessage, addToHistory]);
+    }, [handleSendMessage, onSendMessage, addMessage, addToHistory]);
 
     // Add a method to add narrative content from WebSocket messages
     const addNarrativeContent = useCallback(

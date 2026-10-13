@@ -482,6 +482,43 @@ object ROOM [
     return $room:_passage_annotation(this, passage, direction);
   endmethod
 
+  method use_exit_action owner: ARCH_WIZARD
+    "Use the connection shown in a client action, without matching its command against another exit.";
+    const {who, command, reference} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    set_task_perms(principal);
+    fn stale()
+      who:inform_current($event:mk_info(who, "That exit has changed or is no longer here. Look again."));
+      return false;
+    endfn
+    typeof(reference) == TYPE_MAP && typeof(command) == TYPE_STR || return stale();
+    const source = `reference["source"] ! E_RANGE => ""';
+    const identity = `reference["passage"] ! E_RANGE => ""';
+    const destination = `reference["destination"] ! E_RANGE => ""';
+    const room = who.location;
+    valid(room) && source == $url_utils:to_curie_str(room) || return stale();
+    const found = $room:find_connection(room, identity);
+    length(found) || return stale();
+    const passage = found[2];
+    $passage:allows_direction(passage, room) || return stale();
+    const near = passage.side_a_room == room;
+    const other = near ? passage.side_b_room | passage.side_a_room;
+    const names = $passage:expand_direction_aliases($passage:command_names(passage, room));
+    valid(other) && destination == $url_utils:to_curie_str(other) || return stale();
+    if (command in {"go " + name for name in (names)})
+      return passage:travel_from(who, room, []);
+    elseif (command in {"open " + door_name for door_name in (names)}
+        && (passage.is_door || typeof(passage.unlock_rule) == TYPE_FLYWEIGHT))
+      const result = $passage:operate(passage, 'open, who, room);
+      if (result['status] != 'applied)
+        who:inform_current($event:mk_info(who, result['reason]));
+      endif
+      return result['status] == 'applied;
+    endif
+    return stale();
+  endmethod
+
   method action_go owner: ARCH_WIZARD
     "Use a passage from this room for an authenticated actor; return whether movement completed.";
     const principal = caller_perms();

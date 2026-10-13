@@ -284,10 +284,13 @@ export const MainSurface: React.FC = () => {
     }, [argumentCoordinator, authToken, inputMetadata, stateRevision]);
     useEffect(() => () => argumentCoordinator.dispose(), [argumentCoordinator]);
     const inspect = useInspectPopover({ authToken, showMessage, refreshKey: stateRevision });
-    const submitInspectionCommand = useCallback((command: string) => {
-        if (inputMetadata) throw new Error("Finish the current prompt before running a command.");
-        return narrativeRef.current?.submitCommand(command) ?? false;
-    }, [inputMetadata, narrativeRef]);
+    const submitInspectionCommand = useCallback(
+        (command: string, context?: Extract<SemanticAnnotation, { kind: "command" }>) => {
+            if (inputMetadata) throw new Error("Finish the current prompt before running a command.");
+            return narrativeRef.current?.submitCommand(command, context) ?? false;
+        },
+        [inputMetadata, narrativeRef],
+    );
     const { closeInspectPopover, inspectObject } = inspect;
     const { handleLinkClick } = useNarrativeLinks();
 

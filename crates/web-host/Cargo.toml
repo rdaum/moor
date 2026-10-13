@@ -36,7 +36,7 @@ moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-runtime-api = { path = "../runtime-api" }
 moor-schema = { path = "../schema" }
-moor-var = { path = "../var" }
+moor-var = { path = "../var", features = ["json"] }
 moor-zmq-client = { path = "../zmq-client" }
 
 # Command Line & Configuration

@@ -44,6 +44,7 @@ use self::webrtc::{
     SignalingMessage, WebRtcConfig, WebRtcPeer, encode_signaling_message, parse_signaling_message,
 };
 use self::websocket::{ReadEvent, read_websocket_event};
+use crate::host::actions::{action_request, is_action_frame};
 
 const WEBSOCKET_PING_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -134,12 +135,19 @@ impl ClientSession {
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
         let mut expecting_input = VecDeque::new();
+        let mut deferred_actions = VecDeque::new();
         let mut ping_interval = tokio::time::interval(WEBSOCKET_PING_INTERVAL);
         let mut heartbeat_interval = tokio::time::interval(HEARTBEAT_INTERVAL);
         let mut pending_heartbeat: Option<Instant> = None;
         let mut ice_candidate_rx: Option<tokio::sync::mpsc::UnboundedReceiver<SignalingMessage>> =
             None;
         loop {
+            if expecting_input.is_empty()
+                && self.pending_task.is_none()
+                && let Some(action) = deferred_actions.pop_front()
+            {
+                self.process_command_line(action).await;
+            }
             // Check for heartbeat timeout - if we sent a heartbeat and haven't received
             // a response within HEARTBEAT_TIMEOUT, the websocket connection is likely zombie.
             if let Some(sent_time) = pending_heartbeat
@@ -160,7 +168,16 @@ impl ClientSession {
                 ) => {
                     match line {
                         ReadEvent::Command(line) => {
-                            self.process_command_line(line).await;
+                            if expecting_input.is_empty() {
+                                self.process_command_line(line).await;
+                            } else {
+                                // Keep actions separate from read() replies, including prompt races.
+                                if deferred_actions.len() >= 64 {
+                                    warn!("Too many actions queued during a prompt");
+                                    break;
+                                }
+                                deferred_actions.push_back(line);
+                            }
                         }
                         ReadEvent::InputReply(line) =>{
                             self.process_requested_input_line(line, &mut expecting_input).await;
@@ -322,28 +339,42 @@ impl ClientSession {
     }
 
     async fn process_command_line(&mut self, line: Message) {
-        let line = match line.into_text() {
-            Ok(line) => line,
-            Err(e) => {
-                warn!("Received non-text command message: {}", e);
-                return;
+        let request = if let Message::Binary(ref bytes) = line
+            && is_action_frame(bytes)
+        {
+            match action_request(
+                &bytes[1..],
+                self.handler_object,
+                self.auth_token.clone(),
+                self.client_token.clone(),
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    warn!(%error, "Invalid structured action");
+                    return;
+                }
+            }
+        } else {
+            let line = match line.into_text() {
+                Ok(line) => line,
+                Err(e) => {
+                    warn!("Received non-text command message: {}", e);
+                    return;
+                }
+            };
+            ClientRequest::Command {
+                auth_token: self.auth_token.clone(),
+                handler_object: self.handler_object,
+                command: line.trim().to_string(),
+                mode: InvocationMode::Connected {
+                    client_token: self.client_token.clone(),
+                },
             }
         };
-        let cmd = line.trim().to_string();
 
         let reply = self
             .daemon_client
-            .client_call(
-                self.client_id,
-                ClientRequest::Command {
-                    auth_token: self.auth_token.clone(),
-                    handler_object: self.handler_object,
-                    command: cmd,
-                    mode: InvocationMode::Connected {
-                        client_token: self.client_token.clone(),
-                    },
-                },
-            )
+            .client_call(self.client_id, request)
             .await;
         let reply = match reply {
             Ok(reply) => reply,

@@ -42,5 +42,6 @@ export * from "./ws.js";
 
 export * from "./annotations.js";
 
+export { encodeAction } from "./actions.js";
 export { readSse, SseSessionTransport } from "./sse.js";
 export type { SessionTransport, SseResumeState } from "./sse.js";

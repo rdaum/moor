@@ -135,6 +135,8 @@ Cowbell entries.
 
 ### Fixed
 
+- Clicking an exit in Meadow checks the room and connection shown by that link. Old links cannot
+  use a different room's exit or a replacement connection. Door actions check the current state.
 - Closed and locked passages remain visible in room descriptions, `exits`, and room panels. Door
   links offer an opening command. Both endpoints show connections stored in another area. Connection
   changes refresh occupied room panels and prevent older exit captures from replacing the new state.

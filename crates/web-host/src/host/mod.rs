@@ -13,6 +13,7 @@
 
 //! Web host state, routing, authentication, session, and HTTP handler modules.
 
+mod actions;
 mod auth;
 mod handlers;
 pub(crate) mod negotiate;

@@ -16,6 +16,7 @@ import { ClientEventUnion } from "@moor/schema/generated/moor-rpc/client-event-u
 import { PlayerSwitchedEvent } from "@moor/schema/generated/moor-rpc/player-switched-event";
 import { RequestInputEvent } from "@moor/schema/generated/moor-rpc/request-input-event";
 import * as flatbuffers from "flatbuffers";
+import { actionBody } from "./actions.js";
 import { buildAuthHeaders } from "./auth.js";
 import type { SessionCredentials, WsAttachOptions } from "./types.js";
 
@@ -293,14 +294,24 @@ export class SseSessionTransport implements SessionTransport {
             while (this.outgoing.length && !this.abort.signal.aborted) {
                 const inputId = this.resume.inputRequests[0];
                 if (this.resume.pendingTask && !inputId) return;
-                const data = this.outgoing.shift()!;
-                if (!inputId && typeof data !== "string") throw new Error("Command must be text");
+                // A prompt reply may pass a queued action, but cannot consume it.
+                const index = inputId ? this.outgoing.findIndex(data => !actionBody(data)) : 0;
+                if (index < 0) return;
+                const data = this.outgoing.splice(index, 1)[0];
+                const action = actionBody(data);
+                if (!inputId && !action && typeof data !== "string") throw new Error("Command must be text");
                 if (!inputId) this.resume.pendingTask = true;
                 // Commands are never retried automatically: a lost reply can follow successful execution.
                 await this.request(inputId ? `/v1/session/input/${inputId}` : "/v1/session/command", {
                     method: "POST",
-                    headers: { "Content-Type": typeof data === "string" ? "text/plain" : "application/x-flatbuffers" },
-                    body: data,
+                    headers: {
+                        "Content-Type": action
+                            ? "application/json"
+                            : typeof data === "string"
+                            ? "text/plain"
+                            : "application/x-flatbuffers",
+                    },
+                    body: action ?? data,
                 });
                 if (inputId) this.resume.inputRequests.shift();
             }

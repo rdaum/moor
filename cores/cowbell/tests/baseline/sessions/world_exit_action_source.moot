@@ -1,0 +1,19 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; move(#90103, #90108); #90108:create_passage(#90103, #90110, $passage:mk(#90103, "east", {"e"}, "", false, #90110, "west", {}, "", false)); #90108:create_passage(#90110, #90109, $passage:mk(#90110, "east", {"e"}, "", false, #90109, "west", {}, "", false)); move(#90101, #90103); return true;
+true
+@programmer
+// The authenticated player can use a captured alias.
+; player.runtime_probe = player.location:exit_annotation("e"); return #0:do_action(player.runtime_probe);
+true
+; return player.location == #90110;
+true
+// Reusing the same link must not select the east exit in this new room.
+; return #0:do_action(player.runtime_probe);
+false
+; return player.location == #90110;
+true
+// Other actors cannot use a forged player binding to request the action.
+; return `$room:use_exit_action(#90102, "go east", player.runtime_probe["exit"]) ! E_PERM => E_PERM';
+E_PERM

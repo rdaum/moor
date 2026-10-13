@@ -13,12 +13,13 @@
 
 //! WebSocket frame classification for the client session event loop.
 
-use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use futures_util::{StreamExt, stream::SplitStream};
+use axum::extract::ws::{CloseFrame, Message};
+use futures_util::{Stream, StreamExt};
 use std::time::Duration;
 use tracing::{debug, error, trace};
 
 use super::{PendingTask, webrtc};
+use crate::host::actions::is_action_frame;
 
 const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 const HEARTBEAT_RESPONSE: u8 = 0x01;
@@ -37,7 +38,7 @@ pub enum ReadEvent {
 }
 
 pub async fn read_websocket_event(
-    ws_receiver: &mut SplitStream<WebSocket>,
+    ws_receiver: &mut (impl Stream<Item = Result<Message, axum::Error>> + Unpin),
     expecting_input: bool,
     pending_task: &mut Option<PendingTask>,
 ) -> ReadEvent {
@@ -76,6 +77,10 @@ pub async fn read_websocket_event(
             {
                 return ReadEvent::WebRtcSignaling(data.to_vec());
             }
+            Message::Binary(ref data) if is_action_frame(data) => {
+                // An action is never a reply to an outstanding read().
+                return ReadEvent::Command(msg);
+            }
             Message::Text(_) | Message::Binary(_) if expecting_input => {
                 return ReadEvent::InputReply(msg);
             }
@@ -92,6 +97,35 @@ pub async fn read_websocket_event(
             }
             Message::Close(close_frame) => return read_close_event(close_frame),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::stream;
+
+    #[tokio::test]
+    async fn structured_actions_are_not_prompt_replies() {
+        let action = Message::Binary(b"\x04{\"command\":\"go east\"}".to_vec().into());
+        let reply = Message::Text("the prompt answer".into());
+        let mut messages = stream::iter(vec![Ok(action), Ok(reply)]);
+        let mut pending = None;
+        assert!(matches!(
+            read_websocket_event(&mut messages, true, &mut pending).await,
+            ReadEvent::Command(Message::Binary(_))
+        ));
+        assert!(
+            matches!(read_websocket_event(&mut messages, true, &mut pending).await, ReadEvent::InputReply(Message::Text(text)) if text == "the prompt answer")
+        );
+    }
+
+    #[tokio::test]
+    async fn ordinary_text_still_uses_the_command_path() {
+        let mut messages = stream::iter(vec![Ok(Message::Text("go east".into()))]);
+        assert!(
+            matches!(read_websocket_event(&mut messages, false, &mut None).await, ReadEvent::Command(Message::Text(text)) if text == "go east")
+        );
     }
 }
 
