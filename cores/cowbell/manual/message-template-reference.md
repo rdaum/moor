@@ -309,8 +309,21 @@ The last argument selects plural verb agreement and defaults to `false`. Supply 
 a boolean. Construction validates these requirements. Stored sets are also checked when read.
 
 Assign the result to an actor or thing's `pronouns` property using the property owner's permissions.
-`player:set_pronouns(string)` accepts preset labels only and checks owner, wizard, or delegated
-`set_pronouns` authority. `@pronouns` changes the current player's preset.
+`player:set_pronouns(input)` accepts a preset label or a map of custom fields. Both commands and
+Meadow call this setter. It checks owner, wizard, or delegated `set_pronouns` authority.
+
+```moo
+const input = ["subject" -> "ze", "object" -> "zir", "possessive_adjective" -> "zir",
+  "possessive_pronoun" -> "zirs", "reflexive" -> "zirself", "agreement" -> "is"];
+const sentences = $pronouns:examples(input);
+player:set_pronouns(input);
+```
+
+Custom input requires all six fields and rejects unknown fields. Each word must occupy one line,
+with 1–64 characters after trimming. `agreement` is `"is"` or `"are"`. `$pronouns:from_input(input)`
+validates and constructs the set; `examples(input)` returns the sentences without saving.
+`player:pronouns_settings()` returns the current fields for editing. `@pronouns custom` collects
+these fields, previews the sentences, and rechecks permission on save.
 
 `object:pronouns()` returns the validated set. `actor:pronouns_display()` returns its display label.
 Actors and things share these convenience methods:

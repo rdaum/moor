@@ -13,18 +13,16 @@
 
 // Hook for managing player pronouns with graceful fallback for unsupported cores
 
-import { Var } from "@moor/schema/generated/moor-var/var";
-import { VarList } from "@moor/schema/generated/moor-var/var-list";
-import { VarStr } from "@moor/schema/generated/moor-var/var-str";
-import { VarUnion } from "@moor/schema/generated/moor-var/var-union";
-import * as flatbuffers from "flatbuffers";
+import { buildStructuredArgs } from "@moor/web-sdk";
 import { useCallback, useEffect, useState } from "react";
+import { CustomPronouns, PronounInput, readCustomPronouns } from "../lib/pronouns";
 import { invokeVerbFlatBuffer } from "../lib/rpc-fb";
 
 export const usePronouns = (authToken: string | null, playerOid: string | null) => {
     const [currentPronouns, setCurrentPronouns] = useState<string | null>(null);
     const [availablePresets, setAvailablePresets] = useState<string[]>([]);
     const [pronounsAvailable, setPronounsAvailable] = useState<boolean | null>(null);
+    const [customPronouns, setCustomPronouns] = useState<CustomPronouns | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -85,14 +83,40 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
         }
     }, [authToken, playerOid]);
 
+    const fetchCustomPronouns = useCallback(async () => {
+        if (!authToken || !playerOid) return;
+        try {
+            const { result } = await invokeVerbFlatBuffer(authToken, playerOid, "pronouns_settings");
+            setCustomPronouns(readCustomPronouns(result));
+        } catch {
+            // Other cores can offer presets without a custom pronoun editor.
+            setCustomPronouns(null);
+        }
+    }, [authToken, playerOid]);
+
+    const previewPronouns = useCallback(async (input: CustomPronouns): Promise<string[]> => {
+        if (!authToken) throw new Error("Not authenticated");
+        const { result } = await invokeVerbFlatBuffer(
+            authToken,
+            "sysobj:pronouns",
+            "examples",
+            buildStructuredArgs([{ ...input }]),
+        );
+        if (!Array.isArray(result) || !result.every(value => typeof value === "string")) {
+            throw new Error("The server did not return a pronoun preview.");
+        }
+        return result;
+    }, [authToken]);
+
     // Fetch presets and current pronouns on mount and when auth changes
     useEffect(() => {
         fetchPresets();
         fetchPronouns();
-    }, [fetchPresets, fetchPronouns]);
+        fetchCustomPronouns();
+    }, [fetchPresets, fetchPronouns, fetchCustomPronouns]);
 
     const updatePronouns = useCallback(
-        async (pronouns: string) => {
+        async (pronouns: PronounInput) => {
             if (!authToken || !playerOid) {
                 throw new Error("Not authenticated");
             }
@@ -101,21 +125,12 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
             setError(null);
 
             try {
-                // Build FlatBuffer argument
-                const builder = new flatbuffers.Builder(256);
-                const pronounsStrOffset = builder.createString(pronouns);
-                const varStrOffset = VarStr.createVarStr(builder, pronounsStrOffset);
-                const pronounsVarOffset = Var.createVar(builder, VarUnion.VarStr, varStrOffset);
-                const elementsVectorOffset = VarList.createElementsVector(builder, [pronounsVarOffset]);
-                const varListOffset = VarList.createVarList(builder, elementsVectorOffset);
-                const listVarOffset = Var.createVar(builder, VarUnion.VarList, varListOffset);
-                builder.finish(listVarOffset);
-                const bytes = builder.asUint8Array();
+                const bytes = buildStructuredArgs([typeof pronouns === "string" ? pronouns : { ...pronouns }]);
 
                 await invokeVerbFlatBuffer(authToken, playerOid, "set_pronouns", bytes);
 
                 // Refresh after update
-                await fetchPronouns();
+                await Promise.all([fetchPronouns(), fetchCustomPronouns()]);
             } catch (err) {
                 console.error("Update pronouns error:", err);
                 const errorMessage = err instanceof Error
@@ -127,11 +142,13 @@ export const usePronouns = (authToken: string | null, playerOid: string | null) 
                 setLoading(false);
             }
         },
-        [authToken, playerOid, fetchPronouns],
+        [authToken, playerOid, fetchPronouns, fetchCustomPronouns],
     );
 
     return {
         currentPronouns,
+        customPronouns,
+        previewPronouns,
         availablePresets,
         pronounsAvailable,
         loading,

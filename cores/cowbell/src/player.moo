@@ -291,35 +291,52 @@ object PLAYER [
   endmethod
 
   verb "@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"
-    "Set or view your pronouns.";
-    "Usage: @pronouns [pronoun-set]";
-    "Examples: @pronouns they/them, @pronouns she/her, @pronouns";
-    caller != this && raise(E_PERM);
+    "View your pronouns, choose a preset, or enter custom words with a preview.";
+    "Usage: @pronouns [PRESET|custom]. Custom entry commits at each prompt and rechecks access on save.";
+    caller == this || raise(E_PERM);
     set_task_perms(this);
-    query = argstr:trim();
-    if (!query)
-      "Show current pronouns and available options";
-      current = $pronouns:display(this:pronouns());
-      available = $pronouns:list_presets();
-      content = $format.block:mk($format.title:mk("Your Pronouns"), "Current: " + current, "", "Available presets:", $format.code:mk(available:join(", ")), "", "Usage: @pronouns [pronoun-set]");
-      event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
-      this:inform_current(event);
+    const query = argstr:trim();
+    if (!length(query))
+      const lines = {"Your pronouns: " + this:pronouns_display(),
+        "Presets: " + $pronouns:list_presets():join(", "),
+        "Use @pronouns PRESET, or @pronouns custom to enter your own words."};
+      this:inform_current($event:mk_info(this, @{$format.paragraph:mk(line) for line in (lines)})
+        :with_audience('utility));
       return;
     endif
-    "Try to look up the pronoun set";
-    pronoun_set = $pronouns:lookup(query);
-    if (typeof(pronoun_set) != TYPE_FLYWEIGHT)
-      content = $format.block:mk($format.title:mk("Unknown Pronoun Set"), "No preset matches: " + query, "", "Available presets:", $format.code:mk($pronouns:list_presets():join(", ")), "", "Usage: @pronouns [pronoun-set]");
-      event = $event:mk_error(this, content):with_audience('utility):as_inset():with_group('utility, this);
-      this:inform_current(event);
-      return;
+    let input = query;
+    if (query == "custom")
+      input = [];
+      for field in ({{"subject", "___ is ready.", "ze"}, {"object", "I met ___.", "zir"},
+        {"possessive_adjective", "This is ___ coat.", "zir"},
+        {"possessive_pronoun", "The coat is ___.", "zirs"}, {"reflexive", "Ze did it ___.", "zirself"}})
+        const answer = this:prompt("Fill the blank: " + field[2] + " Enter @abort to cancel.", field[3]);
+        typeof(answer) == TYPE_STR || return;
+        input[field[1]] = answer;
+      endfor
+      let agreement = "";
+      while (!(agreement in {"is", "are"}))
+        const answer = this:prompt("Choose: " + input["subject"] + " is ready, or "
+          + input["subject"] + " are ready. Enter is or are, or @abort to cancel.", "is or are");
+        typeof(answer) == TYPE_STR || return;
+        agreement = answer:trim();
+      endwhile
+      input["agreement"] = agreement;
     endif
-    "Set the pronouns";
-    this.pronouns = pronoun_set;
-    display = $pronouns:display(pronoun_set);
-    content = $format.block:mk($format.title:mk("Pronouns Updated"), "Pronouns set to: " + display, "", "Usage: @pronouns [pronoun-set]");
-    event = $event:mk_info(this, content):with_audience('utility):as_inset():with_group('utility, this);
-    this:inform_current(event);
+    try
+      const examples = $pronouns:examples(input);
+      if (query == "custom")
+        this:inform_current($event:mk_info(this, @{$format.paragraph:mk(line) for line in (examples)})
+          :with_audience('utility));
+        const confirmed = this:confirm("Use these pronouns?");
+        equal(confirmed, true) || return;
+      endif
+      this:set_pronouns(input);
+      this:inform_current($event:mk_info(this, "Pronouns set to: " + this:pronouns_display())
+        :with_audience('utility));
+    except error (E_INVARG, E_TYPE, E_PERM)
+      this:inform_current($event:mk_error(this, error[2]):with_audience('utility));
+    endtry
   endverb
 
   method acceptable owner: ARCH_WIZARD
@@ -2030,7 +2047,7 @@ object PLAYER [
   endmethod
 
   method set_pronouns owner: ARCH_WIZARD
-    "Programmatically set pronouns from a string like 'they/them'.";
+    "Set a preset or validated custom fields. Commands and clients use this same permission check.";
     let actor = caller_perms();
     "Direct client calls have no MOO caller; nested and scheduled calls retain their own authority.";
     if (actor == #-1 && !callers() && caller == player)
@@ -2038,13 +2055,13 @@ object PLAYER [
     endif
     const {target, perms} = $root:_check_permissions_as(this, actor, 'set_pronouns);
     set_task_perms(perms);
-    const {pronouns_str} = args;
-    typeof(pronouns_str) == TYPE_STR || raise(E_TYPE, "Pronouns must be a string");
-    const pronoun_set = $pronouns:lookup(pronouns_str:trim());
-    if (typeof(pronoun_set) != TYPE_FLYWEIGHT)
-      raise(E_INVARG, "Unknown pronoun set: " + pronouns_str);
-    endif
-    target.pronouns = pronoun_set;
+    const {input} = args;
+    target.pronouns = $pronouns:from_input(input);
+  endmethod
+
+  method pronouns_settings owner: ARCH_WIZARD
+    "Return the current words for the client's pronoun editor.";
+    return $pronouns:to_input(this.pronouns);
   endmethod
 
   method set_home owner: ARCH_WIZARD

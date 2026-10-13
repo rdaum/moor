@@ -8,6 +8,9 @@ Cowbell entries.
 
 ### Added
 
+- Players can enter custom pronouns with `@pronouns custom` or Meadow's account and profile editors.
+  Sentence examples explain each form, and a preview precedes confirmation. Both interfaces use the
+  same validated setter; cancellation keeps the previous pronouns.
 - `@preview-message` shows draft messages from three example readers' perspectives before saving.
   Reactions support `preview-message` and include example sentences in their existing previews.
   Private reaction messages also supply the recipient as a named binding.

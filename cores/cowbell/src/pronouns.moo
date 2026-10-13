@@ -15,6 +15,71 @@ object PRONOUNS [
 
   override description (owner: HACKER, flags: "rc") = "Pronoun system providing preset and custom pronoun sets for objects and players.";
 
+  method from_input owner: HACKER
+    "Validate a preset label or the six named fields supplied by commands and clients.";
+    const {input} = args;
+    if (typeof(input) == TYPE_STR)
+      const preset = this:lookup(input);
+      typeof(preset) == TYPE_FLYWEIGHT || raise(E_INVARG, "Unknown preset. Use @pronouns custom to enter your own words.");
+      return this:validate(preset);
+    endif
+    typeof(input) == TYPE_MAP || raise(E_TYPE, "Use a preset name or custom pronoun fields.");
+    const fields = {"subject", "object", "possessive_adjective", "possessive_pronoun", "reflexive", "agreement"};
+    let words = {};
+    for field in (fields)
+      maphaskey(input, field) || raise(E_INVARG, "Missing pronoun field: " + field);
+      typeof(input[field]) == TYPE_STR || raise(E_TYPE, "Pronoun fields must be text.");
+      const word = input[field]:trim();
+      (length(word) > 0 && length(word) <= 64 && !index(word, "\n") && !index(word, "\r"))
+        || raise(E_INVARG, "Enter one line of 1 to 64 characters for " + field + ".");
+      words = {@words, word};
+    endfor
+    length(input) == length(fields) || raise(E_INVARG, "Unknown custom pronoun field.");
+    words[6] in {"is", "are"} || raise(E_INVARG, "Choose is or are for verb agreement.");
+    return this:mk(@words[1..5], words[6] == "are");
+  endmethod
+
+  method to_input owner: HACKER
+    "Return the fields used to edit an existing pronoun set.";
+    const {value} = args;
+    const checked = this:validate(value);
+    return ["subject" -> checked.ps, "object" -> checked.po,
+      "possessive_adjective" -> checked.pp, "possessive_pronoun" -> checked.pq,
+      "reflexive" -> checked.pr, "agreement" -> checked.verb_be];
+  endmethod
+
+  method examples owner: HACKER
+    "Preview every form and verb agreement before a user applies a pronoun choice.";
+    const {input} = args;
+    const pronouns = this:from_input(input);
+    const subject = pronouns.ps:capitalize();
+    return {subject + " " + pronouns.verb_be + " ready.", "I met " + pronouns.po + ".",
+      "This is " + pronouns.pp + " coat.", "The coat is " + pronouns.pq + ".",
+      subject + " did it " + pronouns.pr + ".", subject + " " + pronouns.verb_have + " a map."};
+  endmethod
+
+  method test_custom_input owner: HACKER
+    "Custom editor fields and presets share validation, previews, and lossless editing.";
+    let input = ["subject" -> " ze ", "object" -> "zir", "possessive_adjective" -> "zir",
+      "possessive_pronoun" -> "zirs", "reflexive" -> "zirself", "agreement" -> "is"];
+    const set = this:from_input(input);
+    $test_utils:assert_true(equal(this:examples(input), {"Ze is ready.", "I met zir.",
+      "This is zir coat.", "The coat is zirs.", "Ze did it zirself.", "Ze has a map."}),
+      "preview covers all forms and agreement");
+    $test_utils:assert_true(equal(this:from_input(this:to_input(set)), set), "custom edit roundtrip");
+    for preset in (this:list_presets())
+      $test_utils:assert_true(equal(this:from_input(preset), this:lookup(preset)), "preset uses same input path");
+    endfor
+    input["agreement"] = "are";
+    $test_utils:assert_eq(this:examples(input)[1], "Ze are ready.", "explicit plural agreement");
+    for invalid in ({"", " ", "two\nlines", "x":repeat(65)})
+      input["subject"] = invalid;
+      $test_utils:assert_raises(E_INVARG, this, "from_input", {input}, "reject invalid form");
+    endfor
+    $test_utils:assert_raises(E_INVARG, this, "from_input", {[]}, "all fields required");
+    return true;
+  endmethod
+
   method mk owner: HACKER
     "Create a custom set from five nonempty strings and an optional agreement boolean.";
     "The boolean selects plural verbs, including for singular they. It defaults to false.";

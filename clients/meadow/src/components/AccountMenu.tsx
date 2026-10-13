@@ -18,6 +18,7 @@ import AvatarEditor, { type AvatarEditorRef } from "react-avatar-editor";
 import { usePlayerDescription } from "../hooks/usePlayerDescription";
 import { useProfilePicture } from "../hooks/useProfilePicture";
 import { usePronouns } from "../hooks/usePronouns";
+import { CustomPronounEditor } from "./CustomPronounEditor";
 import { EncryptionSettings } from "./EncryptionSettings";
 
 interface AccountMenuProps {
@@ -51,6 +52,9 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     } = usePlayerDescription(authToken, playerOid);
     const {
         currentPronouns,
+        customPronouns,
+        previewPronouns,
+        error: pronounsError,
         availablePresets,
         pronounsAvailable,
         loading: pronounsLoading,
@@ -64,6 +68,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
     const panelRef = useRef<HTMLDivElement>(null);
     const previousActiveElementRef = useRef<HTMLElement | null>(null);
     const [editorOpen, setEditorOpen] = useState(false);
+    const [editingCustomPronouns, setEditingCustomPronouns] = useState(false);
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [editorScale, setEditorScale] = useState(1.0);
 
@@ -432,7 +437,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                                     // Error handled by hook
                                                 }
                                             }}
-                                            disabled={pronounsLoading}
+                                            disabled={pronounsLoading || editingCustomPronouns}
                                             aria-label="Select pronouns"
                                             style={{
                                                 padding: "8px 12px",
@@ -443,6 +448,9 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                                 fontSize: "14px",
                                             }}
                                         >
+                                            {currentPronouns && !availablePresets.includes(currentPronouns) && (
+                                                <option value={currentPronouns}>{currentPronouns} (custom)</option>
+                                            )}
                                             {availablePresets.map((preset) => (
                                                 <option key={preset} value={preset}>
                                                     {preset}
@@ -450,6 +458,28 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                                             ))}
                                         </select>
                                     )}
+                                {pronounsError && !editingCustomPronouns && <p role="alert">{pronounsError}</p>}
+                                {customPronouns && !editingCustomPronouns && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => setEditingCustomPronouns(true)}
+                                        disabled={pronounsLoading}
+                                    >
+                                        Enter custom pronouns
+                                    </button>
+                                )}
+                                {customPronouns && editingCustomPronouns && (
+                                    <CustomPronounEditor
+                                        initial={customPronouns}
+                                        preview={previewPronouns}
+                                        onApply={async input => {
+                                            await updatePronouns(input);
+                                            setEditingCustomPronouns(false);
+                                        }}
+                                        onCancel={() => setEditingCustomPronouns(false)}
+                                    />
+                                )}
                             </div>
                         </div>
                     )}

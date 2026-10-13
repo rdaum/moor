@@ -29,7 +29,25 @@ provides a pronoun selector in the account settings.
 These choices affect messages that use pronoun tokens. They do not rewrite ordinary speech or
 replace words that an author wrote directly into a message.
 
-The command and Meadow selector currently accept presets only. Custom sets require MOO code.
+To enter your own words, use `@pronouns custom`. You do not need builder or programmer privileges.
+The prompts ask you to fill five blanks:
+
+| Sentence          | Example answer |
+| ----------------- | -------------- |
+| ___ is ready.     | ze             |
+| I met ___.        | zir            |
+| This is ___ coat. | zir            |
+| The coat is ___.  | zirs           |
+| Ze did it ___.    | zirself        |
+
+Then choose the wording that fits: “ze is ready” or “ze are ready.” This also selects “has” or
+“have.” The command shows complete sentences before asking you to apply the choice. Answer `no`, or
+enter `@abort` at a word prompt, to keep your existing pronouns.
+
+In Meadow, choose **Enter custom pronouns** in account settings or profile setup. Fill the blanks,
+choose the verb form, then select **Preview sentences**. If the sentences look right, select **Use
+these pronouns**. In profile setup, finish the profile to save the choice. If you change a word,
+preview the sentences again before applying it.
 
 ## Give an object a different pickup message
 

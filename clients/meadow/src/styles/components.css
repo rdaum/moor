@@ -2846,6 +2846,39 @@ input[type="text"]:focus {
   margin-bottom: var(--space-xl);
 }
 
+.custom-pronoun-editor {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.custom-pronoun-field {
+    display: grid;
+    gap: 4px;
+}
+
+.custom-pronoun-editor input,
+.custom-pronoun-editor select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 8px;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font: inherit;
+}
+
+.custom-pronoun-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .settings-section h3 {
   margin: 0 0 var(--space-md) 0;
   font-family: var(--font-ui);

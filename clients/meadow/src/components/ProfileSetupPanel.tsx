@@ -18,7 +18,9 @@ import AvatarEditor, { type AvatarEditorRef } from "react-avatar-editor";
 import { usePlayerDescription } from "../hooks/usePlayerDescription";
 import { useProfilePicture } from "../hooks/useProfilePicture";
 import { usePronouns } from "../hooks/usePronouns";
+import { PronounInput } from "../lib/pronouns";
 import { Presentation } from "../types/presentation";
+import { CustomPronounEditor } from "./CustomPronounEditor";
 
 interface ProfileSetupPanelProps {
     presentation: Presentation;
@@ -38,7 +40,7 @@ export const ProfileSetupPanel: React.FC<ProfileSetupPanelProps> = ({
     // Use existing hooks for profile picture and description
     const { uploadProfilePicture } = useProfilePicture(authToken, playerOid);
     const { updatePlayerDescription } = usePlayerDescription(authToken, playerOid);
-    const { availablePresets, updatePronouns } = usePronouns(authToken, playerOid);
+    const { availablePresets, customPronouns, previewPronouns, updatePronouns } = usePronouns(authToken, playerOid);
 
     // Profile picture state
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +54,8 @@ export const ProfileSetupPanel: React.FC<ProfileSetupPanelProps> = ({
     const [description, setDescription] = useState("");
 
     // Pronouns state - default to first available preset
-    const [pronouns, setPronouns] = useState("");
+    const [pronouns, setPronouns] = useState<PronounInput>("");
+    const [editingCustomPronouns, setEditingCustomPronouns] = useState(false);
 
     // Submission state
     const [submitting, setSubmitting] = useState(false);
@@ -151,12 +154,7 @@ export const ProfileSetupPanel: React.FC<ProfileSetupPanelProps> = ({
 
             // Set pronouns if provided
             if (showPronouns && pronouns) {
-                try {
-                    await updatePronouns(pronouns);
-                } catch (err) {
-                    console.error("Failed to set pronouns:", err);
-                    // Don't fail the whole process
-                }
+                await updatePronouns(pronouns);
             }
 
             // Set description if provided
@@ -315,14 +313,38 @@ export const ProfileSetupPanel: React.FC<ProfileSetupPanelProps> = ({
                             <label htmlFor="profile-pronouns">Pronouns</label>
                             <select
                                 id="profile-pronouns"
-                                value={pronouns}
+                                value={typeof pronouns === "string" ? pronouns : "custom"}
                                 onChange={(e) => setPronouns(e.target.value)}
+                                disabled={editingCustomPronouns || submitting}
                                 className="profile-setup-select"
                             >
+                                {typeof pronouns !== "string" && (
+                                    <option value="custom">{pronouns.subject}/{pronouns.object} (custom)</option>
+                                )}
                                 {availablePresets.map((preset) => (
                                     <option key={preset} value={preset}>{preset}</option>
                                 ))}
                             </select>
+                            {customPronouns && !editingCustomPronouns && (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setEditingCustomPronouns(true)}
+                                >
+                                    Enter custom pronouns
+                                </button>
+                            )}
+                            {customPronouns && editingCustomPronouns && (
+                                <CustomPronounEditor
+                                    initial={typeof pronouns === "string" ? customPronouns : pronouns}
+                                    preview={previewPronouns}
+                                    onApply={async input => {
+                                        setPronouns(input);
+                                        setEditingCustomPronouns(false);
+                                    }}
+                                    onCancel={() => setEditingCustomPronouns(false)}
+                                />
+                            )}
                         </div>
                     )}
 
@@ -356,7 +378,7 @@ export const ProfileSetupPanel: React.FC<ProfileSetupPanelProps> = ({
                     <button
                         className="btn btn-primary"
                         onClick={handleComplete}
-                        disabled={submitting}
+                        disabled={submitting || editingCustomPronouns}
                     >
                         {submitting ? "Saving..." : "Complete Setup"}
                     </button>

@@ -1,0 +1,64 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@nonprogrammer
+% @pronouns she/her
+~~Pronouns set to: she/her
+>> ze
+>> zir
+>> zir
+>> zirs
+>> zirself
+>> is
+>> no
+% @pronouns custom
+=Ze is ready.
+=
+=I met zir.
+=
+=This is zir coat.
+=
+=The coat is zirs.
+=
+=Ze did it zirself.
+=
+=Ze has a map.
+@text Cancelled.
+@wizard
+; return #90102:pronouns_display();
+"she/her"
+@nonprogrammer
+>> ze
+>> zir
+>> zir
+>> zirs
+>> zirself
+>> is
+>> yes
+% @pronouns custom
+=Ze is ready.
+=
+=I met zir.
+=
+=This is zir coat.
+=
+=The coat is zirs.
+=
+=Ze did it zirself.
+=
+=Ze has a map.
+@text Confirmed.
+@text Pronouns set to: ze/zir
+@wizard
+; return {#90102:pronoun_possessive('adj), #90102:pronoun_possessive('noun), #90102:pronouns().is_plural};
+{"zir", "zirs", false}
+@nonprogrammer
+>> @abort
+% @pronouns custom
+@text Cancelled.
+@wizard
+; return #90102:pronouns_display();
+"ze/zir"
+@programmer
+; return `#90102:set_pronouns("he/him") ! E_PERM => E_PERM';
+E_PERM
