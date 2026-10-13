@@ -802,7 +802,7 @@ object HENRI [
     pass(@args);
     $reaction:install(this, "couch_intruder_reaction", <$reaction, .enabled = true, .trigger = 'on_couch_intruder, .when = 0, .effects = {{'announce, 'couch_intruder_msg}}, .fired_at = 0>);
     $reaction:install(this, "cupboard_open_reaction", <$reaction, .enabled = true, .trigger = 'on_cupboard_open, .when = 0, .effects = {{'announce, 'cupboard_open_msg}}, .fired_at = 0>);
-    $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_kibble_taken, .when = 0, .effects = {{'action, 'stand, $couch}, {'announce, 'kibble_taken_msg_bag}}, .fired_at = 0>);
+    $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_kibble_taken, .when = 0, .effects = {{'action, 'stand, ['target -> ['kind -> 'literal, 'value -> $couch], 'actor -> ['kind -> 'input, 'name -> 'This]]}, {'announce, 'kibble_taken_msg_bag}}, .fired_at = 0>);
     $reaction:install(this, "on_pet_grouchy_reaction", $reaction:mk('on_pet,
       "property_is(object: input.This, field: 'mood, value: \"grouchy\")",
       {{'announce, 'pet_grouchy_msg}}));
@@ -812,7 +812,7 @@ object HENRI [
     $reaction:install(this, "sleepy_threshold_reaction", <$reaction, .enabled = true, .trigger = {'when, 'pets_received, 'ge, 4}, .when = 0, .effects = {
       {'set, 'mood, "sleepy"},
       {'announce, 'sleepy_threshold_msg},
-      {'action, 'sit, $couch}
+      {'action, 'sit, ['target -> ['kind -> 'literal, 'value -> $couch], 'actor -> ['kind -> 'input, 'name -> 'This]]}
     }, .fired_at = 0>);
   endmethod
 endobject

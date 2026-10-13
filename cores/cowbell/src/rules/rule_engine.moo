@@ -51,17 +51,23 @@ object RULE_ENGINE [
     return $rule_engine:scope(inputs);
   endmethod
 
+  method passage_scope owner: HACKER
+    "Name passage endpoints explicitly. Key is required only when the condition uses it.";
+    return $rule_engine:scope(['Accessor -> 'object, 'From -> 'object, 'To -> 'object,
+      'Passage -> 'any, 'Key -> 'object]);
+  endmethod
+
   method trigger_scope owner: HACKER
     "Describe event inputs until operation schemas replace the existing trigger entries.";
-    const {trigger} = args;
+    const {trigger, ?state_types = []} = args;
     let inputs = ['This -> 'object, 'Location -> 'object, 'Actor -> 'object];
     if (typeof(trigger) == TYPE_SYM)
-      trigger in {'on_take, 'on_put, 'on_get, 'on_drop} && (inputs['Item] = 'object);
+      trigger in {'on_take, 'on_put, 'on_get, 'on_drop, 'on_wear, 'on_remove} && (inputs['Item] = 'object);
       trigger in {'on_lock, 'on_unlock} && (inputs['Key] = 'object);
       trigger in {'on_enter, 'on_exit} && (inputs['Who] = 'object);
       trigger in {'on_consume, 'on_empty} && (inputs['Amount] = 'integer);
     endif
-    return $rule_engine:scope(inputs);
+    return $rule_engine:scope(inputs, [], state_types);
   endmethod
 
   method schemas owner: HACKER

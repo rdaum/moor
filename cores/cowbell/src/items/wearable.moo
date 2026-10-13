@@ -110,36 +110,67 @@ object WEARABLE [
     "```"
   };
 
+  method _conflict owner: ARCH_WIZARD
+    "Read body-area conflicts without calling an overridable permission helper.";
+    set_task_perms(caller_perms());
+    const {item, who} = args;
+    const area = item.body_area;
+    !area && return #-1;
+    for worn in (who.wearing)
+      if (valid(worn) && worn != item && worn.body_area == area)
+        return worn;
+      endif
+    endfor
+    return #-1;
+  endmethod
+
   method do_wear owner: ARCH_WIZARD
-    "Core implementation: add to who's wearing list and announce.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_wear must be called by this object");
-    {who, ?silent = false} = args;
-    who.wearing = {@who.wearing, this};
+    "Apply wear for the authenticated wearer and emit one completed event.";
+    caller == this || raise(E_PERM);
+    const {who, ?silent = false, ?context = []} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    this.location == who || return false;
+    !(this in who.wearing) || return false;
+    valid($wearable:_conflict(this, who)) && return false;
+    who.wearing = setadd(who.wearing, this);
+    $reaction:_dispatch(this, 'on_wear, mapmerge(context,
+      ['Actor -> who, 'Item -> this, 'Location -> who.location]));
+    set_task_perms(principal);
     if (!silent && valid(who.location))
-      event = $event:mk_info(who, @this.wear_msg):with_dobj(this):with_this(who.location);
+      const event = $event:mk_info(who, @this.wear_msg):with_dobj(this):with_this(who.location);
       who.location:announce(event);
     endif
-    `this:on_wear() ! E_VERBNF';
+    this:on_wear();
     return true;
   endmethod
 
   method do_remove owner: ARCH_WIZARD
-    "Core implementation: remove from who's wearing list and announce.";
-    "Only callable by this object itself";
-    caller != this && raise(E_PERM, "do_remove must be called by this object");
-    {who, ?silent = false} = args;
+    "Apply remove for the authenticated wearer and emit one completed event.";
+    caller == this || raise(E_PERM);
+    const {who, ?silent = false, ?context = []} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    this.location == who || return false;
+    this in who.wearing || return false;
     who.wearing = setremove(who.wearing, this);
+    $reaction:_dispatch(this, 'on_remove, mapmerge(context,
+      ['Actor -> who, 'Item -> this, 'Location -> who.location]));
+    set_task_perms(principal);
     if (!silent && valid(who.location))
-      event = $event:mk_info(who, @this.remove_msg):with_dobj(this):with_this(who.location);
+      const event = $event:mk_info(who, @this.remove_msg):with_dobj(this):with_this(who.location);
       who.location:announce(event);
     endif
-    `this:on_remove() ! E_VERBNF';
+    this:on_remove();
     return true;
   endmethod
 
-  verb wear (this none none) owner: HACKER flags: "rd"
+  verb wear (this none none) owner: ARCH_WIZARD flags: "rd"
     "Command: put on this wearable item";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player || principal.wizard)
+      || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
     if (this.location != player)
       player:inform_current($event:mk_error(player, "You don't have that."));
       return;
@@ -148,17 +179,21 @@ object WEARABLE [
       player:inform_current($event:mk_error(player, "You're already wearing that."));
       return;
     endif
-    conflict = this:conflicting_item();
+    const conflict = this:conflicting_item();
     if (valid(conflict))
-      msg = "You're already wearing " + conflict:display_name() + " on that body part. Remove it first.";
+      const msg = "You're already wearing " + conflict:display_name() + " on that body part. Remove it first.";
       player:inform_current($event:mk_error(player, msg));
       return;
     endif
     this:do_wear(player);
   endverb
 
-  verb remove (this none none) owner: HACKER flags: "rd"
+  verb remove (this none none) owner: ARCH_WIZARD flags: "rd"
     "Command: remove this wearable item";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player || principal.wizard)
+      || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
     if (this.location != player)
       player:inform_current($event:mk_error(player, "You don't have that."));
       return;
@@ -171,22 +206,19 @@ object WEARABLE [
   endverb
 
   method action_wear owner: ARCH_WIZARD
-    "Action handler for reactions: make actor wear this item.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    this.location != who && return false;
-    is_member(this, who.wearing) && return false;
-    valid(this:conflicting_item_for(who)) && return false;
-    return this:do_wear(who);
+    "Apply wear through the same state checks and completed trigger as a command.";
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    $root:check_actor(who);
+    return this:do_wear(who, false, context);
   endmethod
 
   method action_remove owner: ARCH_WIZARD
-    "Action handler for reactions: make actor remove this item.";
-    set_task_perms(this.owner);
-    {who, context} = args;
-    this.location != who && return false;
-    !is_member(this, who.wearing) && return false;
-    return this:do_remove(who);
+    "Apply remove through the same state checks and completed trigger as a command.";
+    set_task_perms(caller_perms());
+    const {who, context} = args;
+    $root:check_actor(who);
+    return this:do_remove(who, false, context);
   endmethod
 
   method on_wear owner: HACKER

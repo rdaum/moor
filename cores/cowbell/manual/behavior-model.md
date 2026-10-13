@@ -36,9 +36,10 @@ keep their settings and counters separate. Their validator has tests, but the di
 use those records. They are not another implemented kind of world object. Their final storage must
 be justified by the reuse examples and can use the existing reaction and object facilities.
 
-Named actions, declared state transitions, cancelable timers, and the builder authoring commands
-remain subsequent work. The execution rules below describe their required outcomes, not current
-runtime guarantees.
+Container and item operations now share checked entry points. Actions have named arguments and
+explicit results. Hosts can declare typed state and named, cancelable timers. The builder authoring
+commands remain subsequent work. The proposed definition and instance records below still do not
+describe the runtime storage.
 
 ## Definition, instance, and authorization
 
@@ -242,6 +243,60 @@ Relations use exact value equality for tuple identity. Repeated assertion return
 Legacy reads already remove duplicates from results. The first mutation collapses duplicate storage
 and rebuilds indexes, retaining an original identity for each fact. Owners can call `repair()`
 explicitly before that first mutation. Repair does not suspend or commit partial batches.
+
+## Implemented operations and timers
+
+Container commands and actions share one operation for opening, closing, locking, unlocking, taking,
+and putting. Taking an item directly from an open container uses that same operation. Both paths
+check the container policy, the item policy, actor authority, reach, and custody. They recheck state
+and policies after callbacks. A successful take emits one `on_get` event for the item and one
+`on_take` event for its container. Denied operations emit neither completed event.
+
+`view_rule` controls viewing contents separately from `take_rule`. A take rule can refer to the
+selected item without breaking a look or a contents search. Passage conditions use `From` and `To`
+for their endpoints. A condition without `Key` runs once without an inventory search. A condition
+that uses `Key` tests carried items.
+
+`$reaction:action_schemas()` supplies descriptions and named argument types. The supported actions
+include container operations, getting and dropping items, sitting and standing, and wearing and
+removing clothing. `perform_action(name, arguments, context)` returns a `status` of `applied`,
+`denied`, or `error`. Denials include a reason. Errors retain the exception details. A reaction
+stops its remaining effects on denial or error.
+
+Wizards can register an action service with the same description and argument declarations. Its MOO
+method receives `(arguments, context)` and returns the same result format. The service must enforce
+its caller's authority. The declarations support help and validation; they do not grant permissions.
+A preview can describe that call without executing the service.
+
+An action effect stores named value expressions in its `arguments` field. For example, an unlock
+action needs `target`, `actor`, and `key`. Each value can come from a literal, the event, declared
+state, or a selected binding. `input.Actor` remains the original participant when a query also
+produces a binding named `Actor`.
+
+`declare_state(host, name, type, initial, choices)` declares an object's counter or state field.
+`choices` can restrict a state to values such as `awake` and `sleepy`. `state_values` reads the
+current values, and `state_types` supplies their types to `mk` when a condition or action refers to
+state. `change` checks declared values before mutation and dispatches thresholds from the actual old
+and new values. Core operations can also emit transitions for built-in state such as a container's
+`open` field.
+
+The schedule effect is `{'schedule, name, seconds, effect}`. Its name belongs to the host, so one
+reaction can cancel a timer started by another. Scheduling that name again replaces the pending
+task. `{'cancel, name}` cancels it. `timers(host)` shows names and due times to the owner.
+
+Replacing or disabling an installation cancels its timers immediately. Re-enabling does not revive
+canceled work. Before execution, a timer rechecks the host's owner, wizard status, location,
+installation, and condition. Changed locations or invalid installations skip the pending effect.
+Declared state and selected bindings are read again. The event's inputs remain the captured values.
+
+An object can have 16 pending timers. Each delay is at most one day. A reaction can have 64 effects,
+and nested effects have a limit of 16 levels. Explicit reaction chains stop after four dispatch
+steps, before the VM's recursion limit, and report the chain. The dispatcher also limits the host to
+64 installed reactions. These limits bound an invocation, not independent future world events.
+
+Forking a timer commits prior effects. An error after that point cannot undo those effects. Within
+one transaction, catching an exception does not undo earlier mutations. An operation that completed
+before a later reaction failed must not be described as rolled back.
 
 ## Effects, state, and timers
 

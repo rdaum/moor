@@ -8,6 +8,116 @@ object HEADLESS_REACTION_SCENARIOS
   override import_export_hierarchy = {"tests", "headless"};
   override import_export_id = "headless_reaction_scenarios";
 
+  method test_named_timers_and_declared_state owner: ARCH_WIZARD
+    "An owner can replace or cancel a timer; its condition uses current declared state when it wakes.";
+    const host = create($thing, #90102, 2);
+    try
+      $reaction:declare_state(host, 'count, 'integer, 0);
+      $reaction:declare_state(host, 'level, 'float, 1.0);
+      $reaction:change(host, 'level, 'increment, 1);
+      $test_utils:assert_eq(host.level, 2.0, "A decimal counter can use the default whole-number increment");
+      $reaction:declare_state(host, 'mode, 'string, "armed", {"armed", "idle"});
+      const reaction = $reaction:mk('start, "state.mode == \"armed\"",
+        {{'schedule, 'alarm, 1, {'increment, 'count}}}, $reaction:state_types(host));
+      $reaction:install(host, "alarm_reaction", reaction);
+      this:_timer_as_owner(host, "start");
+      this:_timer_as_owner(host, "start");
+      $test_utils:assert_eq(length($reaction:timers(host)), 1, "The same timer name replaces the previous task");
+      suspend(2);
+      $test_utils:assert_eq(host.count, 1, "Only the replacement runs");
+      $test_utils:assert_eq($reaction:timers(host), [], "A finished timer removes its record");
+      this:_timer_as_owner(host, "start");
+      this:_timer_as_owner(host, "cancel");
+      $test_utils:assert_eq($reaction:timers(host), [], "Cancellation removes the pending task");
+      this:_timer_as_owner(host, "start");
+      this:_timer_as_owner(host, "idle");
+      suspend(2);
+      $test_utils:assert_eq(host.count, 1, "Cancellation and a false condition prevent later effects");
+      for invalid in ({"bad_counter", "bad_choice"})
+        let rejected = false;
+        try
+          this:_timer_as_owner(host, invalid);
+        except problem (E_INVARG)
+          rejected = true;
+        endtry
+        $test_utils:assert_true(rejected, "Declared state rejects the wrong type or an unknown choice");
+      endfor
+      $test_utils:assert_eq(host.mode, "idle", "Invalid state changes preserve the old value");
+    finally
+      $reaction:cancel_timer(host, 'alarm);
+      recycle(host);
+    endtry
+    return true;
+  endmethod
+
+  method test_reaction_chain_and_timer_limits owner: ARCH_WIZARD
+    "A recursive trigger stops with a useful limit, and an object cannot accumulate unbounded timers.";
+    const host = create($thing, $hacker, 2);
+    try
+      $reaction:declare_state(host, 'count, 'integer, 0);
+      $reaction:install(host, "loop_reaction", $reaction:mk('loop, 0,
+        {{'increment, 'count}, {'trigger, host, 'loop}}));
+      $test_utils:assert_raises(E_QUOTA, host, "fire_trigger", {'loop}, "A reaction loop has a fixed limit");
+      $test_utils:assert_eq(host.count, 4, "The chain stops after four completed steps");
+      for i in [1..16]
+        $reaction:execute_effect({'schedule, tosym("timer_" + tostr(i)), 60, {'increment, 'count}},
+          ['Actor -> player, 'This -> host], host);
+      endfor
+      $test_utils:assert_eq(length($reaction:timers(host)), 16, "The configured pending timer limit is available");
+      $test_utils:assert_raises(E_QUOTA, $reaction, "execute_effect",
+        {{'schedule, 'overflow, 60, {'increment, 'count}}, ['Actor -> player, 'This -> host], host},
+        "Another timer is rejected without scheduling it");
+    finally
+      for name in (mapkeys($reaction:timers(host)))
+        $reaction:cancel_timer(host, name);
+      endfor
+      recycle(host);
+    endtry
+    return true;
+  endmethod
+
+  method _timer_as_owner owner: RUNTIME_PLAYER
+    "Use timer and state services as the non-programmer who owns the object.";
+    caller == this || raise(E_PERM);
+    const {host, operation} = args;
+    operation == "start" && return host:fire_trigger('start, ['Actor -> #90102]);
+    operation == "cancel" && return $reaction:cancel_timer(host, 'alarm);
+    operation == "idle" && return $reaction:change(host, 'mode, 'set, "idle");
+    operation == "bad_counter" && return $reaction:change(host, 'count, 'set, "many");
+    operation == "bad_choice" && return $reaction:change(host, 'mode, 'set, "missing");
+    raise(E_INVARG);
+  endmethod
+
+  method test_reinstall_cancels_timers_and_movement_changes_scope owner: ARCH_WIZARD
+    "Replacing an installation cancels its task immediately; moved hosts cannot execute captured effects.";
+    const first = create($thing, #90102, 2);
+    const second = create($thing, #90102, 2);
+    try
+      for host in ({first, second})
+        $reaction:declare_state(host, 'count, 'integer, 0);
+        const reaction = $reaction:mk('start, 0, {{'schedule, 'alarm, 1, {'increment, 'count}}});
+        $reaction:install(host, "alarm_reaction", reaction);
+        this:_timer_as_owner(host, "start");
+      endfor
+      let disabled = first.alarm_reaction;
+      disabled.enabled = false;
+      $reaction:install(first, "alarm_reaction", disabled);
+      $test_utils:assert_eq($reaction:timers(first), [], "Disabling cancels immediately");
+      disabled.enabled = true;
+      $reaction:install(first, "alarm_reaction", disabled);
+      move(second, #90103);
+      suspend(2);
+      $test_utils:assert_eq({first.count, second.count}, {0, 0},
+        "Re-enabling does not revive a timer; a changed location does not reuse its old scope");
+    finally
+      for host in ({first, second})
+        $reaction:cancel_timer(host, 'alarm);
+        recycle(host);
+      endfor
+    endtry
+    return true;
+  endmethod
+
   verb _fixture (this none this) owner: ARCH_WIZARD flags: "rxd"
     "Create a named thing fixture for reaction state scenarios.";
     {name} = args;
@@ -77,15 +187,19 @@ object HEADLESS_REACTION_SCENARIOS
       add_property(receiver, "chain_count", 0, {this.owner, "r"});
       add_property(receiver, "chain_actor", #-1, {this.owner, "r"});
       add_property(receiver, "chain_this", #-1, {this.owner, "r"});
-      add_verb(handler, {this.owner, "rxd", "action_record_context"}, {"this", "none", "this"});
-      set_verb_code(handler, "action_record_context", {"{target, context} = args;", "target.chain_actor = context['Actor];", "target.chain_this = context['This];", "return true;"});
+      add_verb(handler, {$arch_wizard, "rxd", "action_record_context"}, {"this", "none", "this"});
+      set_verb_code(handler, "action_record_context", {"set_task_perms(caller_perms());", "const {values, context} = args;", "values['target].chain_actor = values['actor];", "values['target].chain_this = values['target];", "return ['status -> 'applied];"});
+      $reaction:register_action('record_context,
+        ['description -> "Record the trigger participants.", 'inputs -> ['target -> 'object, 'actor -> 'object]],
+        handler, "action_record_context");
       $reaction:install(source, "source_trigger_reaction", $reaction:mk('on_first, 0, {{'trigger, receiver, 'on_second}}));
-      $reaction:install(receiver, "receiver_trigger_reaction", $reaction:mk('on_second, 0, {{'increment, 'chain_count, 1}, {'action, 'record_context, handler}}));
+      $reaction:install(receiver, "receiver_trigger_reaction", $reaction:mk('on_second, 0, {{'increment, 'chain_count, 1}, {'action, 'record_context, ['target -> ['kind -> 'input, 'name -> 'This], 'actor -> ['kind -> 'input, 'name -> 'Actor]]}}));
       source:fire_trigger('on_first, ['Actor -> actor]);
       $test_utils:assert_eq(receiver.chain_count, 1, "trigger effect should execute the receiver reaction");
       $test_utils:assert_eq(receiver.chain_actor, actor, "chained trigger should preserve actor context");
       $test_utils:assert_eq(receiver.chain_this, receiver, "chained trigger should update receiver context");
     finally
+      $reaction:unregister_action('record_context);
       valid(handler) && handler:destroy();
       valid(actor) && actor:destroy();
       valid(receiver) && receiver:destroy();

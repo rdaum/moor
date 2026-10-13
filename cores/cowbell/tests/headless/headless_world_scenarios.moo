@@ -7,6 +7,144 @@ object HEADLESS_WORLD_SCENARIOS
   readable: true
   override import_export_id = "headless_world_scenarios";
   override import_export_hierarchy = {"tests", "headless"};
+  method test_view_and_take_policies_are_independent owner: ARCH_WIZARD
+    "An item-specific take rule does not break looking, and both take paths emit the same events.";
+    const room = create($room, #90100, 2);
+    const box = create($container, #90100, 2);
+    const item = create($thing, #90100, 2);
+    const npc = create($actor, #90102, 2);
+    try
+      move(box, room);
+      move(npc, room);
+      move(item, box);
+      box.take_rule = $rule_engine:parse_expression("isa(object: input.Dobj, prototype: " + toliteral($thing) + ")",
+        'items_only, $rule_engine:policy_scope('take_rule));
+      $test_utils:assert_true(box:can_view_contents(npc), "Viewing needs no item input");
+      add_property(box, "takes", 0, {#90100, "r"});
+      add_property(item, "gets", 0, {#90100, "r"});
+      $reaction:install(box, "take_reaction", $reaction:mk('on_take, 0, {{'increment, 'takes}}));
+      $reaction:install(item, "get_reaction", $reaction:mk('on_get, "input.Location == " + toliteral(room), {{'increment, 'gets}}));
+      $test_utils:assert_true(this:_action_as_guest(item, "action_get", npc, []), "Owned NPC takes an item");
+      $test_utils:assert_eq({item.location, box.takes, item.gets}, {npc, 1, 1}, "Both completed events fire once");
+      move(item, box);
+      box.view_rule = $rule_engine:parse_expression("FALSE", 'hidden, $rule_engine:policy_scope('view_rule));
+      $test_utils:assert_false(box:can_view_contents(npc), "Viewing has its own policy");
+      $test_utils:assert_true(this:_action_as_guest(box, "action_take_from", npc, [], item), "Taking retains its own policy");
+      $test_utils:assert_eq({box.takes, item.gets}, {2, 2}, "The second entry produces the same two events");
+      move(item, box);
+      box.take_rule = $rule_engine:parse_expression("FALSE", 'keep, $rule_engine:policy_scope('take_rule));
+      add_verb(box, {#90100, "rxd", "can_take_from"}, {"this", "none", "this"});
+      set_verb_code(box, "can_take_from", {"return ['allowed -> true];"});
+      $test_utils:assert_false(this:_action_as_guest(item, "action_get", npc, []), "An override cannot bypass the actual rule");
+      $test_utils:assert_eq({item.location, box.takes, item.gets}, {box, 2, 2}, "Denial leaves custody and events unchanged");
+      box.take_rule = 0;
+      move(npc, #-1);
+      $test_utils:assert_false(this:_action_as_guest(box, "action_take_from", npc, [], item), "A remote actor cannot take");
+    finally
+      recycle(item);
+      recycle(box);
+      recycle(npc);
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
+  method test_named_actions_preserve_actor_authority owner: ARCH_WIZARD
+    "Named key arguments work for an owner's NPC, and denial differs from an invalid request.";
+    const npc = create($actor, #90102, 2);
+    const box = create($container, #90100, 2);
+    const key = create($thing, #90102, 2);
+    try
+      move(box, npc);
+      move(key, npc);
+      box.locked = true;
+      box.unlock_rule = $rule_engine:parse_expression("input.Key == " + toliteral(key),
+        'key_only, $rule_engine:policy_scope('unlock_rule));
+      const arguments = ['target -> box, 'actor -> npc, 'key -> key];
+      const applied = this:_action_as_guest($reaction, "perform_action", 'unlock, arguments);
+      $test_utils:assert_eq(applied['status], 'applied, "An owned NPC can use an authorized key");
+      $test_utils:assert_false(box.locked, "The operation changes the lock");
+      const denied = this:_action_as_guest($reaction, "perform_action", 'unlock, arguments);
+      $test_utils:assert_eq(denied['status], 'denied, "An already completed operation is a normal denial");
+      const missing = this:_action_as_guest($reaction, "perform_action", 'unlock, mapdelete(arguments, 'key));
+      $test_utils:assert_eq(missing['status], 'error, "A missing required argument is an error");
+      const forged = this:_action_as_guest($reaction, "perform_action", 'unlock,
+        mapmerge(arguments, ['actor -> #90100]));
+      $test_utils:assert_eq(forged['error][1], E_PERM, "An event participant cannot grant another person's authority");
+      box.locked = true;
+      $reaction:install(npc, "unlock_reaction", $reaction:mk('on_lock, 0,
+        {{'action, 'unlock, ['target -> ['kind -> 'literal, 'value -> box],
+          'actor -> ['kind -> 'input, 'name -> 'This], 'key -> ['kind -> 'input, 'name -> 'Key]]}}));
+      this:_action_as_guest(npc, "fire_trigger", 'on_lock, ['Actor -> #90102, 'Key -> key]);
+      $test_utils:assert_false(box.locked, "Installed effects preserve the owner principal and pass named arguments");
+    finally
+      recycle(key);
+      recycle(box);
+      recycle(npc);
+    endtry
+    return true;
+  endmethod
+
+  method test_wear_and_remove_emit_completed_events owner: ARCH_WIZARD
+    "Wearing and removal authenticate the actor, emit one event, and preserve worn-item custody.";
+    const npc = create($actor, #90102, 2);
+    const item = create($wearable, #90100, 2);
+    try
+      move(item, npc);
+      add_property(item, "wears", 0, {#90100, "r"});
+      add_property(item, "removes", 0, {#90100, "r"});
+      $reaction:install(item, "wear_reaction", $reaction:mk('on_wear, 0, {{'increment, 'wears}}));
+      $reaction:install(item, "remove_reaction", $reaction:mk('on_remove, 0, {{'increment, 'removes}}));
+      $test_utils:assert_true(this:_action_as_guest(item, "action_wear", npc, []), "The owner can direct an NPC to wear a held item");
+      $test_utils:assert_eq({npc.wearing, item.wears}, {{item}, 1}, "One completed wear");
+      $test_utils:assert_false(this:_action_as_guest(item, "action_wear", npc, []), "A repeated wear is denied");
+      $test_utils:assert_eq(item.wears, 1, "Denial emits no completed event");
+      $test_utils:assert_false(this:_action_as_guest(item, "action_drop", npc, []), "A worn item cannot be dropped");
+      $test_utils:assert_true(this:_action_as_guest(item, "action_remove", npc, []), "Removal uses the same actor authority");
+      $test_utils:assert_eq({npc.wearing, item.removes, item.location}, {{}, 1, npc}, "One removal leaves the item carried");
+    finally
+      recycle(item);
+      recycle(npc);
+    endtry
+    return true;
+  endmethod
+
+  method _action_as_guest owner: RUNTIME_PLAYER
+    "Exercise action authority as a non-programmer who owns an NPC.";
+    caller == this || raise(E_PERM);
+    const {target, method, @parameters} = args;
+    return target:(method)(@parameters);
+  endmethod
+
+  method test_passage_policy_has_explicit_sides_and_optional_keys owner: ARCH_WIZARD
+    "A policy without Key works with an empty inventory; From and To keep their declared meaning.";
+    const from = create($room, #90100, 2);
+    const to = create($room, #90100, 2);
+    const npc = create($actor, #90102, 2);
+    const key = create($thing, #90102, 2);
+    try
+      let passage = $passage:mk(from, "east", {}, "", true, to, "west", {}, "", true);
+      passage = passage:with_locked(true);
+      const side_rule = $rule_engine:parse_expression("input.From == " + toliteral(from),
+        'one_way, $rule_engine:passage_scope());
+      passage = passage:with_unlock_rule(side_rule);
+      $test_utils:assert_true(passage:check_unlock(npc, from), "A key-independent rule needs no inventory item");
+      $test_utils:assert_false(passage:check_unlock(npc, to), "The other endpoint is not silently tried as From");
+      const key_rule = $rule_engine:parse_expression("input.Key == " + toliteral(key),
+        'key_only, $rule_engine:passage_scope());
+      passage = passage:with_unlock_rule(key_rule);
+      $test_utils:assert_false(passage:check_unlock(npc, from), "A key-dependent rule needs a key");
+      move(key, npc);
+      $test_utils:assert_true(passage:check_unlock(npc, from), "A carried matching key grants access");
+    finally
+      recycle(key);
+      recycle(npc);
+      recycle(from);
+      recycle(to);
+    endtry
+    return true;
+  endmethod
+
   method test_foreign_area_cleanup_denied owner: ARCH_WIZARD
     "Only authorized lifecycle code may remove another area's passages.";
     const area = create($area, $arch_wizard, 2);
@@ -111,16 +249,17 @@ object HEADLESS_WORLD_SCENARIOS
     endtry
   endmethod
 
-  method test_container_put_rechecks_custody_after_policy_yield owner: ARCH_WIZARD
-    "A suspended policy callback cannot authorize moving an item that its actor no longer holds.";
+  method test_container_put_rechecks_custody_after_acceptance_yield owner: ARCH_WIZARD
+    "A suspended acceptance callback cannot authorize moving an item that its actor no longer holds.";
     const container = create($container, #90100, 2);
     const item = create($thing, #90101, 2);
     const prior_location = #90101.location;
     move(#90101, #-1);
     try
+      move(container, #90101);
       move(item, #90101);
-      add_verb(container, {#90100, "rxd", "can_put_into"}, {"this", "none", "this"});
-      set_verb_code(container, "can_put_into", {"const {who, item} = args; move(item, #90103); suspend(0); return ['allowed -> true, 'reason -> {}];"});
+      add_verb(container, {#90100, "rxd", "acceptable"}, {"this", "none", "this"});
+      set_verb_code(container, "acceptable", {"const {item} = args; move(item, #90103); suspend(0); return true;"});
       const result = this:call_as_programmer(container, "action_put_into", #90101, [], item);
       $test_utils:assert_eq(result, false, "stale custody denies put");
       $test_utils:assert_eq(item.location, #90103, "callback transfer remains in its chosen location");
@@ -138,6 +277,7 @@ object HEADLESS_WORLD_SCENARIOS
     const prior_location = #90101.location;
     move(#90101, #-1);
     try
+      move(container, #90101);
       move(item, #90101);
       $test_utils:assert_eq(this:call_as_programmer(container, "action_close", #90101, []), true, "public close succeeds");
       $test_utils:assert_eq(container.open, false, "close applied");
@@ -319,8 +459,8 @@ object HEADLESS_WORLD_SCENARIOS
     endtry
   endmethod
 
-  method test_inspection_transfers_recheck_after_policy_yield owner: ARCH_WIZARD
-    "Transfer policy callbacks may suspend; final custody and reachability must be checked again.";
+  method test_inspection_transfers_recheck_after_acceptance_yield owner: ARCH_WIZARD
+    "Transfer acceptance callbacks may suspend; final custody and reachability must be checked again.";
     const room = create($room, #90100, 2);
     const item = create($thing, #90100, 2);
     const who = player;
@@ -331,16 +471,18 @@ object HEADLESS_WORLD_SCENARIOS
     try
       move(who, room);
       move(item, room);
-      add_verb(item, {#90100, "rxd", "can_get"}, {"this", "none", "this"});
-      set_verb_code(item, "can_get", {"move(this, #90103); suspend(0); return true;"});
+      add_verb(who, {#90100, "rxd", "acceptable"}, {"this", "none", "this"});
+      set_verb_code(who, "acceptable", {"move(args[1], #90103); suspend(0); return true;"});
       this:call_as_test_player(item, "get");
-      $test_utils:assert_eq(item.location, #90103, "Take rechecks reachability after policy yield");
+      $test_utils:assert_eq(item.location, #90103, "Take rechecks reachability after acceptance yield");
+      delete_verb(who, "acceptable");
       move(item, who);
-      add_verb(item, {#90100, "rxd", "can_drop"}, {"this", "none", "this"});
-      set_verb_code(item, "can_drop", {"move(this, #90103); suspend(0); return true;"});
+      add_verb(room, {#90100, "rxd", "acceptable"}, {"this", "none", "this"});
+      set_verb_code(room, "acceptable", {"move(args[1], #90103); suspend(0); return true;"});
       this:call_as_test_player(item, "drop");
-      $test_utils:assert_eq(item.location, #90103, "Drop rechecks custody after policy yield");
+      $test_utils:assert_eq(item.location, #90103, "Drop rechecks custody after acceptance yield");
     finally
+      `delete_verb(who, "acceptable") ! E_VERBNF';
       move(who, prior_location);
       recycle(item);
       recycle(room);
@@ -467,7 +609,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_true(!box:suggestion_eligibility("contents", {beta_ref})[beta_ref]["eligible"], "closed content eligibility reveals no label");
       $test_utils:assert_eq(box:suggestions("contents", "")["items"], {}, "closed contents stay private");
       box.open = true;
-      box.take_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_view, $rule_engine:policy_scope('take_rule));
+      box.view_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_view, $rule_engine:policy_scope('view_rule));
       box.owner = player;
       $test_utils:assert_eq({owner_row["value"] for owner_row in (box:suggestions("contents", "")["items"])}, {tostr(beta)}, "viewing rules allow the owner to see contents");
       $test_utils:assert_true(box:suggestion_eligibility("contents", {beta_ref})[beta_ref]["eligible"], "owner-visible contents remain eligible");
@@ -476,7 +618,7 @@ object HEADLESS_WORLD_SCENARIOS
       const denied = box:suggestion_eligibility("contents", {beta_ref})[beta_ref];
       $test_utils:assert_false(denied["eligible"], "viewing rules deny nonowner eligibility");
       $test_utils:assert_false(maphaskey(denied, "label"), "denied eligibility does not reveal the item name");
-      box.take_rule = 0;
+      box.view_rule = 0;
       move(box, #90103);
       $test_utils:assert_eq(box:suggestions("contents", "")["items"], {}, "distant containers do not expose contents");
       const foreign = `#90101:suggestions("inventory", "") ! E_PERM => E_PERM';

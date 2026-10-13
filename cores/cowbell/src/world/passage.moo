@@ -666,36 +666,26 @@ object PASSAGE [
     return this:_mk_from_props(props);
   endverb
 
-  verb check_unlock (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Check if player can traverse this passage while locked.";
-    "Returns true if unlocked or if unlock_rule grants access with a carried key.";
-    {player, from_room} = args;
-    if (!this:_value("is_locked", false))
-      return true;
+  method check_unlock owner: ARCH_WIZARD
+    "Check a locked passage's policy with explicit From and To rooms and optional carried Key.";
+    set_task_perms(caller_perms());
+    const {who, from_room} = args;
+    !this:_value("is_locked", false) && return true;
+    const rule = this:_value("unlock_rule", 0);
+    rule == 0 && return false;
+    const to_room = this:other_room(from_room);
+    valid(to_room) || return false;
+    let inputs = ['Accessor -> who, 'From -> from_room, 'To -> to_room, 'Passage -> this];
+    const references = $condition:references(rule.condition);
+    if (!('Key in references['input]))
+      return $rule_engine:evaluate(rule, inputs)['success];
     endif
-    unlock_rule = this:_value("unlock_rule", 0);
-    if (typeof(unlock_rule) != TYPE_FLYWEIGHT)
-      "Locked with no unlock rule: deny traversal.";
-      return false;
-    endif
-    to_room = this:other_room(from_room);
-    !valid(to_room) && return false;
-    for item in (player.contents)
-      "Allow rules that key off the side being exited.";
-      bindings = ['Accessor -> player, 'This -> from_room, 'Key -> item, 'Passage -> this];
-      result = $rule_engine:evaluate(unlock_rule, bindings);
-      if (typeof(result) == TYPE_MAP && result['success])
-        return true;
-      endif
-      "Allow rules that key off the side being entered.";
-      bindings = ['Accessor -> player, 'This -> to_room, 'Key -> item, 'Passage -> this];
-      result = $rule_engine:evaluate(unlock_rule, bindings);
-      if (typeof(result) == TYPE_MAP && result['success])
-        return true;
-      endif
+    for key in (who.contents)
+      inputs['Key] = key;
+      $rule_engine:evaluate(rule, inputs)['success] && return true;
     endfor
     return false;
-  endverb
+  endmethod
 
   verb _notify_locked (none none none) owner: ARCH_WIZARD flags: "rxd"
     "Notify player that passage is locked.";
