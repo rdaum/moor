@@ -203,6 +203,26 @@ object SITTABLE [
     this:fire_trigger('on_stand, ['Actor -> player]);
   endverb
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"already_sitting_msg", "cant_reach_msg", "no_room_msg", "not_sitting_msg", "sit_msg", "stand_msg"})
+      let bindings = $sub_utils:standard_bindings("The person sitting or standing.");
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The furniture.",
+        'example -> 'host];
+      return bindings;
+    endif
+    if (tostr(property) in {"dumped_msg", "squeezed_msg"})
+      let bindings = $sub_utils:standard_bindings("The person removed from the furniture.");
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The furniture.",
+        'example -> 'host];
+      bindings['dobj] = ['kind -> 'object, 'description -> "The same person removed from the furniture.",
+        'example -> 'actor];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method add_sitter owner: HACKER
     "Programmatically add an actor to sit. Returns true if successful.";
     const {who, ?silent = false, ?context = []} = args;

@@ -168,6 +168,12 @@ object HEADLESS_BUILDER_COMMAND_SCENARIOS
       fixture.owner = #90102;
       fixture.name = "headless message command fixture";
       add_property(fixture, "headless_msg", "", {#90102, "rc"});
+      add_verb(fixture, {#90102, "rxd", "message_bindings"}, {"this", "none", "this"});
+      const binding_errors = set_verb_code(fixture, "message_bindings", {
+        "\"Declare the participant supplied to the fixture's messages.\";",
+        "args[1] == \"headless_msgs\" && return $sub_utils:standard_bindings(\"The test participant.\");",
+        "return pass(@args);"});
+      $test_utils:assert_false(binding_errors, "fixture binding declaration should compile");
       #90102.is_builder = true;
       add_property(#90102, "headless_last_inform", false, {$arch_wizard, "r"});
       added_inform_log = true;

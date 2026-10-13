@@ -938,7 +938,7 @@ object LLM_WEARABLE [
     const target_obj = $match:match_object(args_map["object"], wearer);
     typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    {success, compiled} = $obj_utils:validate_and_compile_template(template);
+    {success, compiled} = $obj_utils:validate_and_compile_template(template, target_obj, prop_name);
     success || raise(E_INVARG, "Template compilation failed: " + compiled);
     const obj_name = `target_obj.name ! ANY => tostr(target_obj)';
     const prop_key = $obj_utils:property_key(target_obj, prop_name);
@@ -969,7 +969,7 @@ object LLM_WEARABLE [
     const target_obj = $match:match_object(args_map["object"], wearer);
     typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    const compiled = $sub_utils:compile(template);
+    const compiled = $sub_utils:compile(template, target_obj:message_bindings(prop_name));
     const prop_key = $obj_utils:property_key(target_obj, prop_name);
     if (prop_key == E_PROPNF)
       if (!wearer.wizard && target_obj.owner != wearer)

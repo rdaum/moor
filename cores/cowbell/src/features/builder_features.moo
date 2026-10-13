@@ -46,42 +46,45 @@ object BUILDER_FEATURES [
     who.is_builder || raise(E_PERM, "Builder features required.");
   endmethod
 
-  verb "@add-message" (any any any) owner: HACKER flags: "rd"
+  verb "@add-message" (any any any) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object>.<property> <template> -- Add an entry to a message bag.";
     "Add a compiled message template entry to a message bag property. Usage: @add-message <object>.<prop> <template>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (length(args) < 2)
       player:inform_current($event:mk_error(player, "Usage: @add-message <object>.<prop> <template>"):with_audience('utility));
       return;
     endif
-    prop_spec = args[1];
-    parsed = $prog_utils:parse_target_spec(prop_spec);
+    const prop_spec = args[1];
+    const parsed = $prog_utils:parse_target_spec(prop_spec);
+    let target_name;
+    let prop_name;
     if (parsed && parsed['type] == 'property)
       target_name = parsed['object_str];
       prop_name = parsed['item_name];
     elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-      sel = parsed['selectors][1];
+      const sel = parsed['selectors][1];
       sel['kind] == 'property || raise(E_INVARG, "Property must be in the form object.property");
       target_name = parsed['object_str];
       prop_name = sel['item_name];
     else
       raise(E_INVARG, "Property must be in the form object.property");
     endif
-    target = $match:match_object(target_name, player);
+    const target = $match:match_object(target_name, player);
     valid(target) || raise(E_INVARG, "Object not found");
     prop_name:ends_with("_msg_bag") || prop_name:ends_with("_msgs") || raise(E_INVARG, "Property must end with _msg_bag or _msgs");
     "Preserve full template text after target spec";
-    offset = index(argstr, prop_spec) + length(prop_spec);
-    text = argstr[offset..length(argstr)]:trim();
+    const offset = index(argstr, prop_spec) + length(prop_spec);
+    const text = argstr[offset..length(argstr)]:trim();
     !text && raise(E_INVARG, "Usage: @add-message <object>.<prop> <template>");
-    {success, compiled} = $obj_utils:validate_and_compile_template(text);
+    const {success, compiled} = $obj_utils:validate_and_compile_template(text, target, prop_name);
     if (!success)
       player:inform_current($event:mk_error(player, "Template compilation failed: " + compiled):with_audience('utility));
       return;
     endif
-    prop_key = $obj_utils:property_key(target, prop_name);
-    grants = prop_key == E_PROPNF ? {{"property_define", target}} | {{"property_write", target, prop_key}};
+    const prop_key = $obj_utils:property_key(target, prop_name);
+    const grants = prop_key == E_PROPNF ? {{"property_define", target}} | {{"property_write", target, prop_key}};
     $obj_utils:add_message_entry(target, prop_name, compiled, player, grants);
     player:inform_current($event:mk_info(player, "Added message to " + tostr(target) + "." + prop_name):with_audience('utility));
   endverb
@@ -1365,28 +1368,31 @@ object BUILDER_FEATURES [
     present(connection(), editor_id, "text/plain", "property-value-editor", "", {{"object", object_curie}, {"property", prop_name}, {"title", editor_title}});
   endmethod
 
-  verb "@set-m*essage @setm" (any any any) owner: HACKER flags: "rd"
+  verb "@set-m*essage @setm" (any any any) owner: ARCH_WIZARD flags: "rd"
     "Set a custom message template on an object property.";
     "Usage: @set-message OBJECT.PROPERTY template string...";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr || length(args) < 2)
       raise(E_INVARG, "Usage: @set-message OBJECT.PROPERTY template string...");
     endif
     try
-      target_spec = args[1];
+      const target_spec = args[1];
       "Parse property reference";
-      parsed = $prog_utils:parse_target_spec(target_spec);
+      const parsed = $prog_utils:parse_target_spec(target_spec);
       if (!parsed)
         player:inform_current($event:mk_error(player, "Usage: @set-message <object>.<prop-name> template..."));
         return;
       endif
       "Handle both old 'property type and new 'compound type";
+      let object_str;
+      let prop_name;
       if (parsed['type] == 'property)
         object_str = parsed['object_str];
         prop_name = parsed['item_name];
       elseif (parsed['type] == 'compound && length(parsed['selectors]) > 0)
-        sel = parsed['selectors][1];
+        const sel = parsed['selectors][1];
         if (sel['kind] != 'property)
           player:inform_current($event:mk_error(player, "Usage: @set-message <object>.<prop-name> template..."));
           return;
@@ -1399,6 +1405,7 @@ object BUILDER_FEATURES [
       endif
       prop_name:ends_with("_msg") || prop_name:ends_with("_msgs") || prop_name:ends_with("_msg_bag") || raise(E_INVARG, "Property must end with '_msg', '_msgs', or '_msg_bag'.");
       "Match the target object";
+      let target_obj;
       try
         target_obj = $match:match_object(object_str, player);
       except e (E_INVARG, E_PROPNF)
@@ -1408,34 +1415,61 @@ object BUILDER_FEATURES [
         raise(e[1], "Object lookup failed: " + toliteral(e));
       endtry
       "Get remainder after target spec";
-      offset = index(argstr, target_spec) + length(target_spec);
-      template_string = argstr[offset..length(argstr)]:trim();
+      const offset = index(argstr, target_spec) + length(target_spec);
+      const template_string = argstr[offset..length(argstr)]:trim();
       typeof(target_obj) != TYPE_OBJ && raise(E_INVARG, "That reference is not an object.");
       !valid(target_obj) && raise(E_INVARG, "That object does not exist.");
       "Check if property is writable";
-      {writable, error_msg} = $obj_utils:check_message_property_writable(target_obj, prop_name, player);
+      const {writable, error_msg} = $obj_utils:check_message_property_writable(target_obj, prop_name, player);
       if (!writable)
         raise(E_PERM, error_msg);
       endif
       "Compile and validate the template";
-      {success, result} = $obj_utils:validate_and_compile_template(template_string);
+      const {success, result} = $obj_utils:validate_and_compile_template(template_string, target_obj, prop_name);
       if (!success)
         raise(E_INVARG, "Template compilation failed: " + result);
       endif
-      compiled_list = result;
-      obj_name = `target_obj.name ! ANY => tostr(target_obj)';
-      success_message = "Set message template on " + obj_name + " (" + tostr(target_obj) + ")." + prop_name + ".";
+      const compiled_list = result;
+      const obj_name = `target_obj.name ! ANY => tostr(target_obj)';
+      const success_message = "Set message template on " + obj_name + " (" + tostr(target_obj) + ")." + prop_name + ".";
       "Set the compiled message";
-      prop_key = $obj_utils:property_key(target_obj, prop_name);
+      const prop_key = $obj_utils:property_key(target_obj, prop_name);
       prop_key == E_PROPNF && raise(E_PROPNF, "Property not found: " + prop_name);
       $obj_utils:set_compiled_message(target_obj, prop_key, compiled_list, player, {{"property_write", target_obj, prop_key}});
       player:inform_current($event:mk_info(player, success_message));
       return true;
     except e (ANY)
-      message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      const message = length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
       player:inform_current($event:mk_error(player, message));
       return 0;
     endtry
+  endverb
+
+  verb "@message-bindings" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "HINT: OBJECT.PROPERTY -- Explain which participants a message can name.";
+    caller == player || raise(E_PERM);
+    this:_require_builder_command(player);
+    set_task_perms(player);
+    length(args) == 1 || raise(E_INVARG, "Use @message-bindings OBJECT.PROPERTY.");
+    const parsed = $prog_utils:parse_target_spec(args[1]);
+    (parsed && parsed['type] == 'compound && length(parsed['selectors]) == 1
+      && parsed['selectors][1]['kind] == 'property)
+      || raise(E_INVARG, "Use an object.property reference.");
+    const target = $match:match_object(parsed['object_str], player);
+    const property = parsed['selectors][1]['item_name];
+    const bindings = target:message_bindings(property);
+    let lines = {"Bindings for " + args[1] + ":"};
+    for name in (mapkeys(bindings))
+      lines = {@lines, "{" + tostr(name) + "}: " + bindings[name]['description]
+        + " (" + tostr(bindings[name]['kind]) + ")"};
+    endfor
+    if (!length(bindings))
+      lines = {@lines, "This message has no declared bindings. Literal text is allowed.",
+        "Its programmer must declare any participants before you can use their names or pronouns."};
+    endif
+    for line in (lines)
+      player:inform_current($event:mk_info(player, line):with_audience('utility));
+    endfor
   endverb
 
   verb "@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"

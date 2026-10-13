@@ -110,6 +110,20 @@ object WEARABLE [
     "```"
   };
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"wear_msg", "remove_msg"})
+      let bindings = $sub_utils:standard_bindings("The person wearing or removing the item.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The wearable item.",
+        'example -> 'host];
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where this happens.",
+        'example -> 'location];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method _conflict owner: ARCH_WIZARD
     "Read body-area conflicts without calling an overridable permission helper.";
     set_task_perms(caller_perms());

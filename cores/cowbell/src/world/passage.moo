@@ -67,6 +67,30 @@ object PASSAGE [
 
   override description (owner: HACKER, flags: "rc") = "Bidirectional passage configuration.";
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"side_a_arrive_msg", "side_b_arrive_msg", "side_a_leave_msg", "side_b_leave_msg"})
+      let bindings = $sub_utils:standard_bindings("The person travelling.");
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room receiving this message.",
+        'example -> 'location];
+      bindings['from_room] = ['kind -> 'object, 'description -> "The room the traveller leaves.",
+        'example -> 'from_room];
+      bindings['to_room] = ['kind -> 'object, 'description -> "The room the traveller enters.",
+        'example -> 'to_room];
+      bindings['direction] = ['kind -> 'text, 'description -> "The direction seen from this side.",
+        'example -> "north"];
+      bindings['from_direction] = ['kind -> 'text, 'description -> "The departure direction.",
+        'example -> "north"];
+      bindings['to_direction] = ['kind -> 'text, 'description -> "The arrival direction.",
+        'example -> "south"];
+      bindings['passage] = ['kind -> 'text, 'description -> "The passage name.",
+        'example -> "doorway"];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method mk owner: HACKER
     {room_a, label_a, aliases_a, description_a, ambient_a, room_b, label_b, aliases_b, description_b, ambient_b, ?is_open = true} = args;
     typeof(room_a) == TYPE_OBJ && typeof(room_b) == TYPE_OBJ || raise(E_TYPE);

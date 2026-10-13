@@ -84,6 +84,16 @@ To inspect the stored message, use:
 
 To change it again, repeat `@set-message` with the new text.
 
+To find out which participants this message can name, use:
+
+```text
+@message-bindings pebble.get_msg
+```
+
+For this message, `actor` means the person moving the pebble, and `dobj` means the pebble. These
+meanings depend on the interaction. The editor checks them before saving. For example,
+`Hello {dobbj}.` reports a mistake at character 7 and suggests `{dobj}`.
+
 ## Refer to people without guessing their pronouns
 
 The **actor** is the person or object doing the action described by a message. In the pickup

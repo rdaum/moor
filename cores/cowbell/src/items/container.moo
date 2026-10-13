@@ -259,6 +259,56 @@ object CONTAINER [
     "```"
   };
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"open_msg", "close_msg"})
+      let bindings = $sub_utils:standard_bindings("The person opening or closing the container.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      bindings['iobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where this happens.",
+        'example -> 'location];
+      return bindings;
+    endif
+    if (tostr(property) in {"put_msg", "take_msg"})
+      let bindings = $sub_utils:standard_bindings("The person moving an item.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The item being moved.",
+        'example -> 'item];
+      bindings['iobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where this happens.",
+        'example -> 'location];
+      bindings['prep] = ['kind -> 'text, 'description -> "The container preposition, such as in or on.",
+        'example -> "in"];
+      return bindings;
+    endif
+    if (tostr(property) in {"lock_msg", "unlock_msg"})
+      let bindings = $sub_utils:standard_bindings("The person using the key.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The key.",
+        'example -> 'item];
+      bindings['iobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where this happens.",
+        'example -> 'location];
+      return bindings;
+    endif
+    if (tostr(property) in {"already_open_msg", "already_closed_msg", "open_locked_msg", "already_locked_msg", "already_unlocked_msg"})
+      let bindings = $sub_utils:standard_bindings("The person trying the operation.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      return bindings;
+    endif
+    if (tostr(property) in {"put_denied_msg", "take_denied_msg", "open_denied_msg", "close_denied_msg", "lock_denied_msg", "unlock_denied_msg", "not_closeable_msg", "not_lockable_msg", "not_openable_msg", "not_unlockable_msg", "view_denied_msg"})
+      let bindings = $sub_utils:standard_bindings("The person trying the operation.");
+      bindings['iobj] = ['kind -> 'object, 'description -> "The container.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method reference_kind owner: HACKER
     "Identify containers in client references and choices.";
     return "container";

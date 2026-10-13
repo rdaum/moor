@@ -113,6 +113,18 @@ object CONSUMABLE [
     "- `action_consume(who, context, ?amount)`: Reaction handler for programmatic use"
   };
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"consume_msg", "consume_denied_msg", "empty_msg", "finish_msg"})
+      let bindings = $sub_utils:standard_bindings("The person consuming the item.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The food or drink.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method can_consume owner: ARCH_WIZARD
     "Check if accessor can consume this. Returns ['allowed -> bool, 'reason -> msg].";
     {who} = args;

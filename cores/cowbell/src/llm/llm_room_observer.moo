@@ -78,6 +78,18 @@ object LLM_ROOM_OBSERVER [
 
   override description (owner: HACKER, flags: "rc") = "Room-observing bot powered by an LLM agent. Watches room events and responds when poked.";
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"already_off_msg", "already_on_msg", "shut_off_msg", "turn_on_msg"})
+      let bindings = $sub_utils:standard_bindings("The person switching the observer.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The observer device.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method configure owner: ARCH_WIZARD
     "Create agent and apply configuration. Children override _setup_agent to customize.";
     const principal = caller_perms();

@@ -12,6 +12,16 @@ object HOUSEKEEPING [
   property sweep_interval (owner: ARCH_WIZARD, flags: "rc") = 3000;
   property sweep_msgs (owner: ARCH_WIZARD, flags: "rc") = HOUSEKEEPING_SWEEP_MSGS;
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"sweep_msgs"})
+      let bindings = $sub_utils:standard_bindings("The housekeeper.");
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method sweep owner: ARCH_WIZARD
     "Sweep disconnected players back to their home rooms.";
     "Native recurring firings use their creator as caller; each firing has a separate transaction.";

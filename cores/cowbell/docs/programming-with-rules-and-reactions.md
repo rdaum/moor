@@ -83,15 +83,67 @@ one called `pet_msg` for the message:
 ```moot
 % @property petrock.pet_msg {} rc
 ~~Added
-% @set-message petrock.pet_msg {nc} {pet|pets} {d}.
-~~Set message template
 ```
 
 The dot in `petrock.pet_msg` means “the `pet_msg` property on petrock.” `{}` starts it as an empty
 list. The `rc` flags let people read the property and let future child objects own their copy. Keep
 those flags as shown for this lesson.
 
-That message looks peculiar because it has blanks for Cowbell to fill in:
+Before we write the message, Cowbell needs to know who it can mention. Here, that is the person
+petting the rock and the rock itself. We tell the editor once so it can catch mistakes in later
+edits.
+
+MOO calls an object's pieces of code **verbs**. Add a verb that describes these participants:
+
+```moot
+% @verb petrock:message_bindings this none this rxd
+~~added
+```
+
+The editor calls this verb. You do not type its name as a command. The `x` flag lets other code call
+it.
+
+Type `@program petrock:message_bindings`, then enter this code. Finish with a line containing only a
+period (`.`).
+
+```moo verb=petrock:message_bindings
+"Describe the participants in the pet command's messages.";
+const {property} = args;
+if (!property:starts_with("pet_") || !property:ends_with("_msg"))
+  return pass(@args);
+endif
+let participants = $sub_utils:standard_bindings("The person petting the rock.");
+participants['dobj] = ['kind -> 'object, 'description -> "The rock being petted.",
+  'example -> 'host];
+return participants;
+```
+
+<details>
+<summary>Test check: the participant declaration compiled</summary>
+
+```moot
+~~Now programming
+~~lines programmed.
+```
+
+</details>
+
+`property` is the name of the message property being edited. Our petting messages start with `pet_`
+and end with `_msg`. They identify the person petting the rock as `actor`, and the rock as `dobj`.
+The `example` entry tells previews to use the rock for `dobj`.
+
+Other messages use `$thing`'s declarations through `pass(@args)`. This keeps inherited messages,
+such as the pickup message, working as before. The declaration describes the participants. The `pet`
+verb below will supply them when someone uses the command.
+
+Now write the message:
+
+```moot
+% @set-message petrock.pet_msg {nc} {pet|pets} {d}.
+~~Set message template
+```
+
+The text looks peculiar because it has blanks for Cowbell to fill in:
 
 | Part          | What it supplies                                                                  |
 | ------------- | --------------------------------------------------------------------------------- |
@@ -102,10 +154,9 @@ That message looks peculiar because it has blanks for Cowbell to fill in:
 One message can now read correctly to everyone in the room. We also keep it separate from the code,
 so changing the wording won't require reprogramming the command.
 
-### Add a verb
+### Add the pet command
 
-MOO calls an object's pieces of code **verbs**. Some verbs implement commands that people type.
-Let's add `pet`:
+Some verbs implement commands that people type. Let's add `pet`:
 
 ```moot
 % @verb petrock:pet this none none rd

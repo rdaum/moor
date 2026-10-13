@@ -176,10 +176,7 @@ object DOCUMENT_RESOLVER [
   method binding owner: HACKER
     "Read one captured event binding. Values are tagged as object, text, or content.";
     const {context, name} = args;
-    const aliases = ['n -> 'actor, 'nc -> 'actor, 'd -> 'dobj, 'dc -> 'dobj,
-      'i -> 'iobj, 'ic -> 'iobj, 't -> 'this_obj, 'tc -> 'this_obj,
-      'this -> 'this_obj, 'l -> 'location, 'lc -> 'location];
-    const key = maphaskey(aliases, name) ? aliases[name] | name;
+    const key = this:binding_name(name);
     const facts = context['event];
     if (key in {'actor, 'dobj, 'iobj, 'this_obj, 'location})
       maphaskey(facts, key) || raise(E_INVARG, "Missing event binding: " + tostr(key));
@@ -188,6 +185,15 @@ object DOCUMENT_RESOLVER [
     const bindings = maphaskey(facts, 'bindings) ? facts['bindings] | [];
     maphaskey(bindings, key) || raise(E_INVARG, "Missing event binding: " + tostr(key));
     return bindings[key];
+  endmethod
+
+  method binding_name owner: HACKER
+    "Expand the aliases shared by resolution and template validation.";
+    const {name} = args;
+    const aliases = ['n -> 'actor, 'nc -> 'actor, 'd -> 'dobj, 'dc -> 'dobj,
+      'i -> 'iobj, 'ic -> 'iobj, 't -> 'this_obj, 'tc -> 'this_obj,
+      'this -> 'this_obj, 'l -> 'location, 'lc -> 'location];
+    return maphaskey(aliases, name) ? aliases[name] | name;
   endmethod
 
   method _capitalize owner: HACKER

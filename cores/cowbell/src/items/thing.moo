@@ -143,6 +143,26 @@ object THING [
     "```"
   };
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"get_msg", "drop_msg"})
+      let bindings = $sub_utils:standard_bindings("The person moving the item.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The item being picked up or dropped.",
+        'example -> 'host];
+      bindings['iobj] = ['kind -> 'object, 'description -> "The same person moving the item.",
+        'example -> 'actor];
+      return bindings;
+    endif
+    if (tostr(property) in {"get_denied_msg", "drop_denied_msg"})
+      let bindings = $sub_utils:standard_bindings("The person trying to move the item.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The item being picked up or dropped.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method pronouns owner: ARCH_WIZARD
     "Return the validated pronoun set for this object.";
     set_task_perms(caller_perms());

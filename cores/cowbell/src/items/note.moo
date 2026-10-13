@@ -111,6 +111,26 @@ object NOTE [
     "```"
   };
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"read_msg", "write_msg", "erase_msg"})
+      let bindings = $sub_utils:standard_bindings("The person reading, writing, or erasing.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The note.",
+        'example -> 'host];
+      bindings['this_obj] = ['kind -> 'object, 'description -> "The room where this happens.",
+        'example -> 'location];
+      return bindings;
+    endif
+    if (tostr(property) in {"read_denied_msg", "write_denied_msg"})
+      let bindings = $sub_utils:standard_bindings("The person trying to read or write.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The note.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method can_read owner: ARCH_WIZARD
     "Check if accessor can read this note. Returns {allowed, reason}.";
     {accessor} = args;

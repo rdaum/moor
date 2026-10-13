@@ -85,6 +85,7 @@ object SUB_UTILS [
     "{s}, {o}, {p}, {q}, and {r} select subject, object, possessive adjective,",
     "possessive noun, and reflexive pronouns. For they/them: they, them, their, theirs, themselves.",
     "Add c to capitalize: {sc}. Add _dobj or _iobj to select another participant: {sc_dobj}.",
+    "{pronoun recipient subject} selects a named participant. Other forms: object, pos_adj, pos_noun, reflexive.",
     "{be}, {have}, and {look} agree with the actor's pronouns.",
     "Their _dobj and _iobj forms select those participants' pronouns.",
     "A name can need a different verb: \"Alex is\" but \"They are.\"",
@@ -108,7 +109,9 @@ object SUB_UTILS [
     "",
     "Other identifiers select named event bindings: {direction}, {from_room}, or {relic}.",
     "Names start with a letter or underscore, followed by letters, digits, underscores, or hyphens.",
-    "The event producer determines which bindings exist. Unknown names fail during resolution.",
+    "Use @message-bindings OBJECT.PROPERTY to learn which bindings this message supplies.",
+    "Message editors reject unavailable bindings, identify their positions, and suggest similar names.",
+    "Direct compile(text) checks syntax only; compile(text, declarations) also checks bindings.",
     "Articles require object bindings. Use {direction} for a direction supplied as text.",
     "{bind s} selects a binding literally named s instead of the subject pronoun token.",
     "{content detail} inserts an explicitly supplied content binding.",
@@ -149,8 +152,9 @@ object SUB_UTILS [
   method compile owner: HACKER
     "Compile nested substitutions, preserving literal text and branch whitespace.";
     "Backslash quotes braces, pipes, and backslashes. Other backslashes stay literal.";
-    const {template} = args;
+    const {template, ?bindings = false} = args;
     typeof(template) == TYPE_STR || raise(E_TYPE, "template must be string");
+    (typeof(bindings) == TYPE_MAP || equal(bindings, false)) || raise(E_TYPE);
     length(template) <= 65536 || raise(E_INVARG, "Template exceeds 65536 characters.");
     const lexemes = pcre_match(template, "\\\\[{}|\\\\]|[{}|]|[^{}|\\\\]+|\\\\", true, true);
     length(lexemes) <= 8192 || raise(E_INVARG, "Template exceeds 8192 text and delimiter pieces.");
@@ -158,19 +162,30 @@ object SUB_UTILS [
     let parts = {};
     let left = false;
     let tokens = 0;
+    let opening = 0;
     for lexeme in (lexemes)
       let text = lexeme["0"]["match"];
+      const position = lexeme["0"]["position"][1];
       if (text == "{")
         tokens = tokens + 1;
         tokens <= 2048 || raise(E_INVARG, "Template exceeds 2048 tokens.");
         length(stack) < 16 || raise(E_INVARG, "Template nesting exceeds 16 levels.");
-        stack = {@stack, {parts, left}};
+        stack = {@stack, {parts, left, opening}};
+        opening = position;
         parts = {};
         left = false;
       elseif (text == "}")
         length(stack) || raise(E_INVARG, "Unexpected closing brace in template.");
-        const token = this:_finish_token(parts, left);
-        {parts, left} = stack[$];
+        let token;
+        try
+          token = this:_finish_token(parts, left);
+          if (typeof(bindings) == TYPE_MAP)
+            this:_check_token_binding(token, bindings);
+          endif
+        except error (E_INVARG)
+          raise(E_INVARG, "At character " + tostr(opening) + ": " + error[2]);
+        endtry
+        {parts, left, opening} = stack[$];
         stack = stack[1..$ - 1];
         parts = {@parts, token};
       elseif (text == "|" && length(stack))
@@ -190,6 +205,50 @@ object SUB_UTILS [
     endfor
     !stack || raise(E_INVARG, "Unclosed brace in template.");
     return parts;
+  endmethod
+
+  method _check_token_binding owner: HACKER
+    "Check one compiled token against bindings supplied by this message's producer.";
+    const {token, bindings} = args;
+    const kind = token.type;
+    kind == 'capitalize && return;
+    let name = 'actor;
+    let allowed = {'object};
+    if (kind in {'binding, 'content_binding, 'article_a, 'article_the, 'agree, 'pronoun})
+      name = token.binding_name;
+      if (kind == 'binding)
+        allowed = {'object, 'text};
+      elseif (kind == 'content_binding)
+        allowed = {'content};
+      endif
+    elseif (kind in {'actor, 'dobj, 'iobj, 'this, 'location})
+      name = kind;
+    elseif (index(tostr(kind), "dobj_", 1) == 1)
+      name = 'dobj;
+    elseif (index(tostr(kind), "iobj_", 1) == 1)
+      name = 'iobj;
+    endif
+    name = $document_resolver:binding_name(name);
+    if (!maphaskey(bindings, name))
+      const candidates = {tostr(key) for key in (mapkeys(bindings))};
+      const match = complex_match(tostr(name), candidates, 0.5);
+      let message = "This message does not supply {" + tostr(name) + "}.";
+      if (typeof(match) == TYPE_STR)
+        message = message + " Did you mean {" + match + "}?";
+      endif
+      raise(E_INVARG, message);
+    endif
+    bindings[name]['kind] in allowed || raise(E_INVARG,
+      "{" + tostr(name) + "} supplies " + tostr(bindings[name]['kind])
+      + "; this token needs " + {tostr(value) for value in (allowed)}:join(" or ") + ".");
+  endmethod
+
+  method standard_bindings owner: HACKER
+    "Describe the actor and captured location shared by event producers, including preview examples.";
+    const {actor_description} = args;
+    return ['actor -> ['kind -> 'object, 'description -> actor_description, 'example -> 'actor],
+      'location -> ['kind -> 'object, 'description -> "The actor's location when the event starts.",
+        'example -> 'location]];
   endmethod
 
   method _finish_token owner: HACKER
@@ -358,6 +417,57 @@ object SUB_UTILS [
       length(token) || raise(E_INVARG, "Unknown substitution: " + tostr(kind));
     endif
     return capitalize ? "{cap " + token + "}" | token;
+  endmethod
+
+  method test_binding_diagnostics owner: HACKER
+    "Editing reports the misspelled binding and its source position before saving.";
+    const bindings = $thing:message_bindings("get_msg");
+    for example in ({{"Hello {dobbj}.", "At character 7:", "Did you mean {dobj}?"},
+      {"é {dobbj}", "At character 3:", "Did you mean {dobj}?"},
+      {"{self:ok|{missing}}", "At character 10:", "{missing}"},
+      {"{pronoun iobj subject}", "", ""}})
+      try
+        this:compile(example[1], bindings);
+        $test_utils:assert_eq(example[2], "", "unknown bindings must fail during editing");
+      except error (E_INVARG)
+        $test_utils:assert_true(length(example[2]) > 0, "valid binding compiles");
+        $test_utils:assert_true(index(error[2], example[2]) > 0, "error locates the token");
+        $test_utils:assert_true(index(error[2], example[3]) > 0, "error explains the binding");
+      endtry
+    endfor
+    const movement = $passage:message_bindings("side_a_leave_msg");
+    this:compile("{nc} goes {direction} to {to_room}.", movement);
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"{pronoun direction subject}", movement},
+      "text bindings cannot supply pronouns");
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"{the direction}", movement},
+      "text bindings cannot supply articles");
+    $test_utils:assert_raises(E_INVARG, this, "compile", {"{content direction}", movement},
+      "text bindings cannot supply content");
+    $test_utils:assert_raises(E_INVARG, $reaction, "parse_effect", {{'announce, "{i}"}},
+      "announce does not supply an indirect object");
+    this:compile("literal text", []);
+    return true;
+  endmethod
+
+  method test_producer_binding_declarations owner: HACKER
+    "Each shipped editable template uses only bindings declared by its producer.";
+    for producer in ({$thing, $container, $consumable, $food, $drink, $wearable, $note,
+      $sittable, $passage, $llm_room_observer})
+      for property in (properties(producer))
+        if (!tostr(property):ends_with("_msg"))
+          continue;
+        endif
+        const content = producer.(property);
+        if (typeof(content) == TYPE_LIST)
+          this:compile(this:decompile(content), producer:message_bindings(property));
+        endif
+      endfor
+    endfor
+    const child = $food:create(true);
+    this:compile("{d}", child:message_bindings("get_msg"));
+    this:compile("{d}", child:message_bindings("eat_msg"));
+    $test_utils:assert_eq(child:message_bindings("unknown_msg"), [], "unknown producer has no bindings");
+    return true;
   endmethod
 
   method test_compile_simple_binding owner: HACKER

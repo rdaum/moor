@@ -8,6 +8,9 @@ Cowbell entries.
 
 ### Added
 
+- Message editors and reaction message steps check the bindings supplied by their producer. Mistakes
+  include a character position and a suggested name. `@message-bindings` explains the available
+  participants. Custom message producers must declare bindings before authors use them.
 - Message templates can select pronouns for any named participant with `{pronoun BINDING FORM}`. The
   participant sees “you” and “your”; other readers see that participant's chosen pronouns.
 - Add a [builder's guide](manual/reactions.md) with command examples for reactions, membership

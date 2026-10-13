@@ -122,8 +122,10 @@ insert the name with its article, exactly like the template tokens.
 
 ## Named bindings and literal text
 
-`{direction}` reads a binding called `direction`. The event producer must supply it. Unknown token
-names compile as bindings, so a typo can survive compilation and fail during delivery.
+`{direction}` reads a binding called `direction`. The event producer must supply it. `@set-message`,
+`@add-message`, message tools, and reaction message steps check the producer's declarations before
+saving. Errors identify the token's character position and suggest similar names. The check covers
+both branches of an alternative, even when a preview only displays one branch.
 
 There are three binding kinds:
 
@@ -152,7 +154,8 @@ document limits and can reject content that expands beyond them.
 
 ## Which roles does a message supply?
 
-The producer determines the roles. The following table describes current callers:
+Use `@message-bindings OBJECT.PROPERTY` to see each binding's meaning for that message. The producer
+determines the roles. The following table describes current callers:
 
 | Message producer              | Actor            | Direct object    | Indirect object | Hosting object |
 | ----------------------------- | ---------------- | ---------------- | --------------- | -------------- |
@@ -170,6 +173,36 @@ bindings `from_room` and `to_room`, plus text bindings `direction`, `from_direct
 `to_direction`, and `passage`. The arrival message uses the destination-side direction and location.
 
 Rule bindings, reaction state, and reaction inputs do not automatically become message bindings.
+
+### Declare bindings for a new message
+
+Programmers declare a message's bindings on the prototype that produces its event. Override
+`message_bindings(property)` and call `pass(@args)` for other properties. For example, a new
+`welcome_msg` with a named recipient can declare:
+
+```moo
+const {property} = args;
+if (property == "welcome_msg")
+  let bindings = $sub_utils:standard_bindings("The person giving the welcome.");
+  bindings['recipient] = ['kind -> 'object, 'description -> "The person being welcomed.",
+    'example -> 'recipient];
+  return bindings;
+endif
+return pass(@args);
+```
+
+Each declaration gives the binding's `kind`, a plain-language `description`, and an `example` for
+previews. Object examples select `actor`, `recipient`, `host`, `item`, `location`, `from_room`, or
+`to_room`. Text and content examples hold literal values. The declaration supplies editing guidance;
+the event producer still supplies actual values with methods such as `with_object_binding`.
+
+Unknown message properties have no declared bindings. Authors can save literal text in them. Declare
+the participants before authors use substitutions in a new message property. No declaration grants
+permission to edit a property or read another object's contents.
+
+For direct MOO compilation, pass the declarations as the second argument:
+`$sub_utils:compile(text, object:message_bindings(property))`. The one-argument form checks syntax
+only, for callers that supply their own event context.
 
 ## MOO programming interface
 

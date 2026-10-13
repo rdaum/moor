@@ -260,6 +260,27 @@ object REACTION [
     raise(E_INVARG, "Trigger must be symbol or {'when, 'prop, 'op, value}");
   endmethod
 
+  method message_bindings owner: HACKER
+    "Describe the participants supplied by each message effect.";
+    const {kind} = args;
+    let bindings = $sub_utils:standard_bindings("The person who triggered the reaction.");
+    if (kind == 'announce)
+      bindings['dobj] = ['kind -> 'object, 'description -> "The object with this reaction.",
+        'example -> 'host];
+    elseif (kind == 'emote)
+      bindings['actor]['description] = "The object with this reaction; its name is also prefixed.";
+      bindings['actor]['example] = 'host;
+      bindings['dobj] = ['kind -> 'object, 'description -> "The person who triggered the reaction.",
+        'example -> 'actor];
+    elseif (kind == 'tell)
+      bindings['iobj] = ['kind -> 'object, 'description -> "The object with this reaction.",
+        'example -> 'host];
+    else
+      raise(E_INVARG, "This step does not produce a message.");
+    endif
+    return bindings;
+  endmethod
+
   method parse_effect owner: ARCH_WIZARD
     "Parse one effect, checking names, argument shapes, numeric amounts, and bounded nesting.";
     set_task_perms(caller_perms());
@@ -279,11 +300,13 @@ object REACTION [
       return <$reaction, .type = kind, .prop = property, .by = amount>;
     elseif (kind in {'announce, 'emote})
       const {_, message} = spec;
-      const compiled = typeof(message) == TYPE_STR ? $sub_utils:compile(message) | message;
+      const compiled = typeof(message) == TYPE_STR
+        ? $sub_utils:compile(message, $reaction:message_bindings(kind)) | message;
       return <$reaction, .type = kind, .msg = compiled>;
     elseif (kind == 'tell)
       const {_, recipient, message} = spec;
-      const compiled = typeof(message) == TYPE_STR ? $sub_utils:compile(message) | message;
+      const compiled = typeof(message) == TYPE_STR
+        ? $sub_utils:compile(message, $reaction:message_bindings(kind)) | message;
       return <$reaction, .type = 'tell, .target = recipient, .msg = compiled>;
     elseif (kind == 'move)
       const {_, destination} = spec;

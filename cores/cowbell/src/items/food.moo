@@ -172,6 +172,18 @@ object FOOD [
     this:do_consume(player, amount, true);
   endverb
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"bite_msg", "devour_msg", "eat_msg", "munch_msg", "nibble_msg"})
+      let bindings = $sub_utils:standard_bindings("The person eating.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The food.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method help_topics owner: ARCH_WIZARD
     "Return help topics for food items.";
     {for_player, ?topic = ""} = args;

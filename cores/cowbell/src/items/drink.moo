@@ -231,6 +231,18 @@ object DRINK [
     this:fire_trigger('on_refill, ['Actor -> player]);
   endverb
 
+  method message_bindings owner: HACKER
+    "Describe the participants and example values supplied to each editable message.";
+    const {property} = args;
+    if (tostr(property) in {"drink_msg", "gulp_msg", "quaff_msg", "refill_msg", "sip_msg"})
+      let bindings = $sub_utils:standard_bindings("The person drinking or refilling.");
+      bindings['dobj] = ['kind -> 'object, 'description -> "The drink.",
+        'example -> 'host];
+      return bindings;
+    endif
+    return pass(@args);
+  endmethod
+
   method help_topics owner: ARCH_WIZARD
     "Return help topics for drink items.";
     {for_player, ?topic = ""} = args;

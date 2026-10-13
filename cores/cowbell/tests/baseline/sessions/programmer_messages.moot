@@ -7,6 +7,18 @@ true
 @programmer
 % @create $thing named messagesample
 ~~Created
+% @message-bindings messagesample.get_msg
+~~Bindings for messagesample.get_msg:
+~~The person moving the item.
+~~The item being picked up or dropped.
+~~The same person moving the item.
+~~The actor's location when the event starts.
+% @set-message messagesample.get_msg Hello {dobbj}.
+~~At character 7: This message does not supply {dobbj}. Did you mean {dobj}?
+; const object = $match:match_object("messagesample", player); return equal(object.get_msg, $thing.get_msg);
+true
+% @set-message messagesample.get_msg {nc} {pick|picks} up {the d}.
+~~Set message template
 % @property messagesample.greeting_msg {} rc
 ~~Added
 % @set-message messagesample.greeting_msg Hello.

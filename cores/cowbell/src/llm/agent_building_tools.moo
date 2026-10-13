@@ -832,7 +832,7 @@ object AGENT_BUILDING_TOOLS [
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
     !actor.wizard && target_obj.owner != actor && raise(E_PERM, "You must be owner or wizard to set messages on " + tostr(target_obj));
     "Compile the template";
-    const compiled = $sub_utils:compile(template);
+    const compiled = $sub_utils:compile(template, target_obj:message_bindings(prop_name));
     const prop_key = $obj_utils:property_key(target_obj, prop_name);
     if (prop_key != E_PROPNF)
       $obj_utils:set_compiled_message(target_obj, prop_key, compiled, actor);
@@ -859,7 +859,7 @@ object AGENT_BUILDING_TOOLS [
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
     !actor.wizard && target_obj.owner != actor && raise(E_PERM, "You must be owner or wizard to set messages on " + tostr(target_obj));
     prop_name:ends_with("_msgs") || prop_name:ends_with("_msg_bag") || raise(E_INVARG, "Property must end with _msgs or _msg_bag");
-    const compiled = $sub_utils:compile(template);
+    const compiled = $sub_utils:compile(template, target_obj:message_bindings(prop_name));
     const prop_key = $obj_utils:property_key(target_obj, prop_name);
     $obj_utils:add_message_entry(target_obj, prop_name, compiled, actor);
     return "Added message to " + tostr(target_obj) + "." + prop_name + ": " + template;

@@ -240,13 +240,15 @@ object OBJ_UTILS [
     "Compile a template string into a $sub flyweight list. Returns {success, result}.";
     "If success is true, result is the compiled list.";
     "If success is false, result is the error message.";
-    {template_string} = args;
+    set_task_perms(caller_perms());
+    const {template_string, ?target = false, ?property = ""} = args;
     typeof(template_string) != TYPE_STR && raise(E_TYPE, "template_string must be string");
     try
-      compiled = $sub_utils:compile(template_string);
+      const bindings = typeof(target) == TYPE_OBJ ? target:message_bindings(property) | false;
+      const compiled = $sub_utils:compile(template_string, bindings);
       return {true, compiled};
     except e (ANY)
-      error_msg = length(e) > 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
+      const error_msg = length(e) > 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
       return {false, error_msg};
     endtry
   endmethod

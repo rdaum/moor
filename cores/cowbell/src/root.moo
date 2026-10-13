@@ -46,6 +46,14 @@ object ROOT [
     return hint;
   endmethod
 
+  method message_bindings owner: HACKER
+    "Declare the bindings supplied to a message property. Unknown properties have none.";
+    "Override on the producer and call pass(@args) for inherited messages.";
+    "Each entry has kind (object/text/content), description, and an example for previews.";
+    const {property} = args;
+    return [];
+  endmethod
+
   method create owner: ARCH_WIZARD
     "Create a child of this object.";
     "";
