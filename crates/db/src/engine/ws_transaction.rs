@@ -18,6 +18,8 @@
 //! caches.
 
 pub(crate) mod edit;
+#[cfg(test)]
+mod ownership_tests;
 
 use edit::EditScope;
 
@@ -294,6 +296,40 @@ impl WorldStateTransaction {
             == Some(owner)
         {
             return Ok(());
+        }
+        // LambdaMOO leaves property owners unchanged when .owner is assigned.
+        // Save lazy inherited c permissions before their fallback owner changes.
+        let ancestors = self.ancestors(obj, true)?;
+        self.owner_change_reads.extend(ancestors.iter());
+        let mut preserved = Vec::new();
+        for ancestor in ancestors.iter().filter(|ancestor| ancestor != obj) {
+            for property in self.get_properties(&ancestor)?.iter() {
+                let holder = ObjAndUUIDHolder::new(obj, property.uuid());
+                // The decision to preserve or skip a property also depends on
+                // whether another transaction changes its local permissions.
+                self.inherited_policy_reads.insert(holder.clone());
+                if self.object_propflags.has_domain(&holder).map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error checking property flags: {e:?}"))
+                })? {
+                    continue;
+                }
+                self.record_inherited_policy_dependency(obj, property.uuid())?;
+                let perms = self.retrieve_property_permissions(obj, property.uuid())?;
+                if perms.flags().contains(PropFlag::Chown) {
+                    preserved.push((holder, perms));
+                }
+            }
+        }
+        for (holder, perms) in preserved {
+            {
+                let edit = self.edit(EditScope::Permissions(holder.clone()));
+                upsert(edit.object_propflags, holder.clone(), perms).map_err(|e| {
+                    WorldStateError::DatabaseError(format!(
+                        "Error preserving property flags: {e:?}"
+                    ))
+                })?;
+            }
+            self.prop_perm_memo.mark_known_propflags(holder);
         }
         let edit = self.edit(EditScope::Owner(*obj));
         upsert(edit.object_owner, *obj, *owner).map_err(|e| {

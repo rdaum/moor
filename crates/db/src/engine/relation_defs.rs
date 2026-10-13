@@ -656,6 +656,7 @@ macro_rules! define_relations {
                         ancestry_cache: std::cell::RefCell::new(ancestry_cache),
                         prop_perm_memo: crate::engine::ws_transaction::PropertyPermMemo::new(),
                         inherited_policy_reads: std::collections::HashSet::new(),
+                        owner_change_reads: std::collections::HashSet::new(),
                     }
                 }
             }
@@ -665,6 +666,7 @@ macro_rules! define_relations {
             /// This struct contains the working sets for all relations along with
             /// the resolution caches used during transaction processing.
             pub(crate) struct WorkingSets {
+                pub(crate) owner_change_reads: std::collections::HashSet<moor_var::Obj>,
                 pub(crate) inherited_policy_reads: std::collections::HashSet<crate::model::ObjAndUUIDHolder>,
                 #[allow(dead_code)]
                 pub(crate) tx: Tx,
@@ -699,6 +701,7 @@ macro_rules! define_relations {
                 /// - `AncestryCache`: Ancestry cache
                 fn extract_relation_working_sets(self) -> (RelationWorkingSets, VerbResolutionCache, PropResolutionCache, AncestryCache) {
                     let ws = RelationWorkingSets {
+                        owner_change_reads: self.owner_change_reads,
                         inherited_policy_reads: self.inherited_policy_reads,
                         $( $field: self.$field, )*
                     };
@@ -711,6 +714,7 @@ macro_rules! define_relations {
             /// This struct contains only the working sets for relations, with caches
             /// separated out to handle ownership during commit processing.
             pub(crate) struct RelationWorkingSets {
+                pub(crate) owner_change_reads: std::collections::HashSet<moor_var::Obj>,
                 pub(crate) inherited_policy_reads: std::collections::HashSet<crate::model::ObjAndUUIDHolder>,
                 $( $field: WorkingSet<$domain, $codomain>, )*
             }
@@ -721,6 +725,7 @@ macro_rules! define_relations {
             /// all defined database relations. It contains relation transactions for each
             /// relation, along with caches needed for transaction processing.
             pub struct WorldStateTransaction {
+                pub(crate) owner_change_reads: std::collections::HashSet<moor_var::Obj>,
                 pub(crate) inherited_policy_reads: std::collections::HashSet<crate::model::ObjAndUUIDHolder>,
                 #[allow(dead_code)]
                 pub(crate) tx: Tx,
@@ -787,6 +792,7 @@ macro_rules! define_relations {
                     )*
 
                     let ws = Box::new(WorkingSets {
+                        owner_change_reads: self.owner_change_reads,
                         inherited_policy_reads: self.inherited_policy_reads,
                         tx: self.tx,
                         $( $field, )*

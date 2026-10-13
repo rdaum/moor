@@ -54,6 +54,44 @@ fn create_object(tx: &mut WorldStateTransaction, name: &str) -> Obj {
 }
 
 #[test]
+fn ownership_transfer_revalidates_an_empty_property_scan_after_cas_loss() {
+    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let mut tx = db.start_transaction();
+    let parent = create_object(&mut tx, "parent");
+    let child = create_object(&mut tx, "child");
+    tx.set_object_parent(&child, &parent).unwrap();
+    success(tx.commit().unwrap());
+
+    let mut transfer = db.start_transaction();
+    transfer.set_object_owner(&child, &parent).unwrap();
+    let prepared = prepare(&db, transfer);
+    let mut winner = db.start_transaction();
+    let uuid = winner
+        .define_property(
+            &parent,
+            &parent,
+            Symbol::mk("new"),
+            &parent,
+            BitEnum::new_with(PropFlag::Chown),
+            Some(v_int(1)),
+        )
+        .unwrap();
+    success(winner.commit().unwrap());
+    assert!(lose(prepared).rebase().is_err());
+
+    let mut retry = db.start_transaction();
+    retry.set_object_owner(&child, &parent).unwrap();
+    success(retry.commit().unwrap());
+    assert_eq!(
+        db.start_transaction()
+            .retrieve_property_permissions(&child, uuid)
+            .unwrap()
+            .owner(),
+        child
+    );
+}
+
+#[test]
 fn repeated_cas_losses_advance_the_checked_root_and_preserve_winner_writes() {
     let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
     let obj = Obj::mk_id(1);

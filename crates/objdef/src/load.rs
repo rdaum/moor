@@ -351,15 +351,17 @@ impl<'a> ObjectDefinitionLoader<'a> {
             self.loader
                 .set_object_name(obj, def.name.clone())
                 .map_err(error)?;
+            // Establish ownership before acquiring properties from a new parent.
+            // Existing inherited properties retain their owners across this change.
+            self.loader
+                .set_object_owner(obj, &def.owner)
+                .map_err(|e| ObjdefLoaderError::CouldNotSetObjectOwner(path.clone(), e))?;
             self.loader
                 .set_object_parent(obj, &def.parent, options.validate_parent_changes)
                 .map_err(error)?;
             self.loader
                 .set_object_location(obj, &def.location)
                 .map_err(|e| ObjdefLoaderError::CouldNotSetObjectLocation(path.clone(), e))?;
-            self.loader
-                .set_object_owner(obj, &def.owner)
-                .map_err(|e| ObjdefLoaderError::CouldNotSetObjectOwner(path.clone(), e))?;
             self.loader
                 .update_object_flags(obj, def.flags)
                 .map_err(error)?;
@@ -1031,6 +1033,75 @@ mod tests {
         let ws = db.new_world_state().unwrap();
         let flags = ws.flags_of(&Obj::mk_id(10)).unwrap();
         assert!(flags.contains(moor_common::model::ObjFlag::Wizard));
+    }
+
+    #[test]
+    fn ownership_import_uses_final_owner_and_preserves_existing_property_owners() {
+        for bulk in [false, true] {
+            let tmpdir = tempfile::tempdir().unwrap();
+            let db = test_db(tmpdir.path());
+            let mut loader = db.loader_client().unwrap();
+            let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+            parser
+                .load_single_object(
+                    r#"object #0
+                    owner: #0
+                    wizard: true
+                    property value (owner: #0, flags: "rc") = 1;
+                endobject"#,
+                    CompileOptions::default(),
+                    ObjDefLoaderOptions::default(),
+                )
+                .unwrap();
+            loader.commit().unwrap();
+
+            for (owner, expected_property_owner) in [("#0", SYSTEM_OBJECT), ("#1", SYSTEM_OBJECT)] {
+                let source = format!("object #1 owner: {owner} parent: #0 endobject");
+                let mut loader = db.loader_client().unwrap();
+                let mut parser = ObjectDefinitionLoader::new(loader.as_mut());
+                if bulk {
+                    let import_dir = tmpdir.path().join("import");
+                    fs::create_dir_all(&import_dir).unwrap();
+                    fs::write(import_dir.join("child.moo"), &source).unwrap();
+                    parser
+                        .load_objdef_directory(
+                            CompileOptions::default(),
+                            &import_dir,
+                            ObjDefLoaderOptions::default(),
+                        )
+                        .unwrap();
+                } else {
+                    parser
+                        .load_single_object(
+                            &source,
+                            CompileOptions::default(),
+                            ObjDefLoaderOptions::default(),
+                        )
+                        .unwrap();
+                }
+                loader.commit().unwrap();
+                let ws = db.new_world_state().unwrap();
+                assert_eq!(
+                    ws.get_property_info(
+                        &system_permissions(),
+                        &Obj::mk_id(1),
+                        Symbol::mk("value")
+                    )
+                    .unwrap()
+                    .1
+                    .owner(),
+                    expected_property_owner
+                );
+                assert!(
+                    ws.is_property_clear(
+                        &system_permissions(),
+                        &Obj::mk_id(1),
+                        Symbol::mk("value")
+                    )
+                    .unwrap()
+                );
+            }
+        }
     }
 
     #[test]

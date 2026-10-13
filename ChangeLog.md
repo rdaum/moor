@@ -344,6 +344,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Assigning an object's `.owner` preserves ownership of its inherited `c` properties, as in
+  LambdaMOO. Previously, untouched properties changed owner while locally written properties kept
+  their owner. Use `set_property_info()` or a core ownership helper to transfer properties
+  explicitly.
+
 - Meadow no longer adds blank lines between HTML blocks in room descriptions and other narrative
   output. Plain text and code retain their spacing.
 - Snore change reviews display and count new upstream verbs without failing to render the review

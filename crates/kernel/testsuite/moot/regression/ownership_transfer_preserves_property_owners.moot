@@ -1,0 +1,44 @@
+@wizard
+// Value assignment must not decide whether an inherited property changes owner.
+; old_owner = create(#-1); new_owner = create(#-1); prototype = create(#-1);
+> add_property(prototype, "untouched", 1, {player, "rc"});
+> add_property(prototype, "written", 1, {player, "rc"});
+> add_property(prototype, "cleared", 1, {player, "rc"});
+> child = create(prototype, old_owner);
+> child.written = 2; child.cleared = 3; clear_property(child, "cleared");
+> child.owner = new_owner;
+> result = {property_info(child, "untouched")[1] == old_owner,
+>           property_info(child, "written")[1] == old_owner,
+>           property_info(child, "cleared")[1] == old_owner,
+>           is_clear_property(child, "untouched"), is_clear_property(child, "cleared")};
+> for name in ({"untouched", "written", "cleared"})
+>   set_property_info(child, name, {new_owner, "rc"});
+>   result = {@result, property_info(child, name)[1] == new_owner,
+>             property_info(prototype, name)[1] == player};
+> endfor
+> recycle(child); recycle(prototype); recycle(old_owner); recycle(new_owner);
+> return result;
+{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+
+// Access checks use the preserved property owner until an explicit transfer.
+; $tmp = create(#-1);
+; add_property($tmp, "value", 1, {player, "rc"});
+; $object = create($tmp, $programmer_player); $object.owner = $player;
+@programmer
+; return $object.value = 2;
+2
+@nonprogrammer
+; $object.value = 3;
+E_PERM
+@wizard
+; return $object.value;
+2
+; set_property_info($object, "value", {$player, "rc"});
+@nonprogrammer
+; return $object.value = 4;
+4
+@programmer
+; $object.value = 5;
+E_PERM
+@wizard
+; recycle($object); recycle($tmp);

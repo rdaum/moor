@@ -44,6 +44,24 @@ impl RelationWorkingSets {
         &self,
         current: &WorldStateSnapshot,
     ) -> Result<(), ConflictInfo> {
+        // An ownership transfer must see every inherited c property, including
+        // properties added to a previously empty ancestor before publication.
+        for object in &self.owner_change_reads {
+            macro_rules! validate {
+                ($field:ident) => {
+                    if !relation_key_unchanged(self.$field.base_index(), &*current.$field, object) {
+                        return Err(make_conflict_info(
+                            Symbol::mk(stringify!($field)),
+                            object,
+                            ConflictType::ConcurrentWrite,
+                        ));
+                    }
+                };
+            }
+            validate!(object_flags);
+            validate!(object_parent);
+            validate!(object_propdefs);
+        }
         for key in &self.inherited_policy_reads {
             let unchanged = relation_key_unchanged(
                 self.object_propflags.base_index(),
