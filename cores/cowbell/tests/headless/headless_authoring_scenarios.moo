@@ -150,16 +150,16 @@ object HEADLESS_AUTHORING_SCENARIOS
     const host = create($container, #90102);
     try
       const ref = tostr(host);
-      this:_author('facts, tostr(members) + " define author_members person:object group:text");
+      this:_author('facts, tostr(members) + " define person:object group:text");
       this:_author('facts, tostr(members) + " add person=me group=visitors");
       this:_author('facts, tostr(members) + " add person=me group=visitors");
       $test_utils:assert_eq(length($relation:tuples(members)), 1, "Repeated builder commands store one fact");
-      this:_author('rule, ref + " open fact author_members person=actor group=visitors");
+      this:_author('rule, ref + " open fact in " + tostr(members) + " person=actor group=visitors");
       const result = $rule_engine:evaluate(host.open_rule, ['This -> host, 'Accessor -> #90102]);
       $test_utils:assert_true(result['success], "Named facts use the same bindings as the policy");
-      this:_author('facts, tostr(visits) + " define author_visits person:object box:object");
+      this:_author('facts, tostr(visits) + " define person:object box:object");
       this:_author('reaction, ref + " visit after open");
-      this:_author('reaction, ref + " visit then record author_visits person=actor box=this");
+      this:_author('reaction, ref + " visit then record in " + tostr(visits) + " person=actor box=this");
       this:_author('reaction, ref + " visit preview");
       $test_utils:assert_eq($relation:tuples(visits), {}, "Preview cannot write facts");
       this:_author('reaction, ref + " visit enable");
@@ -170,8 +170,6 @@ object HEADLESS_AUTHORING_SCENARIOS
       $test_utils:assert_false($rule_engine:evaluate(host.open_rule,
         ['This -> host, 'Accessor -> #90102])['success], "Removing membership revokes access");
     finally
-      $rule_engine:unregister_predicate('author_members);
-      $rule_engine:unregister_predicate('author_visits);
       recycle(host);
       recycle(members);
       recycle(visits);
@@ -236,6 +234,141 @@ object HEADLESS_AUTHORING_SCENARIOS
     finally
       $reaction:cancel_timer(host, 'reset);
       recycle(host);
+      #90102.is_builder = old_builder;
+    endtry
+    return true;
+  endmethod
+  method test_relation_settings_copy_sharing_and_retargeting owner: ARCH_WIZARD
+    "Copies share explicit storage until retargeted; field order does not affect named facts.";
+    const old_builder = #90102.is_builder;
+    #90102.is_builder = true;
+    const first = create($relation, #90102);
+    const second = create($relation, #90102);
+    const host = create($container, #90102);
+    const copy = create($container, #90102);
+    try
+      this:_author('facts, tostr(first) + " define person:object group:text");
+      this:_author('facts, tostr(second) + " define group:text person:object");
+      const ref = tostr(host) + " remember";
+      const other = tostr(copy) + " remember";
+      this:_author('state, tostr(host) + " visits number 0");
+      this:_author('reaction, ref + " after open");
+      this:_author('reaction, ref + " with visitors object " + tostr(first));
+      this:_author('reaction, ref + " if NOT fact in visitors person=actor group=readers");
+      this:_author('reaction, ref + " then record in visitors person=actor group=readers");
+      this:_author('reaction, ref + " then add visits 1");
+      this:_author('reaction, ref + " copy to " + tostr(copy));
+      $test_utils:assert_eq(copy.remember_reaction.parameters['visitors], first,
+        "Copy keeps the explicit relation setting and does not copy its data");
+      const preview = this:_author('reaction, ref + " preview"):join("\n");
+      $test_utils:assert_true(index(preview, tostr(first)) > 0, "Preview identifies the actual write destination");
+      $test_utils:assert_eq(first:count(), 0, "Preview cannot record a fact");
+      this:_author('reaction, ref + " enable");
+      this:_author('reaction, other + " enable");
+      host:fire_trigger('on_open, ['Actor -> #90102]);
+      copy:fire_trigger('on_open, ['Actor -> #90102]);
+      $test_utils:assert_eq({host.visits, copy.visits}, {1, 0}, "Shared storage makes the copy see the first visit");
+      const original_tree = copy.remember_reaction.when.condition;
+      const original_effects = copy.remember_reaction.effects;
+      this:_author('reaction, other + " with visitors object " + tostr(second));
+      $test_utils:assert_eq(copy.remember_reaction.when.condition, original_tree, "Retargeting preserves the condition");
+      $test_utils:assert_eq(copy.remember_reaction.effects, original_effects, "Retargeting preserves the steps");
+      copy:fire_trigger('on_open, ['Actor -> #90102]);
+      copy:fire_trigger('on_open, ['Actor -> #90102]);
+      $test_utils:assert_eq({host.visits, copy.visits}, {1, 1}, "Independent storage gives each object its own first visit");
+      $test_utils:assert_eq(first:tuples(), {{#90102, "readers"}}, "The original relation remains unchanged");
+      $test_utils:assert_eq(second:tuples(), {{"readers", #90102}}, "Named writes use the destination's column order");
+      this:_author('reaction, other + " if fact in visitors group=readers person as visitor");
+      this:_author('reaction, other + " select each by visitor");
+      this:_author('reaction, other + " step 1 forget in visitors person=visitor group=readers");
+      copy:fire_trigger('on_open, ['Actor -> #90102]);
+      $test_utils:assert_eq(second:tuples(), {}, "A selected value can feed a forget step");
+      $test_utils:assert_eq(first:count(), 1, "Forgetting in one relation does not affect another");
+    finally
+      recycle(copy);
+      recycle(host);
+      recycle(second);
+      recycle(first);
+      #90102.is_builder = old_builder;
+    endtry
+    return true;
+  endmethod
+
+  method test_relation_retarget_errors_and_repair owner: ARCH_WIZARD
+    "Invalid retargets preserve installed definitions; deleted references can be repaired through settings.";
+    const old_builder = #90102.is_builder;
+    #90102.is_builder = true;
+    const first = create($relation, #90102);
+    const replacement = create($relation, #90102);
+    const incompatible = create($relation, #90102);
+    const foreign = create($relation, #90101);
+    const private = create($relation, #90101);
+    const host = create($container, #90102);
+    try
+      for relation in ({first, replacement, foreign, private})
+        relation.r = 1;
+        $relation:define_fields(relation, {'person}, ['person -> 'object]);
+      endfor
+      $relation:define_fields(incompatible, {'person}, ['person -> 'string]);
+      private.r = 0;
+      const ref = tostr(host) + " remember";
+      this:_author('reaction, ref + " after open");
+      this:_author('reaction, ref + " with visitors object " + tostr(first));
+      this:_author('reaction, ref + " if NOT fact in visitors person=actor");
+      this:_author('reaction, ref + " then record in visitors person=actor");
+      this:_author('reaction, ref + " trace on");
+      this:_author('reaction, ref + " enable");
+      const original = host.remember_reaction;
+      for target in ({incompatible, foreign, private})
+        let rejected = false;
+        try
+          this:_author('reaction, ref + " with visitors object " + tostr(target));
+        except problem (E_INVARG, E_PERM)
+          rejected = true;
+          $test_utils:assert_true(length(problem[2]) > 0, "Retarget failure explains the problem");
+        endtry
+        $test_utils:assert_true(rejected, "Wrong fields or insufficient access reject the retarget");
+        $test_utils:assert_eq(host.remember_reaction, original, "A failed retarget preserves the installed reaction");
+      endfor
+      let bad = original;
+      bad.parameters['visitors] = foreign;
+      let refused = false;
+      try
+        $reaction:install(host, "other_reaction", bad);
+      except problem (E_PERM)
+        refused = index(problem[2], "cannot write") > 0;
+      endtry
+      $test_utils:assert_true(refused, "Wizard installation checks the host owner's write authority");
+      first.owner = #90101;
+      refused = false;
+      try
+        host:fire_trigger('on_open, ['Actor -> #90102]);
+      except problem (E_PERM)
+        refused = index(problem[2], "cannot write") > 0;
+      endtry
+      $test_utils:assert_true(refused, "Relation write ownership is rechecked during execution");
+      $test_utils:assert_eq(first:count(), 0, "A denied write leaves no fact");
+      const report = this:_author('reaction, ref + " trace"):join("\n");
+      $test_utils:assert_true(index(report, "cannot write") > 0, "Trace explains a changed permission");
+      recycle(first);
+      refused = false;
+      try
+        host:fire_trigger('on_open, ['Actor -> #90102]);
+      except problem (E_INVARG)
+        refused = index(problem[2], "no longer exists") > 0;
+      endtry
+      $test_utils:assert_true(refused, "A deleted relation fails instead of making NOT succeed");
+      this:_author('reaction, ref + " show");
+      this:_author('reaction, ref + " with visitors object " + tostr(replacement));
+      host:fire_trigger('on_open, ['Actor -> #90102]);
+      $test_utils:assert_eq(replacement:tuples(), {{#90102}}, "Changing the setting repairs a deleted reference");
+    finally
+      recycle(host);
+      recycle(private);
+      recycle(foreign);
+      recycle(incompatible);
+      recycle(replacement);
+      valid(first) && recycle(first);
       #90102.is_builder = old_builder;
     endtry
     return true;

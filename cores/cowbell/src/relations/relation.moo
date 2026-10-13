@@ -12,6 +12,74 @@ object RELATION [
 
   property set_version (owner: HACKER, flags: "rc") = 0;
 
+  property fact_schema (owner: HACKER, flags: "rc") = ['columns -> {}, 'types -> []];
+
+  method define_fields owner: ARCH_WIZARD
+    "Define ordered, named fields on an owned relation. Existing tuples must fit before any change.";
+    const {relation, columns, types} = args;
+    const principal = caller_perms();
+    (typeof(relation) == TYPE_OBJ && valid(relation) && isa(relation, $relation))
+      || raise(E_INVARG, "The relation no longer exists, or is not a relation.");
+    (principal == relation.owner || principal.wizard) || raise(E_PERM, "You do not own this relation.");
+    set_task_perms(principal);
+    $behavior_schema:_types(types, "relation fields");
+    (typeof(columns) == TYPE_LIST && length(columns) > 0 && length(columns) == length(types))
+      || raise(E_INVARG, "Declare each relation field once, in tuple order.");
+    let seen = {};
+    for field in (columns)
+      (maphaskey(types, field) && !(field in seen))
+        || raise(E_INVARG, "Declare each relation field once, in tuple order.");
+      seen = {@seen, field};
+    endfor
+    const schema = ['columns -> columns, 'types -> types];
+    for tuple in ($relation:tuples(relation))
+      $relation:_check_tuple(tuple, schema);
+    endfor
+    relation.fact_schema = schema;
+    return schema;
+  endmethod
+
+  method schema owner: ARCH_WIZARD
+    "Read a relation's field definitions and check an optional required shape and write authority.";
+    const {relation, ?expected = 0, ?write = false} = args;
+    const principal = caller_perms();
+    (typeof(relation) == TYPE_OBJ && valid(relation) && isa(relation, $relation))
+      || raise(E_INVARG, "The relation no longer exists, or is not a relation.");
+    (principal == relation.owner || principal.wizard || (relation.r && !write))
+      || raise(E_PERM, write ? "You cannot write to this relation." | "You cannot read this relation.");
+    set_task_perms(principal);
+    const schema = relation.fact_schema;
+    length(schema['columns]) > 0
+      || raise(E_INVARG, "Define this relation's fields with @facts OBJECT define FIELD:TYPE.");
+    if (typeof(expected) == TYPE_MAP)
+      equal(schema['types], expected)
+        || raise(E_INVARG, "This relation has different field names or types from those required by the condition or step.");
+    endif
+    return schema;
+  endmethod
+
+  method _check_tuple owner: HACKER
+    "Check tuple arity and types against optional named fields. Untyped relations keep their tuple API.";
+    const {tuple, schema} = args;
+    length(schema['columns]) == 0 && return;
+    length(tuple) == length(schema['columns]) || raise(E_INVARG, "Fact has the wrong number of fields.");
+    for i in [1..length(tuple)]
+      const field = schema['columns][i];
+      $behavior_schema:_type(tuple[i], schema['types][field], "fact field " + tostr(field));
+    endfor
+  endmethod
+
+  method change_fact owner: ARCH_WIZARD
+    "Record or forget one complete named fact under the caller's relation write authority.";
+    set_task_perms(caller_perms());
+    const {relation, fields, values, operation} = args;
+    operation in {'record, 'forget} || raise(E_INVARG, "Expected record or forget.");
+    const schema = $relation:schema(relation, fields, true);
+    $behavior_schema:bindings(values, schema['types], "fact fields");
+    const tuple = {values[field] for field in (schema['columns])};
+    return operation == 'record ? $relation:assert(tuple, relation) | $relation:retract(tuple, relation);
+  endmethod
+
   method assert owner: ARCH_WIZARD
     "Store a tuple once and return its identity. The first write repairs legacy duplicates.";
     const {tuple, ?relation = this} = args;
@@ -21,6 +89,7 @@ object RELATION [
     set_task_perms(principal);
     typeof(tuple) == TYPE_LIST || raise(E_TYPE);
     length(tuple) > 0 || raise(E_INVARG);
+    $relation:_check_tuple(tuple, relation.fact_schema);
     relation.set_version != 1 && $relation:repair(relation);
     const existing = $relation:_find_tuple_id(relation, tuple);
     existing != 0 && return existing;
@@ -382,24 +451,18 @@ object RELATION [
   endmethod
 
   method query_rows owner: ARCH_WIZARD
-    "Read named, typed columns from one relation without invoking its overridable verbs.";
+    "Query explicit relation fields; each call chooses its bound columns. Preserve completeness.";
     set_task_perms(caller_perms());
-    const {relation, columns, schema, values, limit} = args;
-    $behavior_schema:bindings(values, schema['inputs], "relation inputs");
-    const pattern = {{'var, column} for column in (columns)};
-    const types = {maphaskey(schema['inputs], field)
-      ? schema['inputs][field] | schema['outputs][field] for field in (columns)};
-    const result = $relation:_query_result(relation, pattern, values,
-      ['max_solutions -> limit], types);
-    let rows = {};
-    for binding in (result['rows])
-      let row = [];
-      for output in (mapkeys(schema['outputs]))
-        row[output] = binding[output];
-      endfor
-      rows = {@rows, row};
+    const {relation, fields, values, limit} = args;
+    const schema = $relation:schema(relation, fields);
+    $behavior_schema:_fields(values, {}, mapkeys(fields), "relation inputs");
+    for field in (mapkeys(values))
+      $behavior_schema:_type(values[field], fields[field], "relation input " + tostr(field));
     endfor
-    return ['rows -> rows, 'complete -> result['complete]];
+    const columns = schema['columns];
+    const pattern = {{'var, column} for column in (columns)};
+    const types = {fields[field_name] for field_name in (columns)};
+    return $relation:_query_result(relation, pattern, values, ['max_solutions -> limit], types);
   endmethod
 
   method _query_result owner: ARCH_WIZARD

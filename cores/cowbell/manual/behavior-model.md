@@ -153,15 +153,16 @@ These namespaces are distinct. `['kind -> 'literal, 'value -> "Actor"]` is text.
 
 ## Conditions and selectors
 
-The condition tree has five node kinds:
+The condition tree has six node kinds:
 
-| `kind`      | Other required fields          | Meaning                                                       |
-| ----------- | ------------------------------ | ------------------------------------------------------------- |
-| `all`       | `children`: ordered conditions | Each child must match. Earlier bindings reach later children. |
-| `any`       | `children`: ordered conditions | Return the distinct matches from all children.                |
-| `not`       | `child`: condition             | Match only when the child has no match in a complete search.  |
-| `compare`   | `op`, `left`, `right`          | Compare two value expressions.                                |
-| `predicate` | `name`, `arguments`, `bind`    | Query a registered fact provider.                             |
+| `kind`      | Other required fields                     | Meaning                                                       |
+| ----------- | ----------------------------------------- | ------------------------------------------------------------- |
+| `all`       | `children`: ordered conditions            | Each child must match. Earlier bindings reach later children. |
+| `any`       | `children`: ordered conditions            | Return the distinct matches from all children.                |
+| `not`       | `child`: condition                        | Match only when the child has no match in a complete search.  |
+| `compare`   | `op`, `left`, `right`                     | Compare two value expressions.                                |
+| `predicate` | `name`, `arguments`, `bind`               | Query a registered fact provider.                             |
+| `relation`  | `relation`, `fields`, `arguments`, `bind` | Query one explicitly referenced relation.                     |
 
 An empty `all` matches once with the existing bindings. An empty `any` does not match. A comparison
 uses `eq`, `ne`, `lt`, `le`, `gt`, or `ge`. Equality preserves value types and string case. Ordered
@@ -179,10 +180,9 @@ For example, this selector returns occupants of the operation's location:
   'bind -> ['object -> 'Visitor]]
 ```
 
-A selector is a predicate with outputs. Its declared inputs identify its scope. The occupants
-provider reads one location. A relation provider reads one named relation. Providers enforce read
-permissions before supplying facts. Unavailable or inaccessible facts are errors, not evidence of
-absence.
+A selector exposes query results as bindings. The occupants provider reads one location. A relation
+condition reads one explicit relation object. Both enforce read permissions before supplying facts.
+Unavailable or inaccessible facts are errors, not evidence of absence.
 
 Only bindings produced on every `any` branch are available afterward. Those branches must agree on
 their types. Negation cannot introduce bindings, including inside an alternative branch. Its
@@ -231,16 +231,56 @@ Conditions and relation queries use the kernel's `term_match` builtin with case-
 and duplicate removal. The MOO code supplies facts, checks access, and combines conditions. The
 kernel does not inspect objects or call world verbs.
 
-`$rule_engine:register_relation(name, relation, columns, schema)` exposes one relation as a named
-query. `columns` lists its field names in tuple order. The schema describes input and output types.
-A field belongs to one of those groups. The caller must own the relation or be a wizard. The
-registration does not grant readers permission to access private facts.
+Relations own their field definitions. `$relation:define_fields(relation, columns, types)` declares
+field names in tuple order and a map from each name to its type. It requires relation ownership or
+wizard authority. Existing tuples must satisfy the new definition before it is saved. Typed
+relations also check subsequent `assert` calls. Relations without field definitions retain their
+untyped tuple API.
 
-For example, a membership relation can store `{club, member}` pairs. Its query takes a club and
-returns members. The column names are `{'club, 'member}`. Its schema declares an object input named
-`club` and an object output named `member`. A rule can use the selected member in later conditions.
-The builder workflow will supply these declarations through commands and describe the fields by
-name.
+For example, a relation storing `{club, member}` pairs has columns `{'club, 'member}` and types
+`['club -> 'object, 'member -> 'object]`. These fields have no fixed input or output roles. Each
+query chooses which values to supply and which values to select:
+
+```text
+relation(#123, club: input.This) -> (member: Member)
+relation(#123, member: input.Actor) -> (club: Club)
+```
+
+Here `#123` stands for the chosen relation's object reference. A reaction can instead use
+`relation(parameter.members, club: input.This) -> (member: Member)`. Its `members` parameter must
+contain a relation object. Relation targets are literals or parameters; event inputs and selected
+bindings cannot choose storage.
+
+A `relation` condition stores its target expression, required field types, argument expressions, and
+output bindings. `$rule:mk(name, tree, scope, parameters)` captures field types when they are absent
+from a parsed tree. `$rule_engine:parse_expression(text, name, scope, parameters)` uses that
+constructor. The parameter values are needed to resolve relation settings during authoring; they are
+supplied again at evaluation. The rule does not retain a second copy of those values.
+
+Installation checks existing field requirements against the selected relation. Retargeting to a
+relation with different names or types fails before replacing the installed reaction. Column order
+can differ: fields are matched by name. Execution checks the requirements and access again. Renaming
+or deleting a referenced relation cannot silently select another object with the same display name.
+
+For effects, use `{'record, relation, arguments}` or `{'forget, relation, arguments}`. These
+constructors accept an object reference and capture its field types. For a parameter target, supply
+its value expression and required types explicitly:
+
+```moo
+{'record, ['kind -> 'parameter, 'name -> 'visitors],
+  ['person -> ['kind -> 'input, 'name -> 'Actor],
+   'rock -> ['kind -> 'input, 'name -> 'This]],
+  ['person -> 'object, 'rock -> 'object]}
+```
+
+All fields are required for a write. Installation checks write access as the host owner, including
+when a wizard installs the reaction. Runtime writes check authority again. Conditions can read a
+shared relation without gaining permission to change it. Copies preserve the explicit reference; the
+author chooses whether to keep sharing or change a setting to separate storage.
+
+General predicates, such as `contains` and `is_open`, remain globally named. Wizards can register
+reusable query implementations with `$rule_engine:register_predicate`. The provider registry does
+not contain relation instances. No global fact name is allocated when a builder creates a relation.
 
 `relation:query_result(pattern, bindings, options)` returns `rows` and `complete`. It asks for one
 extra distinct answer to detect overflow. `relation:query` requires a complete answer and raises
@@ -249,7 +289,7 @@ candidate records. A broader query raises an error asking for a narrower input s
 invalid-data, and search-budget errors remain errors, including under negation.
 
 Stored values that resemble term-variable markers remain data. Inputs use existing bindings, and
-matching interprets variables only in the supplied pattern. A named relation query checks its
+matching interprets variables only in the supplied pattern. A typed relation query checks its
 candidate tuples against the declared field types before matching.
 
 Relations use exact value equality for tuple identity. Repeated assertion returns the same identity.
@@ -275,7 +315,7 @@ order. Searches must complete within 256 results. Text ordering preserves case; 
 identity. An incomplete search performs no effects.
 
 `@state` declares numbers, text, flags, object references, or named choices. `@rule` edits an
-existing operation policy with the same readable conditions. `@facts` names typed relation columns
+existing operation policy with the same readable conditions. `@facts` defines typed relation columns
 and records or removes complete facts. Reaction `record` and `forget` steps use those schemas and
 check write authority separately from query authority. Repeated insertion remains idempotent.
 

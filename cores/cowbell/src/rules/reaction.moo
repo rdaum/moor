@@ -184,9 +184,10 @@ object REACTION [
     endtry
   endmethod
 
-  method _validate_effects owner: HACKER
-    "Check action arguments against the trigger's declared inputs, including nested delays.";
-    const {effects, scope, ?depth = 0} = args;
+  method _validate_effects owner: ARCH_WIZARD
+    "Check action and fact arguments, relation access, and nested timers in the declared scope.";
+    set_task_perms(caller_perms());
+    const {effects, scope, ?depth = 0, ?parameters = [], ?check_targets = true} = args;
     depth <= 16 || raise(E_QUOTA, "Effects are nested more than 16 levels.");
     length(effects) <= 64 || raise(E_QUOTA, "A reaction has more than 64 effects.");
     for effect in (effects)
@@ -195,18 +196,26 @@ object REACTION [
         const schema = $reaction:action_schemas()[effect.action];
         $behavior_schema:_arguments(effect.arguments, schema['inputs], scope, "action " + tostr(effect.action), 0);
       elseif (effect.type in {'record, 'forget})
-        $behavior_schema:_arguments(effect.arguments, $rule_engine:fact_fields(effect.name), scope,
-          "fact " + tostr(effect.name), 0);
+        $behavior_schema:_compatible($behavior_schema:expression(effect.relation, scope), 'object, "relation");
+        effect.relation['kind] in {'literal, 'parameter}
+          || raise(E_INVARG, "Use a relation object or reaction setting.");
+        $behavior_schema:_types(effect.fields, "fact fields");
+        if (check_targets)
+          const target = $condition:relation_target(effect.relation, parameters);
+          $relation:schema(target, effect.fields, true);
+        endif
+        $behavior_schema:_arguments(effect.arguments, effect.fields, scope, "fact fields", 0);
       elseif (effect.type == 'schedule)
-        $reaction:_validate_effects({effect.effect}, scope, depth + 1);
+        $reaction:_validate_effects({effect.effect}, scope, depth + 1, parameters, check_targets);
       endif
     endfor
   endmethod
 
-  method mk owner: HACKER
+  method mk owner: ARCH_WIZARD
     "Create an enabled reaction flyweight from a trigger, optional when clause, and effect specs.";
     "Args: trigger, when_clause (0 or rule string), effects (list of effect specs)";
     "Returns: <REACTION, .trigger, .when, .effects, .enabled, .fired_at>.";
+    set_task_perms(caller_perms());
     const {trigger, ?when_clause = 0, ?effects = {}, ?state_types = []} = args;
     "Validate trigger";
     this:validate_trigger(trigger);
@@ -251,8 +260,9 @@ object REACTION [
     raise(E_INVARG, "Trigger must be symbol or {'when, 'prop, 'op, value}");
   endmethod
 
-  method parse_effect owner: HACKER
+  method parse_effect owner: ARCH_WIZARD
     "Parse one effect, checking names, argument shapes, numeric amounts, and bounded nesting.";
+    set_task_perms(caller_perms());
     const {spec, ?depth = 0} = args;
     depth <= 16 || raise(E_QUOTA, "Effects are nested more than 16 levels.");
     (typeof(spec) == TYPE_LIST && length(spec) >= 2) || raise(E_INVARG, "Invalid effect.");
@@ -294,20 +304,28 @@ object REACTION [
       $behavior_schema:_name(name, "timer name");
       return <$reaction, .type = 'cancel, .name = name>;
     endif
-    const {_, name, arguments} = spec;
     if (kind in {'record, 'forget})
-      $behavior_schema:_fields(arguments, mapkeys($rule_engine:fact_fields(name)), {}, "fact fields");
-      return <$reaction, .type = kind, .name = name, .arguments = arguments>;
+      const {_, target, arguments, ?required = 0} = spec;
+      const reference = typeof(target) == TYPE_OBJ ? ['kind -> 'literal, 'value -> target] | target;
+      const fields = typeof(required) == TYPE_MAP ? required
+        | $relation:schema($condition:relation_target(reference, []))['types];
+      $behavior_schema:_types(fields, "fact fields");
+      $behavior_schema:_fields(arguments, mapkeys(fields), {}, "fact arguments");
+      return <$reaction, .type = kind, .relation = reference, .fields = fields, .arguments = arguments>;
     endif
+    const {_, name, arguments} = spec;
     const schemas = $reaction:action_schemas();
     maphaskey(schemas, name) || raise(E_INVARG, "Unknown action: " + tostr(name));
     $behavior_schema:_fields(arguments, mapkeys(schemas[name]['inputs]), {}, "action arguments");
     return <$reaction, .type = 'action, .action = name, .arguments = arguments>;
   endmethod
 
-  method _definition owner: HACKER
-    "Copy only the executable fields of a canonical reaction.";
-    const {value} = args;
+  method _definition owner: ARCH_WIZARD
+    "Validate and copy a canonical reaction. Only wizards may select a different validation principal.";
+    "Skip target checks for signature verification and editing broken references; installation always checks them.";
+    const {value, ?check_targets = true, ?principal = caller_perms()} = args;
+    (principal == caller_perms() || caller_perms().wizard) || raise(E_PERM);
+    set_task_perms(principal);
     typeof(value) == TYPE_FLYWEIGHT && value.delegate == $reaction || raise(E_INVARG, "Expected a reaction");
     $reaction:validate_trigger(value.trigger);
     (typeof(value.when) == TYPE_INT && value.when == 0) || (typeof(value.when) == TYPE_FLYWEIGHT && value.when.delegate == $rule) || raise(E_INVARG, "Invalid reaction condition");
@@ -334,6 +352,7 @@ object REACTION [
     let scope = $rule_engine:trigger_scope(value.trigger, state_types);
     scope['parameter] = parameter_types;
     if (value.when != 0)
+      check_targets && $condition:prepare_relations(value.when.condition, parameters);
       const checked = $rule_engine:validate_rule(value.when, scope);
       checked['valid] || raise(E_INVARG, checked['warnings]:join("; "));
       scope['binding] = checked['bindings];
@@ -356,7 +375,7 @@ object REACTION [
       length(selection['order]) == 0 || raise(E_INVARG, "Select once does not order or expose matches.");
       scope['binding] = [];
     endif
-    $reaction:_validate_effects(effects, scope);
+    $reaction:_validate_effects(effects, scope, 0, parameters, check_targets);
     return <$reaction, .trigger = value.trigger, .when = value.when, .effects = effects,
       .state_types = state_types, .parameters = parameters, .parameter_types = parameter_types,
       .selection = selection, .trace = `value.trace ! E_PROPNF => false',
@@ -371,7 +390,7 @@ object REACTION [
     principal == host.owner || principal.wizard || raise(E_PERM);
     const name = tostr(property);
     name:ends_with("_reaction") || raise(E_INVARG, "Reaction properties must end with '_reaction'");
-    let reaction = $reaction:_definition(value);
+    let reaction = $reaction:_definition(value, true, host.owner);
     const declared = $reaction:state_types(host);
     for field in (mapkeys(reaction.state_types))
       (maphaskey(declared, field) && declared[field] == reaction.state_types[field])
@@ -414,7 +433,7 @@ object REACTION [
         approved_host == host && name == tostr(property) || return 0;
         owner == host.owner && wizard == owner.wizard || return 0;
         equal(encode_cbor(host.(name)), encode_cbor(reaction)) || return 0;
-        equal(encode_cbor(definition), encode_cbor($reaction:_definition(reaction))) || return 0;
+        equal(encode_cbor(definition), encode_cbor($reaction:_definition(reaction, false))) || return 0;
         return owner;
       except (E_INVARG, E_TYPE, E_RANGE, E_PROPNF)
         return 0;
@@ -876,7 +895,7 @@ object REACTION [
         values[name] = $condition:resolve(effect.arguments[name], environment);
       endfor
       if (effect.type in {'record, 'forget})
-        return $rule_engine:change_fact(effect.name, values, effect.type);
+        return $relation:change_fact($condition:resolve(effect.relation, environment), effect.fields, values, effect.type);
       endif
       const result = $reaction:perform_action(effect.action, values, context);
       if (result['status] == 'error)

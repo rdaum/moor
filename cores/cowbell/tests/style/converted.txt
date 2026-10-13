@@ -351,8 +351,6 @@ rules/reaction.moo:remove
 rules/reaction.moo:_record_trace
 rules/reaction.moo:report
 rules/reaction.moo:_timer_trace
-rules/rule_engine.moo:fact_fields
-rules/rule_engine.moo:change_fact
 relations/relation.moo:assert
 relations/relation.moo:retract
 llm/agent_building_tools.moo:list_reactions
@@ -365,3 +363,4 @@ initial/henri.moo:_pet
 initial/henri.moo:feed
 initial/henri.moo:_feed
 initial/henri.moo:_feeding_allowed
+features/builder_features.moo:_author_relation

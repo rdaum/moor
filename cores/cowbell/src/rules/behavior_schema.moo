@@ -132,9 +132,25 @@ object BEHAVIOR_SCHEMA [
           || raise(E_INVARG, path + ": ordered comparison requires numbers or strings");
       endif
       nodes = nodes + 2;
-    elseif (kind == 'predicate)
-      $behavior_schema:_fields(node, {'kind, 'name, 'arguments, 'bind}, {'source}, path);
-      const predicate = $behavior_schema:_entry(predicates, node['name], path);
+    elseif (kind in {'predicate, 'relation})
+      let predicate;
+      if (kind == 'relation)
+        $behavior_schema:_fields(node, {'kind, 'relation, 'fields, 'arguments, 'bind}, {'source}, path);
+        node['relation]['kind] in {'literal, 'parameter}
+          || raise(E_INVARG, path + ": use a relation object or reaction setting");
+        $behavior_schema:_compatible($behavior_schema:expression(node['relation], scope), 'object, path);
+        $behavior_schema:_types(node['fields], path + ".fields");
+        length(node['fields]) > 0 || raise(E_INVARG, path + ": declare relation fields first");
+        $behavior_schema:_fields(node['arguments], {}, mapkeys(node['fields]), path + ".arguments");
+        let inputs = [];
+        for field in (mapkeys(node['arguments]))
+          inputs[field] = node['fields][field];
+        endfor
+        predicate = ['inputs -> inputs, 'outputs -> node['fields]];
+      else
+        $behavior_schema:_fields(node, {'kind, 'name, 'arguments, 'bind}, {'source}, path);
+        predicate = $behavior_schema:_entry(predicates, node['name], path);
+      endif
       nodes = $behavior_schema:_arguments(node['arguments], predicate['inputs], scope, path, nodes);
       $behavior_schema:_fields(node['bind], {}, mapkeys(predicate['outputs]), path + ".bind");
       for output in (mapkeys(node['bind]))

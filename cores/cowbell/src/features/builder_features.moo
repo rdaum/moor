@@ -2395,10 +2395,19 @@ object BUILDER_FEATURES [
     return ['kind -> 'literal, 'value -> value];
   endmethod
 
+  method _author_relation owner: ARCH_WIZARD
+    "Resolve a relation object or setting and read its fields under the author's permissions.";
+    set_task_perms(caller_perms());
+    const {word, scope, who, parameters} = args;
+    const reference = $builder_features:_author_value(word, scope, who, 'object);
+    const target = $condition:relation_target(reference, parameters);
+    return {reference, $relation:schema(target)['types]};
+  endmethod
+
   method _author_condition owner: ARCH_WIZARD
     "Parse builder conditions into the same tree used by rules. Preserve grouping and precedence.";
     set_task_perms(caller_perms());
-    const {words, scope, who, ?depth = 0} = args;
+    const {words, scope, who, ?depth = 0, ?parameters = []} = args;
     depth <= 16 || raise(E_QUOTA, "The condition has too many nested groups.");
     length(words) > 0 || raise(E_INVARG, "Supply a condition, or use always.");
     let nesting = 0;
@@ -2414,25 +2423,53 @@ object BUILDER_FEATURES [
         words[i] == "(" && (nesting = nesting + 1);
         words[i] == ")" && (nesting = nesting - 1);
         if (nesting == 0 && words[i] == operator)
-          const left = $builder_features:_author_condition(words[1..i - 1], scope, who, depth + 1);
+          const left = $builder_features:_author_condition(words[1..i - 1], scope, who, depth + 1, parameters);
           let right_scope = scope;
           if (operator == "AND")
             right_scope['binding] = $behavior_schema:condition(left, scope, $rule_engine:schemas())['bindings];
           endif
-          const right = $builder_features:_author_condition(words[i + 1..$], right_scope, who, depth + 1);
+          const right = $builder_features:_author_condition(words[i + 1..$], right_scope, who, depth + 1, parameters);
           return ['kind -> operator == "AND" ? 'all | 'any, 'children -> {left, right}];
         endif
       endfor
     endfor
     if (words[1] == "(")
       words[$] == ")" || raise(E_INVARG, "Unexpected text after a condition group.");
-      return $builder_features:_author_condition(words[2..$ - 1], scope, who, depth + 1);
+      return $builder_features:_author_condition(words[2..$ - 1], scope, who, depth + 1, parameters);
     elseif (words[1] == "NOT")
-      return ['kind -> 'not, 'child -> $builder_features:_author_condition(words[2..$], scope, who, depth + 1)];
+      return ['kind -> 'not, 'child -> $builder_features:_author_condition(words[2..$], scope, who, depth + 1, parameters)];
     elseif (length(words) == 1 && words[1] in {"always", "never"})
       return ['kind -> words[1] == "always" ? 'all | 'any, 'children -> {}];
     elseif (words[1] == "fact")
-      length(words) >= 2 || raise(E_INVARG, "Use fact NAME FIELD=VALUE.");
+      if (length(words) >= 2 && words[2] == "in")
+        length(words) >= 3 || raise(E_INVARG, "Use fact in RELATION FIELD=VALUE or FIELD as NAME.");
+        const {reference, fields} = $builder_features:_author_relation(words[3], scope, who, parameters);
+        (length(words) - 3) % 3 == 0 || raise(E_INVARG, "Use FIELD=VALUE or FIELD as NAME.");
+        let values = [];
+        let bind = [];
+        for i in [1..(length(words) - 3) / 3]
+          const offset = i * 3;
+          const field = tosym(words[offset + 1]);
+          maphaskey(fields, field) || raise(E_INVARG, "Unknown relation field: " + tostr(field));
+          (!maphaskey(values, field) && !maphaskey(bind, field))
+            || raise(E_INVARG, "Repeated relation field: " + tostr(field));
+          if (words[offset + 2] == "=")
+            values[field] = $builder_features:_author_value(words[offset + 3], scope, who, fields[field]);
+          elseif (words[offset + 2] == "as")
+            const name = tosym(words[offset + 3]);
+            $behavior_schema:_name(name, "match name");
+            !(words[offset + 3] in {"this", "actor", "place", "item", "key", "food", "who", "me", "here", "from", "to"})
+              && !maphaskey(scope['state], name) && !maphaskey(scope['parameter], name)
+              || raise(E_INVARG, "Choose a match name that differs from event inputs, state, and settings.");
+            bind[field] = name;
+          else
+            raise(E_INVARG, "Use FIELD=VALUE or FIELD as NAME.");
+          endif
+        endfor
+        return ['kind -> 'relation, 'relation -> reference, 'fields -> fields,
+          'arguments -> values, 'bind -> bind];
+      endif
+      length(words) >= 2 || raise(E_INVARG, "Use fact NAME FIELD=VALUE, or fact in RELATION FIELD=VALUE.");
       const name = tosym(words[2]);
       const schemas = $rule_engine:schemas();
       maphaskey(schemas, name) || raise(E_INVARG, "Unknown fact: " + words[2] + ". Use @reaction facts.");
@@ -2451,7 +2488,7 @@ object BUILDER_FEATURES [
     endif
     length(words) >= 3 || raise(E_INVARG, "Use a comparison such as visits >= 4 or actor is me.");
     if (words[2] == "is" && words[3] == "not")
-      return ['kind -> 'not, 'child -> $builder_features:_author_condition({words[1], "is", @words[4..$]}, scope, who, depth + 1)];
+      return ['kind -> 'not, 'child -> $builder_features:_author_condition({words[1], "is", @words[4..$]}, scope, who, depth + 1, parameters)];
     endif
     let predicate = 'is;
     let values = [];
@@ -2512,8 +2549,8 @@ object BUILDER_FEATURES [
       'subtract -> "subtract COUNTER AMOUNT — decrease a declared counter",
       'schedule -> "schedule NAME SECONDS STEP — replace a timer with this name",
       'cancel -> "cancel NAME — cancel a timer on this object",
-      'record -> "record FACT FIELD=VALUE ... — store a named fact once",
-      'forget -> "forget FACT FIELD=VALUE ... — remove a named fact if present",
+      'record -> "record in RELATION FIELD=VALUE ... — store a fact once",
+      'forget -> "forget in RELATION FIELD=VALUE ... — remove a fact if present",
       'do -> "do ACTION target=OBJECT actor=ACTOR ... — request a normal world action"
     ];
   endmethod
@@ -2521,7 +2558,7 @@ object BUILDER_FEATURES [
   method _author_step owner: ARCH_WIZARD
     "Compile one readable step. State changes are restricted to the host's declared fields.";
     set_task_perms(caller_perms());
-    const {words, scope, who, host, ?depth = 0} = args;
+    const {words, scope, who, host, ?depth = 0, ?parameters = []} = args;
     depth <= 16 || raise(E_QUOTA, "Steps are nested too deeply.");
     length(words) > 0 || raise(E_INVARG, "Supply a step. Use @reaction steps for examples.");
     const kind = tosym(words[1]);
@@ -2549,17 +2586,17 @@ object BUILDER_FEATURES [
       $behavior_schema:_name(name, "timer name");
       seconds >= 0 && seconds <= 86400 || raise(E_INVARG, "Timers must wait zero seconds through one day.");
       return <$reaction, .type = 'schedule, .name = name, .seconds = seconds,
-        .effect = $builder_features:_author_step(words[4..$], scope, who, host, depth + 1)>;
+        .effect = $builder_features:_author_step(words[4..$], scope, who, host, depth + 1, parameters)>;
     elseif (kind == 'cancel)
       length(words) == 2 || raise(E_INVARG, "Use cancel NAME.");
       return $reaction:parse_effect({'cancel, tosym(words[2])});
     endif
     if (kind in {'record, 'forget})
-      length(words) >= 2 || raise(E_INVARG, "Use record FACT FIELD=VALUE, or forget FACT FIELD=VALUE.");
-      const name = tosym(words[2]);
-      const schema = $rule_engine:fact_fields(name);
-      return $reaction:parse_effect({kind, name,
-        $builder_features:_author_arguments(words[3..$], schema, scope, who)});
+      (length(words) >= 3 && words[2] == "in")
+        || raise(E_INVARG, "Use record in RELATION FIELD=VALUE, or forget in RELATION FIELD=VALUE.");
+      const {reference, fields} = $builder_features:_author_relation(words[3], scope, who, parameters);
+      return $reaction:parse_effect({kind, reference,
+        $builder_features:_author_arguments(words[4..$], fields, scope, who), fields});
     endif
     length(words) >= 2 || raise(E_INVARG, "Use do ACTION name=value. See @reaction actions.");
     const schemas = $reaction:action_schemas();
@@ -2605,6 +2642,16 @@ object BUILDER_FEATURES [
       return $builder_features:_author_value_text(tree['left]) + " " + ops[tree['op]] + " "
         + $builder_features:_author_value_text(tree['right]);
     endif
+    if (kind == 'relation)
+      let parts = {"fact in", $builder_features:_author_value_text(tree['relation])};
+      for field in (mapkeys(tree['arguments]))
+        parts = {@parts, tostr(field) + "=" + $builder_features:_author_value_text(tree['arguments][field])};
+      endfor
+      for field in (mapkeys(tree['bind]))
+        parts = {@parts, tostr(field) + " as " + tostr(tree['bind][field])};
+      endfor
+      return parts:join(" ");
+    endif
     const name = tree['name];
     const values = tree['arguments];
     const text = {field} => $builder_features:_author_value_text(values[field]);
@@ -2648,7 +2695,14 @@ object BUILDER_FEATURES [
     elseif (kind == 'cancel)
       return "cancel " + tostr(effect.name);
     elseif (kind in {'action, 'record, 'forget})
-      let parts = kind == 'action ? {"do", tostr(effect.action)} | {tostr(kind), tostr(effect.name)};
+      let parts;
+      if (kind == 'action)
+        parts = {"do", tostr(effect.action)};
+      else
+        const reference = typeof(environment) == TYPE_MAP
+          ? ['kind -> 'literal, 'value -> $condition:resolve(effect.relation, environment)] | effect.relation;
+        parts = {tostr(kind), "in", $builder_features:_author_value_text(reference)};
+      endif
       for field in (mapkeys(effect.arguments))
         let expression = effect.arguments[field];
         if (typeof(environment) == TYPE_MAP)
@@ -2693,7 +2747,10 @@ object BUILDER_FEATURES [
       return mapvalues($builder_features:reaction_steps());
     elseif (topic == "actions" || topic == "facts")
       const schemas = topic == "actions" ? $reaction:action_schemas() | $rule_engine:schemas();
-      let lines = {};
+      let lines = topic == "facts" ? {
+        "Stored facts: fact in RELATION FIELD=VALUE. Use FIELD as NAME to select a value.",
+        "RELATION is an object or a reaction setting. @facts OBJECT show lists its fields and facts.",
+        "General world conditions:"} | {};
       for name in (mapkeys(schemas))
         const entry = schemas[name];
         const arguments = {tostr(field) + "=" + tostr(entry['inputs][field]) for field in (mapkeys(entry['inputs]))};
@@ -2713,7 +2770,7 @@ object BUILDER_FEATURES [
         "Select once runs the steps once if anything matches, without exposing found objects to those steps.",
         "Select one requires exactly one match. Select each runs the steps for every distinct match.",
         "Selection orders object references by identity. It never relies on arrival order.",
-        "Use fact NAME FIELD=VALUE to check a named fact. @reaction facts lists the available fields."};
+        "Use fact in RELATION FIELD=VALUE to check stored facts. Use FIELD as NAME to select a value."};
     endif
     return {"A reaction makes an object respond to an event. You choose when it runs and the steps it takes.",
       "Example: @reaction cupboard welcome after open",
@@ -2738,7 +2795,7 @@ object BUILDER_FEATURES [
       "@state OBJECT NAME number 0 — declare a counter; use choice awake sleepy for named states",
       "@state OBJECT — show declared state; @state OBJECT NAME set VALUE changes it",
       "@rule OBJECT OPERATION CONDITION — control open, take, put, view, or another supported operation",
-      "@facts OBJECT define NAME FIELD:TYPE ... — name a set of facts stored in a relation",
+      "@facts OBJECT define FIELD:TYPE ... — define fields on this relation",
       "@facts OBJECT add FIELD=VALUE ... — record a fact; use remove to delete it, or show to read it",
       "Disabling, replacing, or removing a reaction cancels its timers. Earlier completed steps remain completed.",
       "A preview reads current facts and shows planned steps. It sends no messages and changes no state.",
@@ -2880,7 +2937,7 @@ object BUILDER_FEATURES [
       reaction.selection = ['mode -> 'once, 'order -> {}, 'limit -> 256];
       reaction.trace = false;
     else
-      reaction = $reaction:_definition(previous);
+      reaction = $reaction:_definition(previous, false);
       reaction.state_types = $reaction:state_types(host);
     endif
     let scope = $reaction:author_scope(reaction);
@@ -2919,8 +2976,8 @@ object BUILDER_FEATURES [
       reaction.trigger = {'when, field, ops[rest[2]], value};
     elseif (operation == "if")
       scope['binding] = [];
-      const tree = $builder_features:_author_condition(rest, scope, who);
-      reaction.when = $rule:mk(name, tree, scope);
+      const tree = $builder_features:_author_condition(rest, scope, who, 0, reaction.parameters);
+      reaction.when = $rule:mk(name, tree, scope, reaction.parameters);
     elseif (operation == "then" || operation == "step")
       length(rest) > 0 || raise(E_INVARG, "Supply a step. Use @reaction steps for examples.");
       const index = operation == "then" ? length(reaction.effects) + 1
@@ -2928,7 +2985,7 @@ object BUILDER_FEATURES [
       index > 0 && index <= length(reaction.effects) + (operation == "then" ? 1 | 0)
         || raise(E_INVARG, "That step number does not exist. Use show to see the step numbers.");
       const effect_words = operation == "then" ? rest | rest[2..$];
-      const effect = $builder_features:_author_step(effect_words, scope, who, host);
+      const effect = $builder_features:_author_step(effect_words, scope, who, host, 0, reaction.parameters);
       reaction.effects = operation == "then" ? {@reaction.effects, effect}
         | {@reaction.effects[1..index - 1], effect, @reaction.effects[index + 1..$]};
     elseif (operation == "remove-step")
@@ -3088,58 +3145,37 @@ object BUILDER_FEATURES [
     return {"Set " + words[1] + " rule: " + $builder_features:_author_condition_text(tree)};
   endmethod
   method _author_facts owner: ARCH_WIZARD
-    "Declare named fact columns and edit ground rows through checked relation services.";
+    "Define fields on one relation and edit its facts without registering a global name.";
     set_task_perms(caller_perms());
     const {host, words, who} = args;
     isa(host, $relation) || raise(E_INVARG, "Use @create $relation named NAME to create a place for these facts.");
     if (length(words) > 0 && words[1] == "define")
-      length(words) >= 5 && (length(words) - 2) % 3 == 0
-        || raise(E_INVARG, "Use @facts OBJECT define NAME person:object group:text.");
-      const name = tosym(words[2]);
-      for registered in (mapkeys($rule_engine.predicate_sources))
-        const existing = $rule_engine.predicate_sources[registered];
-        if (existing['kind] == 'relation && existing['relation] == host && registered != name)
-          raise(E_INVARG, "This object already stores facts named " + tostr(registered) + ". Use that name when redefining its fields.");
-        endif
-      endfor
+      (length(words) >= 4 && (length(words) - 1) % 3 == 0)
+        || raise(E_INVARG, "Use @facts OBJECT define person:object group:text.");
       let columns = {};
-      let inputs = [];
-      for i in [1..(length(words) - 2) / 3]
-        const offset = (i - 1) * 3 + 2;
+      let types = [];
+      for i in [1..(length(words) - 1) / 3]
+        const offset = (i - 1) * 3 + 1;
         const field = tosym(words[offset + 1]);
         words[offset + 2] == ":" || raise(E_INVARG, "Use field:type for each column.");
         $behavior_schema:_name(field, "fact field");
         !(field in columns) || raise(E_INVARG, "A field name can appear only once.");
         columns = {@columns, field};
-        inputs[field] = $builder_features:_author_type(words[offset + 3]);
+        types[field] = $builder_features:_author_type(words[offset + 3]);
       endfor
-      const schema = ['description -> "Facts stored in " + host.name + ".", 'inputs -> inputs, 'outputs -> []];
-      for tuple in ($relation:tuples(host))
-        length(tuple) == length(columns) || raise(E_INVARG, "Existing facts have a different number of fields.");
-        for i in [1..length(columns)]
-          $behavior_schema:_type(tuple[i], inputs[columns[i]], tostr(columns[i]));
-        endfor
-      endfor
-      $rule_engine:register_relation(name, host, columns, schema);
-      return {"Defined " + words[2] + ". Use @facts " + tostr(host) + " add FIELD=VALUE to record a fact."};
+      $relation:define_fields(host, columns, types);
+      return {"Defined fields on " + host.name + ". Use @facts " + tostr(host) + " add FIELD=VALUE to record a fact."};
     endif
-    let names = {};
-    for name in (mapkeys($rule_engine.predicate_sources))
-      const candidate = $rule_engine.predicate_sources[name];
-      if (candidate['kind] == 'relation && candidate['relation] == host)
-        names = {@names, name};
-      endif
-    endfor
-    length(names) == 1 || raise(E_INVARG, "Define one fact name for this object with @facts OBJECT define NAME FIELD:TYPE.");
-    const source = $rule_engine.predicate_sources[names[1]];
-    const schema = mapmerge(source['schema]['inputs], source['schema]['outputs]);
+    const schema = $relation:schema(host);
     if (length(words) == 0 || words == {"show"})
-      let lines = {"Facts: " + tostr(names[1])};
+      const definitions = {tostr(field) + ":" + tostr(schema['types][field]) for field in (schema['columns])};
+      let lines = {"Facts in " + host.name + " (" + tostr(host) + ")", "Fields: " + definitions:join(", ")};
       const tuples = $relation:tuples(host);
       for tuple in (tuples)
+        $relation:_check_tuple(tuple, schema);
         let fields = {};
-        for i in [1..length(source['columns])]
-          fields = {@fields, tostr(source['columns][i]) + "="
+        for i in [1..length(schema['columns])]
+          fields = {@fields, tostr(schema['columns][i]) + "="
             + $builder_features:_author_value_text(['kind -> 'literal, 'value -> tuple[i]])};
         endfor
         lines = {@lines, fields:join(", ")};
@@ -3147,12 +3183,12 @@ object BUILDER_FEATURES [
       return length(tuples) == 0 ? {@lines, "No facts yet."} | lines;
     endif
     words[1] in {"add", "remove"} || raise(E_INVARG, "Use @facts OBJECT add FIELD=VALUE, remove FIELD=VALUE, or show.");
-    const expressions = $builder_features:_author_arguments(words[2..$], schema, $rule_engine:scope(), who);
+    const expressions = $builder_features:_author_arguments(words[2..$], schema['types], $rule_engine:scope(), who);
     let values = [];
     for field in (mapkeys(expressions))
       values[field] = expressions[field]['value];
     endfor
-    $rule_engine:change_fact(names[1], values, words[1] == "add" ? 'record | 'forget);
+    $relation:change_fact(host, schema['types], values, words[1] == "add" ? 'record | 'forget);
     return {words[1] == "add" ? "Recorded fact. Repeating it does not create a duplicate." | "Removed fact if present."};
   endmethod
 endobject

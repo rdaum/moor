@@ -145,7 +145,19 @@ object CONDITION [
       pos = pos + 1;
     elseif (pos < length(tokens) && tokens[pos + 1]['text] == "(")
       $behavior_schema:_name(tosym(token), "predicate");
-      const {arguments, next} = $condition:_named(tokens, pos + 2, false);
+      let relation = 0;
+      let arguments_pos = pos + 2;
+      if (token == "relation")
+        arguments_pos <= length(tokens) || raise(E_INVARG, "Expected a relation reference.");
+        relation = $condition:_value(tokens[arguments_pos]);
+        arguments_pos = arguments_pos + 1;
+        if (arguments_pos <= length(tokens) && tokens[arguments_pos]['text] != ")")
+          arguments_pos = $condition:_expect(tokens, arguments_pos, ",");
+          (arguments_pos <= length(tokens) && tokens[arguments_pos]['text] != ")")
+            || raise(E_INVARG, "Expected a field after comma.");
+        endif
+      endif
+      const {arguments, next} = $condition:_named(tokens, arguments_pos, false);
       pos = next;
       let bind = [];
       if (pos <= length(tokens) && tokens[pos]['text] == "->")
@@ -154,7 +166,9 @@ object CONDITION [
         bind = outputs;
         pos = after;
       endif
-      tree = ['kind -> 'predicate, 'name -> tosym(token), 'arguments -> arguments, 'bind -> bind];
+      tree = token == "relation"
+        ? ['kind -> 'relation, 'relation -> relation, 'arguments -> arguments, 'bind -> bind]
+        | ['kind -> 'predicate, 'name -> tosym(token), 'arguments -> arguments, 'bind -> bind];
     else
       const left = $condition:_value(tokens[pos]);
       pos = pos + 1;
@@ -222,6 +236,36 @@ object CONDITION [
     return value;
   endmethod
 
+  method relation_target owner: HACKER
+    "Resolve a fixed relation object or an explicit reaction setting. Event values cannot choose storage.";
+    const {expression, parameters} = args;
+    if (expression['kind] == 'literal)
+      return expression['value];
+    endif
+    expression['kind] == 'parameter || raise(E_INVARG, "Use a relation object or a reaction setting.");
+    maphaskey(parameters, expression['name])
+      || raise(E_INVARG, "Missing relation setting: " + tostr(expression['name]));
+    return parameters[expression['name]];
+  endmethod
+
+  method prepare_relations owner: ARCH_WIZARD
+    "Capture required field types when authoring; check existing requirements when installing or retargeting.";
+    set_task_perms(caller_perms());
+    let {tree, ?parameters = [], ?depth = 0} = args;
+    depth <= 16 || raise(E_QUOTA, "Condition nesting exceeds 16 levels.");
+    if (tree['kind] in {'all, 'any})
+      tree['children] = {$condition:prepare_relations(child, parameters, depth + 1)
+        for child in (tree['children])};
+    elseif (tree['kind] == 'not)
+      tree['child] = $condition:prepare_relations(tree['child], parameters, depth + 1);
+    elseif (tree['kind] == 'relation)
+      const relation = $condition:relation_target(tree['relation], parameters);
+      const schema = $relation:schema(relation, `tree['fields] ! E_RANGE => 0');
+      tree['fields] = schema['types];
+    endif
+    return tree;
+  endmethod
+
   method print owner: HACKER
     "Print an unambiguous editable expression. Source positions are recomputed when reparsed.";
     const {tree} = args;
@@ -235,10 +279,13 @@ object CONDITION [
     elseif (kind == 'compare)
       const operators = ['eq -> "==", 'ne -> "!=", 'lt -> "<", 'le -> "<=", 'gt -> ">", 'ge -> ">="];
       return $condition:print_value(tree['left]) + " " + operators[tree['op]] + " " + $condition:print_value(tree['right]);
-    elseif (kind == 'predicate)
+    elseif (kind in {'predicate, 'relation})
       const arguments = {tostr(name) + ": " + $condition:print_value(tree['arguments][name])
         for name in (mapkeys(tree['arguments]))};
-      let text = tostr(tree['name]) + "(" + arguments:join(", ") + ")";
+      const prefix = kind == 'relation
+        ? "relation(" + $condition:print_value(tree['relation]) + (length(arguments) > 0 ? ", " | "")
+        | tostr(tree['name]) + "(";
+      let text = prefix + arguments:join(", ") + ")";
       if (length(tree['bind]) > 0)
         const outputs = {tostr(name) + ": " + tostr(tree['bind][name]) for name in (mapkeys(tree['bind]))};
         text = text + " -> (" + outputs:join(", ") + ")";
@@ -283,8 +330,9 @@ object CONDITION [
         pending = {@pending, node['child]};
       elseif (kind == 'compare)
         pending = {@pending, node['left], node['right]};
-      elseif (kind == 'predicate)
+      elseif (kind in {'predicate, 'relation})
         pending = {@pending, @mapvalues(node['arguments])};
+        kind == 'relation && (pending = {@pending, node['relation]});
       endif
     endwhile
     return result;
@@ -336,12 +384,14 @@ object CONDITION [
         endif
       endif
       return ['bindings -> matches ? {initial} | {}, 'complete -> true];
-    elseif (kind == 'predicate)
+    elseif (kind in {'predicate, 'relation})
       let arguments = [];
       for name in (mapkeys(tree['arguments]))
         arguments[name] = $condition:resolve(tree['arguments][name], environment);
       endfor
-      const result = provider(tree['name], arguments, limit);
+      const result = kind == 'relation
+        ? $relation:query_rows($condition:resolve(tree['relation], environment), tree['fields], arguments, limit)
+        | provider(tree['name], arguments, limit);
       const outputs = mapkeys(tree['bind]);
       const pattern = {{'var, tree['bind][output]} for output in (outputs)};
       const rows = {{row[field] for field in (outputs)} for row in (result['rows])};
