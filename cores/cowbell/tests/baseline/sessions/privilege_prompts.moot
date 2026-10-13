@@ -17,5 +17,16 @@ true
 {false, false}
 >> yes
 % @builder #90102
+@text RUNTIME_PLAYER has been granted builder privileges.
+@text RUNTIME_PLAYER has been granted an Architect's Compass.
+@text You granted RUNTIME_PLAYER builder privileges.
 ; return {#90102.authoring_features == $builder_features, #90102.is_builder, !!#90102.programmer};
 {true, true, false}
+
+// Container refusals describe the target, which can differ from the actor.
+; const item = $thing:create(); item.name = "token"; item:moveto(player); return true;
+true
+% put token in RUNTIME_PLAYER
+=RUNTIME_PLAYER is a person, not a container.
+% put token in #90100
+=You are a person, not a container.

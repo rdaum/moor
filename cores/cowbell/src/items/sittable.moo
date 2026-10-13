@@ -22,7 +22,7 @@ object SITTABLE [
   property dumped_msg (owner: HACKER, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'dobj>,
     " ",
-    <SUB, .capitalize = false, .type = 'verb_be>,
+    <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">,
     " dumped off ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'This>,
     "."
@@ -53,7 +53,7 @@ object SITTABLE [
   property squeezed_msg (owner: HACKER, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'dobj>,
     " ",
-    <SUB, .capitalize = false, .type = 'verb_be>,
+    <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">,
     " squeezed off ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'This>,
     "."

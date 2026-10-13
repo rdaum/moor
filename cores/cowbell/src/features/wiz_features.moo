@@ -88,9 +88,9 @@ object WIZ_FEATURES [
       visor:moveto(target);
       "Announce upgrade";
       if (valid(target.location))
-        event = $event:mk_info(target, $sub:nc(), " ", $sub:verb_have(), " been upgraded to programmer privileges."):with_this(target.location);
+        event = $event:mk_info(target, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been upgraded to programmer privileges."):with_this(target.location);
         target.location:announce(event);
-        tools_event = $event:mk_info(target, $sub:nc(), " ", $sub:verb_have(), " been granted a Data Visor."):with_this(target.location);
+        tools_event = $event:mk_info(target, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted a Data Visor."):with_this(target.location);
         target.location:announce(tools_event);
       endif
       target:tell($event:mk_info(target, "You have been upgraded to programmer. A Data Visor has been added to your inventory for code editing and advanced features."));
@@ -109,9 +109,9 @@ object WIZ_FEATURES [
       visor:moveto(target);
       "Announce fresh grant";
       if (valid(target.location))
-        event = $event:mk_info(target, $sub:nc(), " ", $sub:verb_have(), " been granted programmer and builder privileges."):with_this(target.location);
+        event = $event:mk_info(target, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted programmer and builder privileges."):with_this(target.location);
         target.location:announce(event);
-        tools_event = $event:mk_info(target, $sub:nc(), " ", $sub:verb_have(), " been granted an Architect's Compass and a Data Visor."):with_this(target.location);
+        tools_event = $event:mk_info(target, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted an Architect's Compass and a Data Visor."):with_this(target.location);
         target.location:announce(tools_event);
       endif
       target:tell($event:mk_info(target, "In your inventory there are now an Architect's Compass and a Data Visor - powerful instruments bonded to you alone. Wear them to activate their capabilities: the Compass for building and spatial construction, the Visor for analyzing, writing code, creating objects, adding properties, and shaping the world's logic. Guard them carefully, as they grant significant power over the world."));
@@ -180,7 +180,7 @@ object WIZ_FEATURES [
         endif
       endfor
       if (valid(dobj.location))
-        event = $event:mk_info(dobj, $sub:nc(), " ", $sub:verb_have(), " been downgraded to builder privileges."):with_this(dobj.location);
+        event = $event:mk_info(dobj, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been downgraded to builder privileges."):with_this(dobj.location);
         dobj.location:announce(event);
       endif
       dobj:tell($event:mk_info(dobj, "You have been downgraded to builder. Your Data Visor has been removed, but you retain your Architect's Compass."));
@@ -192,9 +192,9 @@ object WIZ_FEATURES [
       compass.aliases = $architects_compass.aliases;
       compass:moveto(dobj);
       if (valid(dobj.location))
-        event = $event:mk_info(dobj, $sub:nc(), " ", $sub:verb_have(), " been granted builder privileges."):with_this(dobj.location);
+        event = $event:mk_info(dobj, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted builder privileges."):with_this(dobj.location);
         dobj.location:announce(event);
-        tools_event = $event:mk_info(dobj, $sub:nc(), " ", $sub:verb_have(), " been granted an Architect's Compass."):with_this(dobj.location);
+        tools_event = $event:mk_info(dobj, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted an Architect's Compass."):with_this(dobj.location);
         dobj.location:announce(tools_event);
       endif
       dobj:tell($event:mk_info(dobj, "In your inventory there is now an Architect's Compass - a powerful instrument bonded to you alone. Wear it to activate its capabilities for building and spatial construction. Guard it carefully, as it grants significant power over the world."));
@@ -867,7 +867,7 @@ object WIZ_FEATURES [
     target.admin_features = admin_features;
     target.wizard = true;
     if (valid(target.location))
-      event = $event:mk_info(target, $sub:nc(), " ", $sub:verb_have(), " been granted wizard privileges."):with_this(target.location);
+      event = $event:mk_info(target, $sub:nc(), " ", $sub:agree('actor, 'name, "have", "has"), " been granted wizard privileges."):with_this(target.location);
       target.location:announce(event);
     endif
     target:tell($event:mk_info(target, "You have been granted wizard privileges. Your command set now includes programmer, admin, and wizard features."));

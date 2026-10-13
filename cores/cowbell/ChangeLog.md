@@ -93,6 +93,11 @@ Cowbell entries.
 
 ### Fixed
 
+- Messages can select verb agreement for a participant's name or pronoun explicitly, including named
+  object bindings. Use `{agree actor name:are|is}` for “Alex is” and `{agree actor pronoun:are|is}`
+  for “They are.” Privilege announcements, furniture messages, and container refusals now agree with
+  the participant they describe.
+
 - Nested message alternatives now resolve their substitutions and preserve branch whitespace. Escape
   literal braces, pipes, and backslashes with a backslash. Stray closing braces are errors.
 - Displayed message templates preserve capitalization, nested alternatives, and literal punctuation

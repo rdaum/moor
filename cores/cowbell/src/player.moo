@@ -701,7 +701,7 @@ object PLAYER [
 
   verb put (any in this) owner: ARCH_WIZARD flags: "rd"
     "Reject putting things in a player";
-    event = $event:mk_error(player, $sub:tc(), " ", $sub:verb_be(), " a person, not a container."):with_this(this);
+    event = $event:mk_error(player, $sub:tc(), " ", $sub:agree('this, 'name, "are", "is"), " a person, not a container."):with_this(this);
     player:inform_current(event);
   endverb
 

@@ -9,264 +9,76 @@ object SUB [
 
   override description (owner: HACKER, flags: "rc") = "Flyweight delegate and factory for template substitution in events.";
   override object_documentation (owner: HACKER, flags: "rc") = {
-    "# $sub - Event Substitution System",
+    "# Message substitutions for programmers",
     "",
-    "## Overview",
+    "A substitution is an unresolved value inside an event. It selects words for each viewer.",
+    "The event captures participant identities. Names and pronouns are read when it resolves.",
+    "Rendering an already resolved document does not read these objects again.",
     "",
-    "The `$sub` system provides template-based text substitution for events in the MOO. It allows you to write narrative",
-    "descriptions that automatically adapt based on perspective (first-person vs third-person) and grammatical context.",
+    "For the complete template syntax, see the object documentation on $sub_utils.",
     "",
-    "Substitutions are created as lightweight flyweight objects that get evaluated when events are rendered to players. This",
-    "means the same event can produce different text for different viewers.",
-    "",
-    "## Basic Concept",
-    "",
-    "When you create an event, you build content using substitution flyweights:",
+    "## Constructing a message",
     "",
     "```moo",
-    "content = {$sub:nc(), \" \", $sub:self_alt(\"pick\", \"picks\"), \" up \", $sub:d(), \".\"};",
+    "const event = $event:mk_info(player,",
+    "  $sub:nc(), \" \", $sub:agree('actor, 'name, \"wave\", \"waves\"), \" to \", $sub:d(), \".\")",
+    "  :with_dobj(recipient);",
+    "const document = event:resolve(viewer);",
+    "const text = $document:render(document, 'text_plain)['body];",
     "```",
     "",
-    "When this event is rendered:",
-    "",
-    "- **To the actor**: \"You pick up the sword.\"",
-    "- **To others**: \"Alice picks up the sword.\"",
-    "",
-    "## Name Substitutions",
-    "",
-    "These substitute names of objects and participants in the event.",
-    "",
-    "### Actor Names",
-    "",
-    "| Verb        | Output                 | Example (actor is Alice) |",
-    "|-------------|------------------------|--------------------------|",
-    "| `$sub:n()`  | Actor name             | \"Alice\" / \"you\"          |",
-    "| `$sub:nc()` | Capitalized actor name | \"Alice\" / \"You\"          |",
-    "",
-    "### Object Names",
-    "",
-    "| Verb        | Description          | Example               |",
-    "|-------------|----------------------|-----------------------|",
-    "| `$sub:d()`  | Direct object        | \"the sword\" / \"you\"   |",
-    "| `$sub:dc()` | Capitalized dobj     | \"The sword\" / \"You\"   |",
-    "| `$sub:i()`  | Indirect object      | \"the chest\" / \"you\"   |",
-    "| `$sub:ic()` | Capitalized iobj     | \"The chest\" / \"You\"   |",
-    "| `$sub:t()`  | This object          | \"the door\" / \"you\"    |",
-    "| `$sub:tc()` | Capitalized this     | \"The door\" / \"You\"    |",
-    "| `$sub:l()`  | Location             | \"the tavern\" / \"here\" |",
-    "| `$sub:lc()` | Capitalized location | \"The tavern\" / \"Here\" |",
-    "",
-    "## Pronoun Substitutions",
-    "",
-    "These substitute pronouns based on the actor's or object's gender settings.",
-    "",
-    "### Actor Pronouns",
-    "",
-    "| Verb       | Type                 | Example (he/him)       | Example (they/them)       |",
-    "|------------|----------------------|------------------------|---------------------------|",
-    "| `$sub:s()` | Subject              | \"he\" / \"you\"           | \"they\" / \"you\"            |",
-    "| `$sub:o()` | Object               | \"him\" / \"you\"          | \"them\" / \"you\"            |",
-    "| `$sub:p()` | Possessive adjective | \"his\" / \"your\"         | \"their\" / \"your\"          |",
-    "| `$sub:q()` | Possessive noun      | \"his\" / \"yours\"        | \"theirs\" / \"yours\"        |",
-    "| `$sub:r()` | Reflexive            | \"himself\" / \"yourself\" | \"themselves\" / \"yourself\" |",
-    "",
-    "Add `c` for capitalized versions: `$sub:sc()`, `$sub:oc()`, etc.",
-    "",
-    "### Direct Object Pronouns",
-    "",
-    "| Verb            | Type            | Example              |",
-    "|-----------------|-----------------|----------------------|",
-    "| `$sub:s_dobj()` | Subject         | \"he\" / \"it\"          |",
-    "| `$sub:o_dobj()` | Object          | \"him\" / \"it\"         |",
-    "| `$sub:p_dobj()` | Possessive adj  | \"his\" / \"its\"        |",
-    "| `$sub:q_dobj()` | Possessive noun | \"his\" / \"its\"        |",
-    "| `$sub:r_dobj()` | Reflexive       | \"himself\" / \"itself\" |",
-    "",
-    "Also available with capitalization: `$sub:sc_dobj()`, etc.",
-    "",
-    "### Indirect Object Pronouns",
-    "",
-    "Same pattern as dobj, but using `_iobj` suffix:",
-    "",
-    "- `$sub:s_iobj()`, `$sub:o_iobj()`, `$sub:p_iobj()`, etc.",
-    "- Capitalized: `$sub:sc_iobj()`, `$sub:oc_iobj()`, etc.",
-    "",
-    "## Verb Conjugation",
-    "",
-    "These conjugate verbs based on person and number.",
-    "",
-    "### Actor Verb Conjugation",
-    "",
-    "| Verb               | 2nd person (you) | 3rd person (he/she/it) |",
-    "|--------------------|------------------|------------------------|",
-    "| `$sub:verb_be()`   | \"are\"            | \"is\"                   |",
-    "| `$sub:verb_have()` | \"have\"           | \"has\"                  |",
-    "| `$sub:verb_look()` | \"look\"           | \"looks\"                |",
-    "",
-    "### Object Verb Conjugation",
-    "",
-    "Same verbs available with `_dobj` or `_iobj` suffix:",
-    "",
-    "- `$sub:verb_be_dobj()`, `$sub:verb_have_iobj()`, etc.",
-    "",
-    "## Self-Alternation",
-    "",
-    "The `self_alt()` method chooses between two alternatives based on whether the viewer is the actor.",
-    "",
-    "```moo",
-    "$sub:self_alt(for_self, for_others)",
-    "```",
-    "",
-    "### Basic Usage",
-    "",
-    "```moo",
-    "content = {$sub:nc(), \" \", $sub:self_alt(\"feel\", \"feels\"), \" tired.\"};",
-    "```",
-    "",
-    "- **To actor**: \"You feel tired.\"",
-    "- **To others**: \"Alice feels tired.\"",
-    "",
-    "### Nested Substitutions",
-    "",
-    "You can nest substitutions inside `self_alt()`:",
-    "",
-    "```moo",
-    "content = {",
-    "    $sub:nc(), \" \", $sub:self_alt(\"try\", \"tries\"),",
-    "    \" to pet the cat, but it swats \",",
-    "    $sub:self_alt(\"your\", $sub:p()), \" hand away.\"",
-    "};",
-    "```",
-    "",
-    "- **To actor**: \"You try to pet the cat, but it swats **your** hand away.\"",
-    "- **To others**: \"Alice tries to pet the cat, but it swats **her** hand away.\"",
-    "",
-    "The nested `$sub:p()` is only evaluated when the viewer is not the actor.",
-    "",
-    "### Capitalization",
-    "",
-    "Use `$sub:self_altc()` to capitalize the result:",
-    "",
-    "```moo",
-    "$sub:self_altc(\"you're\", \"they're\")",
-    "```",
-    "",
-    "## Complete Example",
-    "",
-    "Here's a full example of building event content:",
-    "",
-    "```moo",
-    "verb pet (this none this)",
-    "    dobj = args[1];",
-    "",
-    "    if (!dobj:allows_petting())",
-    "        \"Build content for failed petting attempt\";",
-    "        content = {",
-    "            $sub:nc(), \" \", $sub:self_alt(\"try\", \"tries\"),",
-    "            \" to pet \", $sub:d(), \", but \", $sub:d(),",
-    "            \" hisses and swats \", $sub:self_alt(\"your\", $sub:p()),",
-    "            \" hand away.\"",
-    "        };",
-    "",
-    "        event = $event:mk_pet(player, @content):with_dobj(dobj):with_this(this);",
-    "        player.location:announce(event);",
-    "",
-    "        \"Tell actor they failed\";",
-    "        player:inform_current($event:mk_info(player, \"The cat doesn't want to be petted right now.\"));",
-    "        return;",
-    "    endif",
-    "",
-    "    \"Build content for successful petting\";",
-    "    content = {",
-    "        $sub:nc(), \" \", $sub:self_alt(\"pet\", \"pets\"), \" \", $sub:d(),",
-    "        \" gently, and \", $sub:d(), \" purrs contentedly.\"",
-    "    };",
-    "",
-    "    event = $event:mk_pet(player, @content):with_dobj(dobj):with_this(this);",
-    "    player.location:announce(event);",
-    "endverb",
-    "```",
-    "",
-    "When Alice pets the friendly cat:",
-    "",
-    "- **Alice sees**: \"You pet the friendly cat gently, and the friendly cat purrs contentedly.\"",
-    "- **Bob sees**: \"Alice pets the friendly cat gently, and the friendly cat purrs contentedly.\"",
-    "",
-    "When Alice tries to pet the grumpy cat:",
-    "",
-    "- **Alice sees**: \"You try to pet the grumpy cat, but the grumpy cat hisses and swats your hand away.\"",
-    "- **Bob sees**: \"Alice tries to pet the grumpy cat, but the grumpy cat hisses and swats her hand away.\"",
-    "",
-    "## Implementation Notes",
-    "",
-    "- All substitution verbs return flyweight objects with a `.type` property",
-    "- The actual substitution happens when the event is rendered via `event:resolve(viewer)`",
-    "- Substitutions check if `event.actor == viewer` to determine perspective",
-    "- The resolver captures object names and references for the selected viewer",
-    "- Nested substitutions are expanded during resolution",
-    "- If a dobj/iobj is missing, placeholder text like `\"<no-dobj>\"` is returned",
-    "",
-    "## Phrase Utilities",
-    "",
-    "The `$sub:phrase()` verb provides text manipulation:",
-    "",
-    "```moo",
-    "$sub:phrase(text, options)",
-    "```",
-    "",
-    "Options:",
-    "",
-    "- `'strip_period` - Remove trailing period",
-    "- `'initial_lowercase` - Lowercase first character",
-    "",
-    "Example:",
-    "",
-    "```moo",
-    "result = $sub:phrase(\"Hello world.\", {'strip_period, 'initial_lowercase});",
-    "\"Result: hello world\";",
-    "```",
-    "",
-    "## Article Substitutions",
-    "",
-    "Articles (a, an, the) are determined by the object's noun properties and the builder's template choice.",
-    "Article substitutions render both the article and the binding's name (e.g., `{the d}` \u2192 \"the sword\"). Proper nouns or self-targets drop the article.",
-    "",
-    "### Articles",
-    "",
-    "$sub:a('d) inserts an object name with a or an. $sub:the('d) inserts its name with the.",
-    "Use ac or thec to capitalize the whole phrase. Neither constructor needs a separate name token.",
-    "",
-    "```moo",
-    "content = {$sub:ac('d), \" glints.\"};",
-    "```",
-    "",
-    "Proper names and the viewer's own name have no article. Plural and uncountable nouns omit a/an.",
-    "The object's is_plural(), is_countable(), and is_proper_noun() methods supply these choices.",
-    "Only the abbreviations nc, dc, ic, tc, and lc capitalize a name after its article.",
-    "Other binding names remain intact, including names ending in c.",
-    "",
-    "The a_or_an(word) helper guesses from spelling and common pronunciation exceptions.",
-    "Set a thing's indefinite_article property to \"a\" or \"an\" to override that guess.",
-    "An empty override uses automatic selection. Pronunciation can depend on dialect.",
-    "",
-    "",
-    "## Captured bindings",
-    "",
-    "Events capture the actor, direct object, indirect object, this object, and action location.",
-    "Use event:with_text_binding(name, text) for a literal text value.",
-    "Use event:with_object_binding(name, object) for a named object.",
-    "Use event:with_content_binding(name, content) for explicit inline content.",
-    "",
-    "$sub:binding(name) reads text or an object name. $sub:bindingc(name) capitalizes its result.",
-    "$sub:content_binding(name) inserts explicitly bound inline content.",
-    "Missing named bindings raise E_INVARG. Missing optional participants produce a readable placeholder.",
-    "",
-    "## Resolution",
-    "",
-    "event:resolve(viewer) expands substitutions into a canonical document.",
-    "The viewer selects perspective. The actual caller determines authority.",
-    "Only the selected self_alt branch runs. Rendering a resolved document does not call substitutions.",
-    "Use $document:render(document, format) for HTML, Djot, or plain text."
+    "recipient and viewer are objects supplied by your program. No message is sent by this example.",
+    "Resolution runs under the caller's authority. Choosing a viewer does not grant their permissions.",
+    "",
+    "## Names and pronouns",
+    "",
+    "n, d, i, t, and l select the actor, direct object, indirect object, this object, and location.",
+    "Append c to capitalize: nc, dc, ic, tc, lc. Names become you when the object is the viewer.",
+    "Names do not add articles. Use a('d), ac('d), the('d), or thec('d) for a name with an article.",
+    "Articles need object bindings, and include the object's name exactly once.",
+    "Only the abbreviations nc/dc/ic/tc/lc capitalize a name after its article.",
+    "",
+    "s, o, p, q, and r select subject, object, possessive adjective, possessive noun, and reflexive forms.",
+    "They use the actor's chosen pronouns. Add c to capitalize, and _dobj or _iobj to select another role.",
+    "Examples: sc(), p_dobj(), qc_iobj(). Pronouns become you/you/your/yours/yourself for the viewer.",
+    "",
+    "## Agreement and alternatives",
+    "",
+    "agree(binding, subject_form, plural_form, singular_form) selects literal wording for a subject.",
+    "Use 'name when the sentence names its subject, or 'pronoun when it uses a subject pronoun.",
+    "For example, agree('actor, 'name, \"are\", \"is\") gives Alex is and You are.",
+    "With 'pronoun, a singular person using they/them takes are: They are.",
+    "The binding can be any object role or named object binding, including 'this or 'companion.",
+    "Noun plurality comes from is_plural(); pronoun agreement comes from pronouns.is_plural.",
+    "",
+    "verb_be(), verb_have(), and verb_look() are pronoun-agreement shortcuts.",
+    "Their _dobj and _iobj versions select those participants. Pair them with pronouns, not names.",
+    "self_alt(for_self, for_others) selects by actor/viewer identity, without checking grammar.",
+    "Branches can hold strings, lists, or structured inline content. Only the selected branch resolves.",
+    "self_altc capitalizes its selected branch. capitalize(content) capitalizes any resolved inline content.",
+    "",
+    "## Named bindings and literal content",
+    "",
+    "binding(name) reads an object name or literal text; bindingc(name) capitalizes its result.",
+    "content_binding(name) reads explicitly supplied inline content.",
+    "Supply these through event:with_object_binding, with_text_binding, or with_content_binding.",
+    "Missing named bindings raise E_INVARG. Missing optional object roles show a readable placeholder.",
+    "Text bindings remain literal, including braces, HTML, and Djot. They are never compiled again.",
+    "",
+    "## Article selection",
+    "",
+    "Proper names and you omit articles. Plural and uncountable nouns omit a/an.",
+    "Objects supply is_proper_noun(), is_plural(), and is_countable().",
+    "a_or_an(word) guesses from spelling and common exceptions such as hour and user.",
+    "A thing's indefinite_article property can be \"a\" or \"an\" to override pronunciation.",
+    "An empty property uses automatic selection. Pronunciation can depend on dialect.",
+    "",
+    "## Template editing",
+    "",
+    "$sub_utils:compile(text) converts authored template text to content.",
+    "$sub_utils:decompile(content) preserves supported content for editing, including nested substitutions.",
+    "It supports strings, $sub values, and lists. Other structured content raises an error.",
+    "Use content_binding for formatted or computed content that must appear in an editable template."
   };
 
   method is_proper_noun owner: ARCH_WIZARD
@@ -301,6 +113,19 @@ object SUB [
     endif
     typeof(viewer) == TYPE_OBJ && valid(viewer)
       || raise(E_INVARG, "This substitution needs a viewer");
+    if (kind == 'agree)
+      const binding = $document_resolver:binding(context, this.binding_name);
+      binding['kind] == 'object || raise(E_INVARG, "Agreement requires an object binding.");
+      const target = binding['value];
+      if (typeof(target) != TYPE_OBJ || !valid(target))
+        return $format:literal_inline("<no-" + tostr(this.binding_name) + ">");
+      endif
+      let plural = target == viewer;
+      if (!plural)
+        plural = this.subject_form == 'name ? target:is_plural() | target:pronouns().is_plural;
+      endif
+      return $format:literal_inline(plural ? this.plural_form | this.singular_form);
+    endif
     if (kind == 'self_alt)
       const selected = facts['actor] == viewer ? this.for_self | this.for_others;
       const parts = $format:inlines({selected});
@@ -368,6 +193,18 @@ object SUB [
       endif
     endif
     return $format:literal_inline(capitalize ? text:capitalize() | text);
+  endmethod
+
+  method agree owner: HACKER
+    "Choose plural or singular wording for a binding's name or subject pronoun.";
+    "The viewer always takes the plural form, as in you are or you wave.";
+    const {binding_name, subject_form, plural_form, singular_form} = args;
+    (typeof(binding_name) == TYPE_SYM && typeof(subject_form) == TYPE_SYM
+      && typeof(plural_form) == TYPE_STR && typeof(singular_form) == TYPE_STR) || raise(E_TYPE);
+    subject_form in {'name, 'pronoun} || raise(E_INVARG, "Agreement needs 'name or 'pronoun.");
+    (length(plural_form) && length(singular_form)) || raise(E_INVARG, "Both verb forms are required.");
+    return <$sub, .type = 'agree, .binding_name = binding_name, .subject_form = subject_form,
+      .plural_form = plural_form, .singular_form = singular_form>;
   endmethod
 
   method capitalize owner: HACKER
@@ -772,6 +609,74 @@ object SUB [
     $test_utils:assert_eq(fw_q.type, 'iobj_pos_noun, "q_iobj() type");
     fw_r = this:r_iobj();
     $test_utils:assert_eq(fw_r.type, 'iobj_reflexive, "r_iobj() type");
+    return true;
+  endmethod
+
+  method test_explicit_subject_agreement owner: HACKER
+    "Singular they, noun plurality, and the viewer select agreement independently.";
+    const actor = $thing:create(true);
+    actor.name = "alex";
+    actor.pronouns = $pronouns.they_them;
+    for example in ({{"{nc} {agree actor name:are|is} ready.", "Alex is ready.", "You are ready."},
+      {"{sc} {agree actor pronoun:wave|waves}.", "They wave.", "You wave."},
+      {"{sc} {be} ready.", "They are ready.", "You are ready."}})
+      const content = $sub_utils:compile(example[1]);
+      for version in ({content, $sub_utils:compile($sub_utils:decompile(content))})
+        const event = $event:mk_test(actor, @version);
+        $test_utils:assert_eq(strcmp($document:render(event:resolve(player), 'text_plain)['body],
+          example[2]), 0, "observer: " + example[1]);
+        $test_utils:assert_eq(strcmp($document:render(event:resolve(actor), 'text_plain)['body],
+          example[3]), 0, "actor: " + example[1]);
+      endfor
+    endfor
+    actor.pronouns = $pronouns.he_him;
+    const singular = $event:mk_test(actor, this:sc(), " ", this:agree('actor, 'pronoun, "wave", "waves"));
+    $test_utils:assert_eq($document:render(singular:resolve(player), 'text_plain)['body],
+      "He waves", "singular pronoun agreement");
+    const boots = $thing:create(true);
+    boots.name = "boots";
+    boots.is_plural_noun = true;
+    for role in ({'dobj, 'iobj, 'this, 'location, 'companion})
+      const content = {this:bindingc(role), " ", this:agree(role, 'name, "are", "is"), " / ",
+        this:agree(role, 'pronoun, "are", "is")};
+      const event = $event:mk_test(actor, @content):with_dobj(boots):with_iobj(boots)
+        :with_this(boots):with_location(boots):with_object_binding('companion, boots);
+      $test_utils:assert_eq($document:render(event:resolve(player), 'text_plain)['body],
+        "Boots are / is", "name number differs from it/its for " + tostr(role));
+      $test_utils:assert_eq($document:render(event:resolve(boots), 'text_plain)['body],
+        "You are / are", "agreement follows subject viewer for " + tostr(role));
+    endfor
+    return true;
+  endmethod
+
+  method test_agreement_errors owner: HACKER
+    "Invalid subject forms and non-object bindings produce authoring errors.";
+    $test_utils:assert_raises(E_INVARG, this, "agree", {'actor, 'bad, "are", "is"}, "unknown subject form");
+    $test_utils:assert_raises(E_INVARG, this, "agree", {'actor, 'name, "", "is"}, "empty verb form");
+    const text = $event:mk_test(player, this:agree('word, 'name, "are", "is"))
+      :with_text_binding('word, "boots");
+    $test_utils:assert_raises(E_INVARG, text, "resolve", {player}, "agreement needs object grammar");
+    const missing = $event:mk_test(player, this:agree('missing, 'name, "are", "is"));
+    $test_utils:assert_raises(E_INVARG, missing, "resolve", {player}, "unknown binding");
+    return true;
+  endmethod
+
+  method test_furniture_subject_agreement owner: HACKER
+    "Furniture messages agree with the displaced occupant's name, independently of the actor.";
+    const actor = $thing:create(true);
+    actor.pronouns = $pronouns.they_them;
+    const occupant = $thing:create(true);
+    occupant.name = "sam";
+    occupant.pronouns = $pronouns.they_them;
+    const chair = $sittable:create(true);
+    chair.name = "chair";
+    for example in ({{chair.dumped_msg, "dumped"}, {chair.squeezed_msg, "squeezed"}})
+      const event = $event:mk_test(actor, @example[1]):with_dobj(occupant):with_this(chair);
+      $test_utils:assert_eq($document:render(event:resolve(player), 'text_plain)['body],
+        "Sam is " + example[2] + " off the chair.", "observer sees name agreement");
+      $test_utils:assert_eq($document:render(event:resolve(occupant), 'text_plain)['body],
+        "You are " + example[2] + " off the chair.", "occupant sees own agreement");
+    endfor
     return true;
   endmethod
 

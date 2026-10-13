@@ -89,6 +89,15 @@ object SUB_UTILS [
     "Their _dobj and _iobj forms select those participants' pronouns.",
     "A name can need a different verb: \"Alex is\" but \"They are.\"",
     "",
+    "## Explicit agreement",
+    "",
+    "{nc} {agree actor name:are|is} ready. gives Alex is ready. or You are ready.",
+    "{sc} {agree actor pronoun:wave|waves}. gives They wave. or You wave.",
+    "Use name when the sentence names its subject; use pronoun when it uses a subject pronoun.",
+    "Replace actor with dobj, iobj, this, location, or a named object binding.",
+    "The first verb form is plural (including you); the second is singular.",
+    "Both forms are literal text. Name number and pronoun agreement are independent.",
+    "",
     "## Articles and bindings",
     "",
     "{a d} inserts an object name with a/an. {the d} inserts it with the.",
@@ -109,6 +118,8 @@ object SUB_UTILS [
     "",
     "{left|right} selects left for the actor and right for everyone else.",
     "It selects a perspective, not grammatical agreement. Both branches preserve their whitespace.",
+    "{self:left|right} explicitly selects this operation; decompile uses this spelling.",
+    "Use the explicit spelling if the left branch starts with the reserved agree or self: prefix.",
     "Branches may contain substitutions or further alternatives:",
     "",
     "{You see {d}|{nc} sees {d}}",
@@ -185,6 +196,17 @@ object SUB_UTILS [
     "Build one token after its nested tokens have been compiled.";
     const {parts, left} = args;
     if (typeof(left) == TYPE_LIST)
+      if (length(left) && typeof(left[1]) == TYPE_STR && index(left[1], "self:", 1) == 1)
+        return $sub:self_alt({left[1][6..$], @left[2..$]}, parts);
+      endif
+      if (length(left) && typeof(left[1]) == TYPE_STR && index(left[1], "agree ", 1) == 1)
+        const header = pcre_match(left[1], "^agree ([A-Za-z_][A-Za-z0-9_-]*) (name|pronoun):", true, false);
+        (length(header) && length(left) == 1 && length(parts) == 1 && typeof(parts[1]) == TYPE_STR)
+          || raise(E_INVARG, "Use {agree BINDING name:plural|singular} or pronoun in place of name.");
+        const fields = header[1];
+        return $sub:agree(tosym(fields["1"]["match"]), tosym(fields["2"]["match"]),
+          left[1][fields["0"]["position"][2] + 1..$], parts[1]);
+      endif
       return $sub:self_alt(left, parts);
     endif
     if (length(parts) && typeof(parts[1]) == TYPE_STR && index(parts[1], "cap ", 1) == 1)
@@ -256,7 +278,7 @@ object SUB_UTILS [
           const cap = `value.capitalize ! E_PROPNF => false';
           pending = {@pending, {cap ? "}}" | "}", depth, true},
             {value.for_others, depth + 1, false}, {"|", depth, true},
-            {value.for_self, depth + 1, false}, {cap ? "{cap {" | "{", depth, true}};
+            {value.for_self, depth + 1, false}, {cap ? "{cap {self:" | "{self:", depth, true}};
         else
           result = result + this:_reconstruct_token(value, names);
         endif
@@ -309,6 +331,11 @@ object SUB_UTILS [
           || raise(E_INVARG, "Unsupported capitalized article binding.");
       endif
       return "{" + (capitalize ? prefix:capitalize() | prefix) + " " + name + suffix + "}";
+    elseif (kind == 'agree)
+      const name = tostr(fw.binding_name);
+      this:_binding_name(name);
+      token = "{agree " + name + " " + tostr(fw.subject_form) + ":"
+        + this:_escape(fw.plural_form) + "|" + this:_escape(fw.singular_form) + "}";
     elseif (kind in {'binding, 'content_binding})
       const name = tostr(fw.binding_name);
       this:_binding_name(name);
@@ -459,7 +486,8 @@ object SUB_UTILS [
       {$sub:bindingc('direction)}, {$sub:binding('s)}, {$sub:the('dc)},
       {$sub:self_altc("you", {"they see ", $sub:d()})},
       {$sub:self_alt({$sub:nc(), " | ", $sub:d()}, {$sub:thec('d), " is here"})},
-      {$sub:content_binding('detail)}};
+      {$sub:content_binding('detail)}, {$sub:self_alt("agree actor name:are", "is")},
+      {$sub:self_alt("self:literal", "other")}};
     for content in (samples)
       const edited = this:compile(this:decompile(content));
       const original = $event:mk_test(actor, @content):with_dobj(item)
