@@ -14,18 +14,19 @@ object RELATION [
 
   method assert owner: ARCH_WIZARD
     "Store a tuple once and return its identity. The first write repairs legacy duplicates.";
+    const {tuple, ?relation = this} = args;
+    isa(relation, $relation) || raise(E_INVARG, "Expected a relation.");
     const principal = caller_perms();
-    (principal == this.owner || principal.wizard) || raise(E_PERM);
+    (principal == relation.owner || principal.wizard) || raise(E_PERM);
     set_task_perms(principal);
-    const {tuple} = args;
     typeof(tuple) == TYPE_LIST || raise(E_TYPE);
     length(tuple) > 0 || raise(E_INVARG);
-    this.set_version != 1 && $relation:repair(this);
-    const existing = $relation:_find_tuple_id(this, tuple);
+    relation.set_version != 1 && $relation:repair(relation);
+    const existing = $relation:_find_tuple_id(relation, tuple);
     existing != 0 && return existing;
     const identity = uuid();
-    add_property(this, "tuple_" + identity, tuple, {this.owner, "r"});
-    $relation:_index_tuple(this, identity, tuple);
+    add_property(relation, "tuple_" + identity, tuple, {relation.owner, "r"});
+    $relation:_index_tuple(relation, identity, tuple);
     return identity;
   endmethod
 
@@ -103,31 +104,32 @@ object RELATION [
 
   method retract owner: ARCH_WIZARD
     "Remove a fact once. Return false when absent; repair legacy duplicates before removal.";
+    const {tuple, ?relation = this} = args;
+    isa(relation, $relation) || raise(E_INVARG, "Expected a relation.");
     const principal = caller_perms();
-    (principal == this.owner || principal.wizard) || raise(E_PERM);
+    (principal == relation.owner || principal.wizard) || raise(E_PERM);
     set_task_perms(principal);
-    const {tuple} = args;
     typeof(tuple) == TYPE_LIST || raise(E_TYPE);
-    this.set_version != 1 && $relation:repair(this);
-    const identity = $relation:_find_tuple_id(this, tuple);
+    relation.set_version != 1 && $relation:repair(relation);
+    const identity = $relation:_find_tuple_id(relation, tuple);
     identity == 0 && return false;
     for element in (tuple)
       if (typeof(element) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
         continue;
       endif
       const name = $relation:_index_key(element);
-      const previous = `this.(name) ! E_PROPNF => {}';
+      const previous = `relation.(name) ! E_PROPNF => {}';
       if (length(previous) == 0)
         continue;
       endif
       const identities = setremove(previous, identity);
       if (length(identities) > 0)
-        this.(name) = identities;
+        relation.(name) = identities;
       else
-        delete_property(this, name);
+        delete_property(relation, name);
       endif
     endfor
-    delete_property(this, "tuple_" + identity);
+    delete_property(relation, "tuple_" + identity);
     return true;
   endmethod
 

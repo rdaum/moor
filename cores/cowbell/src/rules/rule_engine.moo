@@ -165,7 +165,7 @@ object RULE_ENGINE [
   method evaluate owner: ARCH_WIZARD
     "Evaluate a rule under the invoking principal; incomplete exhaustive results remain errors.";
     set_task_perms(caller_perms());
-    const {rule, ?inputs = [], ?parameters = [], ?state = []} = args;
+    const {rule, ?inputs = [], ?parameters = [], ?state = [], ?preview = false} = args;
     const validation = $rule_engine:validate_rule(rule);
     validation['valid] || raise(E_INVARG, validation['warnings]:join("; "));
     const environment = ['input -> inputs, 'parameter -> parameters, 'state -> state, 'binding -> []];
@@ -177,7 +177,7 @@ object RULE_ENGINE [
         $behavior_schema:_type(environment[namespace][name], rule.scope[namespace][name], tostr(name));
       endfor
     endfor
-    const query = {name, values, limit} => $rule_engine:query(name, values, limit);
+    const query = {name, values, limit} => $rule_engine:query(name, values, limit, preview);
     const result = $condition:evaluate(rule.condition, environment, query);
     result['complete] || raise(E_QUOTA, "Condition search is incomplete");
     const rows = result['bindings];
@@ -188,7 +188,7 @@ object RULE_ENGINE [
   method query owner: ARCH_WIZARD
     "Call one registered provider with the caller's permissions and validate its complete row shape.";
     set_task_perms(caller_perms());
-    const {name, values, limit} = args;
+    const {name, values, limit, ?preview = false} = args;
     (typeof(limit) == TYPE_INT && limit > 0 && limit <= 256)
       || raise(E_INVARG, "Query result limit must be between 1 and 256");
     const schemas = $rule_engine:schemas();
@@ -201,6 +201,7 @@ object RULE_ENGINE [
       if (source['kind] == 'relation)
         result = $relation:query_rows(source['relation], source['columns], schema, values, limit);
       else
+        !preview || raise(E_INVARG, "Preview cannot call the extension condition " + tostr(name) + ".");
         result = source['provider]:(source['method])(name, values, limit);
       endif
     else
@@ -214,5 +215,27 @@ object RULE_ENGINE [
       $behavior_schema:bindings(row, schema['outputs], "predicate outputs");
     endfor
     return result;
+  endmethod
+  method fact_fields owner: HACKER
+    "Describe every field required to write one named relation fact.";
+    const {name} = args;
+    maphaskey($rule_engine.predicate_sources, name) || raise(E_INVARG, "Unknown fact name: " + tostr(name));
+    const source = $rule_engine.predicate_sources[name];
+    source['kind] == 'relation || raise(E_INVARG, "That name is a condition, not a stored fact.");
+    return mapmerge(source['schema]['inputs], source['schema]['outputs]);
+  endmethod
+
+  method change_fact owner: ARCH_WIZARD
+    "Record or forget an exact typed tuple under the caller's own relation write authority.";
+    set_task_perms(caller_perms());
+    const {name, values, operation} = args;
+    operation in {'record, 'forget} || raise(E_INVARG);
+    $behavior_schema:bindings(values, $rule_engine:fact_fields(name), "fact fields");
+    const source = $rule_engine.predicate_sources[name];
+    const tuple = {values[field] for field in (source['columns])};
+    if (operation == 'record)
+      return $relation:assert(tuple, source['relation]);
+    endif
+    return $relation:retract(tuple, source['relation]);
   endmethod
 endobject

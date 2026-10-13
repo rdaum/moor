@@ -52,9 +52,14 @@ object AGENT_BUILDING_TOOLS [
     tools = {@tools, $llm_agent_tool:mk("show_rule", "Display the current expression for a specific rule property.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Rule property name (must end with _rule)"]], "required" -> {"object", "property"}], target_obj, "show_rule")};
     tools = {@tools, $llm_agent_tool:mk("test_rule", "Test a rule expression with specific variable bindings to see if it evaluates successfully.", ["type" -> "object", "properties" -> ["expression" -> ["type" -> "string", "description" -> "Rule expression to test (e.g., 'input.Key == #123')"], "bindings" -> ["type" -> "object", "description" -> "Variable bindings as key-value pairs (e.g., {\"This\": \"#123\", \"Accessor\": \"#5\", \"Key\": \"#456\"})"]], "required" -> {"expression", "bindings"}], target_obj, "tool_test_rule")};
     "Reaction tools";
+    tools = {@tools, $llm_agent_tool:mk("author_reaction",
+      "Use the same reaction, state, and rule commands as a builder. Call with command=reaction and text=help first. "
+        + "The help is generated from current definitions. New reactions start disabled. Inspect and preview before enabling.",
+      ["type" -> "object", "properties" -> [
+        "command" -> ["type" -> "string", "enum" -> {"reaction", "state", "rule", "facts"}],
+        "text" -> ["type" -> "string", "description" -> "Arguments after @reaction, @state, @rule, or @facts. Do not include the command name."]],
+        "required" -> {"command", "text"}], target_obj, "author_reaction")};
     tools = {@tools, $llm_agent_tool:mk("list_reactions", "List all reactions on an object with detailed information including triggers, conditions, effects, and enabled status.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (e.g., '#12', 'here', 'cupboard')"]], "required" -> {"object"}], target_obj, "list_reactions")};
-    tools = {@tools, $llm_agent_tool:mk("add_reaction", "Add a reaction to an object. Example: trigger=on_open, when=0, effects={{'announce, \"Door opens!\"}}", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Target object (name or #id)"], "property_name" -> ["type" -> "string", "description" -> "Must end with _reaction (e.g., on_open_reaction)"], "trigger" -> ["type" -> "string", "description" -> "Event name WITHOUT quotes: on_open, on_close, on_take, on_drop, on_pet, on_touch, on_use"], "when" -> ["type" -> "string", "description" -> "Use 0 for always. Or rule like: This is(\"locked\")?"], "effects" -> ["type" -> "string", "description" -> "List: {{'announce, \"msg\"}} or {{'set, 'prop, value}, {'announce, \"msg\"}}"]], "required" -> {"object", "property_name", "trigger", "when", "effects"}], target_obj, "add_reaction")};
-    tools = {@tools, $llm_agent_tool:mk("set_reaction_enabled", "Enable or disable a reaction by property name.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object containing the reaction"], "property_name" -> ["type" -> "string", "description" -> "Reaction property name (must end with '_reaction')"], "enabled" -> ["type" -> "boolean", "description" -> "true to enable, false to disable"]], "required" -> {"object", "property_name", "enabled"}], target_obj, "set_reaction_enabled")};
     "Message template tools";
     tools = {@tools, $llm_agent_tool:mk("list_messages", "List message template properties (*_msg) and message bags (*_msg_bag/_msgs) on an object.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to inspect (e.g., '#62', '$room', 'here')"]], "required" -> {"object"}], target_obj, "list_messages")};
     tools = {@tools, $llm_agent_tool:mk("get_message_template", "Show a single message template or list the entries of a message bag.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object reference"], "property" -> ["type" -> "string", "description" -> "Property name (must end with _msg, _msgs, or _msg_bag)"]], "required" -> {"object", "property"}], target_obj, "get_message_template")};
@@ -706,153 +711,21 @@ object AGENT_BUILDING_TOOLS [
   endmethod
 
   method list_reactions owner: ARCH_WIZARD
-    "Tool: List reactions on an object with details";
-    let kind = 0;
-    let op = 0;
-    let prop = 0;
-    let prop_name = 0;
-    let reaction = 0;
-    let rule_str = 0;
-    let value = 0;
-    const {args_map, actor} = args;
+    "Show complete reaction definitions through the same service used by builders.";
+    const {request, actor} = args;
     $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
-    const target_obj = this:_resolve_object(args_map["object"], actor);
-    typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
-    valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    const reaction_props = $obj_utils:reaction_properties(target_obj, actor, true);
-    if (!reaction_props || length(reaction_props) == 0)
-      return "No reactions found on " + tostr(target_obj);
-    endif
-    let lines = {"Reactions on " + tostr(target_obj) + " (" + tostr(length(reaction_props)) + " total):", ""};
-    for prop_info in (reaction_props)
-      {prop_name, reaction} = prop_info;
-      lines = {@lines, prop_name + ":"};
-      "Trigger";
-      if (typeof(reaction.trigger) == TYPE_SYM)
-        lines = {@lines, "  Trigger: " + tostr(reaction.trigger)};
-      elseif (typeof(reaction.trigger) == TYPE_LIST)
-        {kind, prop, op, value} = reaction.trigger;
-        lines = {@lines, "  Trigger: threshold - " + tostr(prop) + " " + tostr(op) + " " + tostr(value)};
-      else
-        lines = {@lines, "  Trigger: (unknown)"};
-      endif
-      "When condition";
-      if (reaction.when == 0)
-        lines = {@lines, "  When: (no condition)"};
-      else
-        rule_str = $rule_engine:decompile_rule(reaction.when);
-        lines = {@lines, "  When: " + rule_str};
-      endif
-      "Effects";
-      lines = {@lines, "  Effects: " + tostr(length(reaction.effects)) + " items"};
-      for effect in (reaction.effects)
-        if (typeof(effect) == TYPE_LIST && length(effect) > 0)
-          lines = {@lines, "    - " + tostr(effect[1])};
-        else
-          lines = {@lines, "    - " + toliteral(effect)};
-        endif
-      endfor
-      "Enabled";
-      lines = {@lines, "  Enabled: " + (reaction.enabled ? "yes" | "no")};
-      lines = {@lines, ""};
+    const host = $builder_features:_author_object(toliteral(request["object"]), actor);
+    (host.owner == actor || actor.wizard) || raise(E_PERM);
+    let lines = {};
+    for entry in ($obj_utils:reaction_properties(host, actor, true))
+      lines = {@lines, @$builder_features:_author_inspect(host, tostr(entry[1])[1..$ - 9],
+        $reaction:_definition(entry[2]))};
     endfor
-    return lines:join("\n");
+    return length(lines) == 0 ? "No reactions." | lines:join("\n");
   endmethod
 
-  method add_reaction owner: ARCH_WIZARD
-    "Tool: Add a reaction to an object";
-    let effects = 0;
-    let reaction = 0;
-    let trigger = 0;
-    let when_clause = 0;
-    const {args_map, actor} = args;
-    $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
-    set_task_perms(actor);
-    const obj_spec = args_map["object"];
-    const prop_name = args_map["property_name"];
-    const trigger_str = args_map["trigger"];
-    const when_str = args_map["when"];
-    const effects_str = args_map["effects"];
-    "Parse object";
-    const target_obj = this:_resolve_object(obj_spec, actor);
-    typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
-    valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    "Validate property name";
-    prop_name:ends_with("_reaction") || raise(E_INVARG, "Property name must end with '_reaction'");
-    "Check permission";
-    if (!actor.wizard && target_obj.owner != actor)
-      return "Permission denied: You do not own " + tostr(target_obj) + " and are not a wizard.";
-    endif
-    const prop_key = $obj_utils:property_key(target_obj, prop_name);
-    const prop_exists = prop_key != E_PROPNF;
-    set_task_perms(actor);
-    "Parse trigger literal";
-    if (pcre_match(trigger_str, "^[a-z_]+$"))
-      trigger = tosym(trigger_str);
-    else
-      try
-        trigger = fromliteral(trigger_str);
-      except e (E_INVARG, E_TYPE)
-        return "Error parsing trigger: " + (length(e) >= 2 ? e[2] | toliteral(e));
-      endtry
-    endif
-    "Parse effects literal";
-    try
-      effects = fromliteral(effects_str);
-    except e (E_INVARG, E_TYPE)
-      return "Error parsing effects: " + (length(e) >= 2 ? e[2] | toliteral(e));
-    endtry
-    "When clause";
-    if (when_str == "0")
-      when_clause = 0;
-    else
-      when_clause = when_str;
-    endif
-    "Create reaction";
-    try
-      reaction = $reaction:mk(trigger, when_clause, effects);
-    except e (ANY)
-      return "Error creating reaction: " + (length(e) >= 2 ? tostr(e[2]) | toliteral(e));
-    endtry
-    "Add or update property";
-    if (prop_exists)
-      target_obj.(prop_key) = reaction;
-    else
-      add_property(target_obj, prop_name, reaction, {actor, "r"});
-    endif
-    return "Set " + tostr(target_obj) + "." + prop_name;
-  endmethod
 
-  method set_reaction_enabled owner: ARCH_WIZARD
-    "Tool: Enable or disable a reaction";
-    const {args_map, actor} = args;
-    $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
-    set_task_perms(actor);
-    const obj_spec = args_map["object"];
-    const prop_name = args_map["property_name"];
-    const enabled = args_map["enabled"];
-    "Parse object";
-    const target_obj = this:_resolve_object(obj_spec, actor);
-    typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
-    valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    "Validate property name";
-    prop_name:ends_with("_reaction") || raise(E_INVARG, "Property name must end with '_reaction'");
-    "Check permission";
-    if (!actor.wizard && target_obj.owner != actor)
-      return "Permission denied: You do not own " + tostr(target_obj);
-    endif
-    "Check property exists and is a reaction";
-    const prop_key = $obj_utils:property_key(target_obj, prop_name);
-    prop_key == E_PROPNF && raise(E_INVARG, "Property not found: " + prop_name);
-    set_task_perms(actor);
-    const reaction = target_obj.(prop_key);
-    typeof(reaction) == TYPE_FLYWEIGHT && reaction.delegate == $reaction || raise(E_INVARG, prop_name + " is not a reaction");
-    "Reconstruct flyweight with new enabled state (flyweights are immutable)";
-    const new_reaction = <reaction.delegate, .when = reaction.when, .trigger = reaction.trigger, .effects = reaction.effects, .enabled = enabled, .fired_at = reaction.fired_at>;
-    target_obj.(prop_key) = new_reaction;
-    return (enabled ? "Enabled" | "Disabled") + " " + tostr(target_obj) + "." + prop_name;
-  endmethod
 
   method list_messages owner: ARCH_WIZARD
     "Tool: List message template properties on an object";
@@ -1502,4 +1375,11 @@ object AGENT_BUILDING_TOOLS [
     "Otherwise it's a string - use match_object";
     return $match:match_object(spec, actor);
   endverb
+  method author_reaction owner: ARCH_WIZARD
+    "Author behavior through the same authenticated service used by text commands.";
+    const {request, actor} = args;
+    $agent_building_tools:_require_tool_dispatch(actor, caller_perms());
+    set_task_perms(actor);
+    return $builder_features:author(tosym(request["command"]), request["text"], actor):join("\n");
+  endmethod
 endobject
