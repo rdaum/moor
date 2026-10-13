@@ -358,14 +358,14 @@ object DOCUMENT_RESOLUTION_SCENARIOS
     try
       container.name = "document box";
       container.description = $format.block:mk("First paragraph.", "Second paragraph.");
-      container.take_denied_msg = $sub_utils:compile("{The i} is shut.");
+      container.view_denied_msg = $sub_utils:compile("{The i} is shut.");
       item.name = "hidden *token*";
       move(container, player);
       move(item, container);
       container.open = false;
       const closed = $look:narrative(container:look_self():capture(player)):resolve(player);
       $test_utils:assert_eq(this:_plain(closed),
-        "Document box\n\nFirst paragraph.\n\nSecond paragraph.\n\nThe document box is shut.",
+        "document box\n\nFirst paragraph.\n\nSecond paragraph.\n\nThe document box is shut.",
         "Closed view retains the description and resolves its own container binding");
       container.open = true;
       const opened = $look:narrative(container:look_self():capture(player)):resolve(player);

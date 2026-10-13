@@ -52,8 +52,9 @@ object AREA [
     endif
   endmethod
 
-  method passage_for owner: HACKER
-    "Find the passage between two rooms.";
+  method passage_for owner: ARCH_WIZARD
+    "Find the passage between two rooms under the caller's read permissions, or return false.";
+    set_task_perms(caller_perms());
     const {room_a, room_b} = args;
     typeof(room_a) == TYPE_OBJ && typeof(room_b) == TYPE_OBJ || raise(E_TYPE);
     if (typeof(this.passages_rel) != TYPE_OBJ || !valid(this.passages_rel))
