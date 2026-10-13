@@ -93,6 +93,8 @@ Cowbell entries.
 
 ### Fixed
 
+- Passage lookup preserves the caller's permissions. Owners and wizards can query a new area's empty
+  passage relation without a permission error.
 - Henri's interaction responses now use one set of editable reactions. Refused nearby pet attempts
   count toward his sleepy mood, and accepted feeding resets that counter. Petting and feeding check
   the actor, location, and access rules before reporting completion. Replace custom uses of

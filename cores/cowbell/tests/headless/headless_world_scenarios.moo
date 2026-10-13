@@ -209,11 +209,19 @@ object HEADLESS_WORLD_SCENARIOS
     const room_a = create($room, #90101, 2);
     const room_b = create($room, #90100, 2);
     try
+      $test_utils:assert_false(this:call_as_programmer(owned_area, "passage_for", room_a, room_b),
+        "The owner can query a new area's empty relation");
+      $test_utils:assert_eq(`this:call_as_programmer(foreign_area, "passage_for", room_a, room_b)
+        ! E_PERM => E_PERM', E_PERM, "Lookup retains the caller's relation read permissions");
       const passage = <$passage, .side_a_room = room_a, .side_b_room = room_b, .is_open = true>;
       this:call_as_programmer(owned_area, "set_passage", room_a, room_b, passage);
       $test_utils:assert_eq(length(owned_area:passages()), 1, "owner can register passage");
+      $test_utils:assert_eq(this:call_as_programmer(owned_area, "passage_for", room_a, room_b), passage,
+        "The owner can query a registered passage");
       this:call_as_programmer(owned_area, "on_room_recycle", room_a);
       $test_utils:assert_eq(length(owned_area:passages()), 0, "owner cleanup succeeds");
+      $test_utils:assert_false(this:call_as_programmer(owned_area, "passage_for", room_a, room_b),
+        "The owner sees no passage after its removal");
       foreign_area:set_passage(room_a, room_b, passage);
       move(room_a, foreign_area);
       this:call_as_programmer(room_a, "destroy");
