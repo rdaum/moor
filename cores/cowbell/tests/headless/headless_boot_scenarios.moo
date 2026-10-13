@@ -44,7 +44,7 @@ object HEADLESS_BOOT_SCENARIOS
         count = count + 1;
       endfor
     endfor
-    $test_utils:assert_eq(count, 9, "Every shipped reaction must be installed");
+    $test_utils:assert_eq(count, 14, "Every shipped reaction must be installed");
     const original = $henri.cupboard_open_reaction;
     try
       let disabled = original;

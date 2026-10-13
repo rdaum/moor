@@ -57,6 +57,9 @@ object HEADLESS_AUTHORING_SCENARIOS
         $test_utils:assert_eq(child.visits, 0, "The child no longer reads changing parent state");
         this:_author('state, ref + " later number 1");
         $test_utils:assert_false(maphaskey($reaction:state_types(child), 'later), "Child declarations do not track later parent edits");
+        this:_author('reaction, tostr(child) + " count remove");
+        $test_utils:assert_eq(child.count_reaction, 0, "Removing an inherited reaction hides it on this child");
+        $test_utils:assert_eq(host.count_reaction.delegate, $reaction, "Removing the child's reaction preserves the parent's definition");
       finally
         recycle(child);
       endtry

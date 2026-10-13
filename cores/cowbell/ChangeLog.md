@@ -8,6 +8,8 @@ Cowbell entries.
 
 ### Added
 
+- Add a [builder's guide](manual/reactions.md) with command examples for reactions, membership
+  rules, and a timed puzzle. These workflows require builder privileges, with no MOO programming.
 - Add MOO parsing for an explicit Djot authoring profile, with source-location errors for
   unsupported syntax. Speech and help now preserve authored formatting in HTML, Djot, and plain
   text.
@@ -81,6 +83,12 @@ Cowbell entries.
 
 ### Fixed
 
+- Henri's interaction responses now use one set of editable reactions. Refused nearby pet attempts
+  count toward his sleepy mood, and accepted feeding resets that counter. Petting and feeding check
+  the actor, location, and access rules before reporting completion. Replace custom uses of
+  `pets_received` with the declared `pet_attempts` counter.
+- Removing an inherited reaction now removes its response on that object without changing its parent
+  or leaving its timers active.
 - Nested rule conditions preserve their grouping during evaluation and when displayed for editing.
   Negation accepts inputs supplied by the operation. Unknown inputs and predicates are rejected
   before a condition is saved.

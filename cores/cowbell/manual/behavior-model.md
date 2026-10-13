@@ -9,8 +9,8 @@ message. The opening supplies the cupboard, the person who opened it, and the lo
 condition checks where the cat is. The actions request the stand operation and send the message.
 
 This is a reference for core programmers. It describes the stored values and checks used by the
-implementation. These records are not the builder authoring interface. The builder commands and
-manual must explain tasks through object names, available events, conditions, and actions.
+implementation. The [builder's guide](reactions.md) explains the command interface with working
+examples. Builders do not need these internal records.
 
 ## Why describe these parts as data?
 
@@ -47,6 +47,11 @@ its initial values on a new host. Existing compatible state on the destination i
 
 The grouped definition and instance records below remain a proposal, not runtime storage. The
 current commands reuse individual reactions and require no corresponding object hierarchy.
+
+Henri's interaction recipe uses those same commands through the shared authoring service. Petting
+supplies separate attempt and completion events. Feeding checks custody and access before its
+completion event supplies the food. Reactions choose mood responses and change the declared state.
+Henri's optional native idle schedules remain separate and disabled by default.
 
 ## Definition, instance, and authorization
 

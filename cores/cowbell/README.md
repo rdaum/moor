@@ -43,6 +43,10 @@ action to a response. A reaction can make a cat purr after someone pets it. Buil
 rules and reactions without a program for each interaction. Programmers can add new behaviors in MOO
 code.
 
+The [builder's guide to rules and reactions](manual/reactions.md) walks through a responsive box,
+club membership, and a timed puzzle using ordinary in-world commands. It requires builder
+privileges, with no MOO programming.
+
 Objects also have owners and permissions. Cowbell provides ways to grant specific operations on an
 object without handing over ownership. This lets people share building work and give tools limited
 authority.

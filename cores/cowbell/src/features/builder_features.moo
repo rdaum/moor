@@ -2367,7 +2367,7 @@ object BUILDER_FEATURES [
     const {word, scope, who, ?expected = 'any} = args;
     const aliases = ["this" -> 'This, "actor" -> maphaskey(scope['input], 'Actor) ? 'Actor | 'Accessor,
       "place" -> 'Location, "item" -> maphaskey(scope['input], 'Item) ? 'Item | 'Dobj,
-      "key" -> 'Key, "who" -> 'Who, "from" -> 'From, "to" -> 'To];
+      "key" -> 'Key, "food" -> 'Food, "who" -> 'Who, "from" -> 'From, "to" -> 'To];
     if (maphaskey(aliases, word) && maphaskey(scope['input], aliases[word]))
       return ['kind -> 'input, 'name -> aliases[word]];
     endif
@@ -2381,6 +2381,8 @@ object BUILDER_FEATURES [
       value = $builder_features:_author_object(word, who);
     elseif (expected == 'string)
       value = $builder_features:_author_text(word);
+    elseif (expected == 'symbol)
+      value = tosym($builder_features:_author_text(word));
     elseif (word in {"true", "yes", "false", "no"})
       value = !!(word in {"true", "yes"});
     elseif (pcre_match(word, "^-?[0-9]+([.][0-9]+)?$"))
@@ -2440,7 +2442,7 @@ object BUILDER_FEATURES [
       (length(words) == 6 && words[2] == "occupant" && words[3] == "in" && words[5] == "as")
         || raise(E_INVARG, "Use find occupant in PLACE as NAME.");
       $behavior_schema:_name(tosym(words[6]), "match name");
-      !(words[6] in {"this", "actor", "place", "item", "key", "who", "me", "here", "from", "to"})
+      !(words[6] in {"this", "actor", "place", "item", "key", "food", "who", "me", "here", "from", "to"})
         && !maphaskey(scope['state], tosym(words[6])) && !maphaskey(scope['parameter], tosym(words[6]))
         || raise(E_INVARG, "Choose a match name that differs from event inputs, state, and settings.");
       return ['kind -> 'predicate, 'name -> 'occupants,
@@ -2575,12 +2577,13 @@ object BUILDER_FEATURES [
       if (typeof(value) == TYPE_OBJ)
         return valid(value) ? value.name + " (" + tostr(value) + ")" | tostr(value) + " (removed)";
       endif
+      typeof(value) == TYPE_SYM && return tostr(value);
       return typeof(value) == TYPE_BOOL ? (value ? "yes" | "no") | toliteral(value);
     endif
     const name = expression['name];
     if (expression['kind] == 'input)
       const aliases = ['This -> "this", 'Actor -> "actor", 'Accessor -> "actor", 'Location -> "place",
-        'Item -> "item", 'Dobj -> "item", 'Key -> "key", 'Who -> "who", 'From -> "from", 'To -> "to"];
+        'Item -> "item", 'Dobj -> "item", 'Key -> "key", 'Food -> "food", 'Who -> "who", 'From -> "from", 'To -> "to"];
       return `aliases[name] ! E_RANGE => tostr(name)';
     endif
     return tostr(name);
@@ -2678,7 +2681,8 @@ object BUILDER_FEATURES [
     set_task_perms(caller_perms());
     const {?topic = "help"} = args;
     if (topic == "events")
-      let lines = {"Events happen after an operation succeeds. No reaction runs for a denied operation."};
+      let lines = {"Most events report a completed operation. pet_attempt reports a nearby attempt, even if Henri refuses it.",
+        "cupboard_open, couch_intruder, and kibble_taken are notifications sent by the starting world objects."};
       for event in ($reaction.event_triggers)
         const scope = $rule_engine:trigger_scope(event);
         lines = {@lines, $builder_features:_author_trigger_text(event) + ": "
@@ -2767,7 +2771,11 @@ object BUILDER_FEATURES [
     for i in [1..length(reaction.effects)]
       lines = {@lines, "Step " + tostr(i) + ": " + $builder_features:_author_step_text(reaction.effects[i])};
     endfor
-    for timer in (mapkeys($reaction:timers(host)))
+    const timers = $reaction:timers(host);
+    if (length(timers) == 0)
+      lines = {@lines, "Pending timers: none."};
+    endif
+    for timer in (mapkeys(timers))
       lines = {@lines, "Pending timer: " + tostr(timer)};
     endfor
     return lines;
@@ -2932,7 +2940,7 @@ object BUILDER_FEATURES [
       length(rest) == 3 || raise(E_INVARG, "Use with NAME TYPE VALUE, such as with cat object Henri.");
       const setting = tosym(rest[1]);
       $behavior_schema:_name(setting, "setting name");
-      !(rest[1] in {"this", "actor", "place", "item", "key", "who", "me", "here", "from", "to"})
+      !(rest[1] in {"this", "actor", "place", "item", "key", "food", "who", "me", "here", "from", "to"})
         && !maphaskey(scope['state], setting) || raise(E_INVARG, "That name already identifies an event input or state.");
       const kind = $builder_features:_author_type(rest[2]);
       const value = $builder_features:_author_value(rest[3], $rule_engine:scope(), who, kind)['value];
@@ -3031,7 +3039,7 @@ object BUILDER_FEATURES [
     length(words) >= 3 || raise(E_INVARG, "Use @state OBJECT NAME TYPE VALUE, or @state OBJECT NAME set VALUE.");
     const name = tosym(words[1]);
     $behavior_schema:_name(name, "state name");
-    !(words[1] in {"this", "actor", "place", "item", "key", "who", "me", "here", "from", "to"})
+    !(words[1] in {"this", "actor", "place", "item", "key", "food", "who", "me", "here", "from", "to"})
       || raise(E_INVARG, "That name already identifies an event input.");
     if (words[2] == "set")
       length(words) == 3 || raise(E_INVARG, "Use set VALUE. Quote text that contains spaces.");

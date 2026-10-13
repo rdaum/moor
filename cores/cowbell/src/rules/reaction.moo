@@ -39,6 +39,11 @@ object REACTION [
     'on_enter,
     'on_exit,
     'on_pet,
+    'on_pet_attempt,
+    'on_fed,
+    'on_cupboard_open,
+    'on_couch_intruder,
+    'on_kibble_taken,
     'on_consume,
     'on_empty,
     'on_wear,
@@ -517,7 +522,8 @@ object REACTION [
       || (source[4] == $reaction && source[2] == "change")
       || (source[4] == $container && source[2] == "_operate")
       || (source[4] == $thing && source[2] == "transfer")
-      || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})) || raise(E_PERM);
+      || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})
+      || (source[4] == $henri && source[2] in {"_pet", "_feed"})) || raise(E_PERM);
     const {host, trigger_name, initial_context, ?transition = {}} = args;
     let context = initial_context;
     const chain = `context['_reaction_chain] ! E_RANGE => {}';
@@ -1175,7 +1181,7 @@ object REACTION [
   endmethod
 
   method remove owner: ARCH_WIZARD
-    "Remove an owned reaction and cancel its timers before returning.";
+    "Remove a local reaction or hide an inherited one on this object, then cancel its timers.";
     const {host, property} = args;
     const principal = caller_perms();
     (principal == host.owner || principal.wizard) || raise(E_PERM, "You do not own that object.");
@@ -1183,7 +1189,11 @@ object REACTION [
     name:ends_with("_reaction") || raise(E_INVARG);
     typeof(host.(name)) == TYPE_FLYWEIGHT && host.(name).delegate == $reaction || raise(E_INVARG);
     set_task_perms(principal);
-    delete_property(host, name);
+    if (name in properties(host))
+      delete_property(host, name);
+    else
+      host.(name) = 0;
+    endif
     $reaction:_cancel_installation_timers(host, name);
   endmethod
 

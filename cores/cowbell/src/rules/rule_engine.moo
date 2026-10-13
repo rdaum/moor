@@ -66,6 +66,7 @@ object RULE_ENGINE [
       trigger in {'on_lock, 'on_unlock} && (inputs['Key] = 'object);
       trigger in {'on_enter, 'on_exit} && (inputs['Who] = 'object);
       trigger in {'on_consume, 'on_empty} && (inputs['Amount] = 'integer);
+      trigger == 'on_fed && (inputs['Food] = 'object);
     endif
     return $rule_engine:scope(inputs, [], state_types);
   endmethod

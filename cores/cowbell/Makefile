@@ -10,7 +10,7 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
-HEADLESS_FILTERS ?= 90104 90000 90001 90002 90003 90004 90005 90006 90007 90010 90011 90012 90013 90014 90015 90016
+HEADLESS_FILTERS ?= 90104 90000 90001 90002 90003 90004 90005 90006 90007 90010 90011 90012 90013 90014 90015 90016 90017 90018
 HEADLESS_PLAYER_FILTERS ?= 90008:test_headless_builder_commands_use_stored_grants 90008:test_headless_builder_commands_missing_grants_deny_cleanly 90008:test_headless_builder_message_commands_dispatch_as_player 90014:test_inspection_transfer_reachability 90014:test_inspection_transfers_recheck_after_policy_yield 90014:test_exit_command_annotations 90014:test_travel_rechecks_after_pre_exit_yield 90014:test_contextual_suggestions
 HEADLESS_WIZARD_FILTERS ?= 90008:test_headless_builder_commands_wizard_builds_without_grants
 HEADLESS_TASK_PLAYER ?= 90102

@@ -1,0 +1,48 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; return true;
+true
+@nonprogrammer
+% @create $container named clubbox
+~~Created
+% @create $relation named members
+~~Created
+% @facts members define club_members person:object group:text
+~~Defined club_members
+% @facts members add person=me group=readers
+~~Recorded fact
+% @facts members add person=me group=readers
+~~does not create a duplicate
+% @rule clubbox open fact club_members person=actor group=readers
+~~Set open rule
+% @create $relation named visits
+~~Created
+% @facts visits define club_visits person:object box:object
+~~Defined club_visits
+% @reaction clubbox log after open
+~~disabled
+% @reaction clubbox log then record club_visits person=actor box=this
+~~Saved
+% @reaction clubbox log enable
+~~enabled
+% close clubbox
+~~close
+% open clubbox
+~~open
+% @facts visits
+~~box=clubbox
+% close clubbox
+~~close
+% @facts members remove person=me group=readers
+~~Removed fact
+% open clubbox
+~~won't open
+% @rule clubbox open show
+~~fact club_members
+% @facts members
+~~No facts yet
+@wizard
+; return !#90102.programmer && !#90102.wizard;
+true
