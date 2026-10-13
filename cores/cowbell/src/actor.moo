@@ -251,19 +251,13 @@ object ACTOR [
 
   method pronouns owner: ARCH_WIZARD
     set_task_perms(caller_perms());
-    return this.pronouns;
+    return $pronouns:validate(this.pronouns);
   endmethod
 
   method "pronoun_*" owner: ARCH_WIZARD
+    "Read a pronoun form; possessive takes one selector, 'adj or 'noun.";
     set_task_perms(caller_perms());
-    ptype = tosym(verb[9..length(verb)]);
-    p = this:pronouns();
-    ptype == 'subject && return p.ps;
-    ptype == 'object && return p.po;
-    ptype == 'possessive && args[1] == 'adj && return p.pp;
-    ptype == 'possessive && args[2] == 'noun && return p.pq;
-    ptype == 'reflexive && return p.pr;
-    raise(E_INVARG);
+    return $pronouns:form(this:pronouns(), tosym(verb[9..$]), @args);
   endmethod
 
   method fact_is_wizard owner: HACKER

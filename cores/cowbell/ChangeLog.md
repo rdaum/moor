@@ -93,6 +93,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Actors and things accept `pronoun_possessive('noun)` and `pronoun_possessive('adj)` consistently.
+  Pronoun sets reject empty forms, missing fields, and invalid agreement flags.
+
 - `@builder` and `@programmer` can ask for confirmation when a player has no description.
 
 - Message templates reject unfinished braces and empty tokens immediately. Compilation has limits on

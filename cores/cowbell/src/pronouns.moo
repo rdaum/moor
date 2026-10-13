@@ -16,54 +16,137 @@ object PRONOUNS [
   override description (owner: HACKER, flags: "rc") = "Pronoun system providing preset and custom pronoun sets for objects and players.";
 
   method mk owner: HACKER
-    "Create a custom pronoun set as a flyweight.";
-    "Usage: $pronouns:mk(subject, object, possessive_adj, possessive_noun, reflexive [, is_plural])";
-    "Example: $pronouns:mk(\"ze\", \"zir\", \"zir\", \"zirs\", \"zirself\")";
-    {ps, po, pp, pq, pr, ?is_plural = false} = args;
-    typeof(ps) == TYPE_STR || raise(E_TYPE, "All pronoun arguments must be strings");
-    typeof(po) == TYPE_STR || raise(E_TYPE, "All pronoun arguments must be strings");
-    typeof(pp) == TYPE_STR || raise(E_TYPE, "All pronoun arguments must be strings");
-    typeof(pq) == TYPE_STR || raise(E_TYPE, "All pronoun arguments must be strings");
-    typeof(pr) == TYPE_STR || raise(E_TYPE, "All pronoun arguments must be strings");
-    verb_be = is_plural ? "are" | "is";
-    verb_have = is_plural ? "have" | "has";
-    display = ps + "/" + po;
-    return <this, .display = display, .ps = ps, .po = po, .pp = pp, .pq = pq, .pr = pr, .is_plural = is_plural, .verb_be = verb_be, .verb_have = verb_have>;
+    "Create a custom set from five nonempty strings and an optional agreement boolean.";
+    "The boolean selects plural verbs, including for singular they. It defaults to false.";
+    const {ps, po, pp, pq, pr, ?is_plural = false} = args;
+    typeof(is_plural) == TYPE_BOOL || raise(E_TYPE, "Pronoun agreement must be a boolean.");
+    const verb_be = is_plural ? "are" | "is";
+    const verb_have = is_plural ? "have" | "has";
+    for word in ({ps, po, pp, pq, pr})
+      typeof(word) == TYPE_STR || raise(E_TYPE, "Pronoun forms must be strings.");
+    endfor
+    const pronouns = <this, .display = ps + "/" + po, .ps = ps, .po = po, .pp = pp,
+      .pq = pq, .pr = pr, .is_plural = is_plural, .verb_be = verb_be, .verb_have = verb_have>;
+    return this:validate(pronouns);
+  endmethod
+
+  method validate owner: HACKER
+    "Return a complete pronoun set, or reject malformed fields with E_TYPE or E_INVARG.";
+    const {pronouns} = args;
+    typeof(pronouns) == TYPE_FLYWEIGHT || raise(E_TYPE, "Expected a pronoun set.");
+    pronouns.delegate == $pronouns || raise(E_INVARG, "Expected a $pronouns flyweight.");
+    try
+      for field in ({'ps, 'po, 'pp, 'pq, 'pr, 'display, 'verb_be, 'verb_have})
+        const word = pronouns.(field);
+        typeof(word) == TYPE_STR || raise(E_TYPE, "Pronoun " + tostr(field) + " must be a string.");
+        length(word:trim()) || raise(E_INVARG, "Pronoun " + tostr(field) + " must not be empty.");
+      endfor
+      typeof(pronouns.is_plural) == TYPE_BOOL
+        || raise(E_TYPE, "Pronoun agreement must be a boolean.");
+      const be = pronouns.is_plural ? "are" | "is";
+      const have = pronouns.is_plural ? "have" | "has";
+      (strcmp(pronouns.verb_be, be) == 0 && strcmp(pronouns.verb_have, have) == 0)
+        || raise(E_INVARG, "Pronoun verb forms disagree with is_plural.");
+    except (E_PROPNF)
+      raise(E_INVARG, "Pronoun set is missing a required field.");
+    endtry
+    return pronouns;
+  endmethod
+
+  method form owner: HACKER
+    "Read subject, object, reflexive, or possessive ('adj or 'noun) from a pronoun set.";
+    const {pronouns, form, @options} = args;
+    const checked = this:validate(pronouns);
+    if (form == 'possessive)
+      length(options) == 1 || raise(E_INVARG, "Specify 'adj or 'noun for possessive pronouns.");
+      options[1] in {'adj, 'noun} || raise(E_INVARG, "Expected possessive 'adj or 'noun.");
+      return options[1] == 'adj ? checked.pp | checked.pq;
+    endif
+    !options || raise(E_INVARG, "This pronoun form takes no additional arguments.");
+    const fields = ['subject -> 'ps, 'object -> 'po, 'reflexive -> 'pr];
+    maphaskey(fields, form) || raise(E_INVARG, "Unknown pronoun form.");
+    return checked.(fields[form]);
   endmethod
 
   method display owner: HACKER
-    "Display pronouns in common format like 'they/them' or 'it/its'.";
-    "Can be called on preset or custom flyweight.";
-    {pronoun_set} = args;
-    typeof(pronoun_set) == TYPE_FLYWEIGHT || raise(E_TYPE, "Argument must be a pronoun flyweight");
-    try
-      return pronoun_set.display;
-    except (E_PROPNF)
-      return pronoun_set.ps + "/" + pronoun_set.po;
-    endtry
+    "Return the label of a validated preset or custom pronoun set.";
+    const {pronouns} = args;
+    return this:validate(pronouns).display;
+  endmethod
+
+  method presets owner: HACKER
+    "Return the available preset sets in menu order.";
+    return {this.he_him, this.she_her, this.they_them, this.it_its, this.spivak};
   endmethod
 
   method lookup owner: HACKER
-    "Look up a pronoun set by display name like 'they/them' or 'he/him'.";
-    "Returns the pronoun object if found, or false if not found.";
-    {search} = args;
-    search = search:trim();
-    !search && return false;
-    target = search:lowercase();
-    "Check each preset by comparing display property";
-    presets = {this.he_him, this.she_her, this.they_them, this.it_its, this.spivak};
-    for preset in (presets)
-      display = this:display(preset);
-      if (display == search || display:lowercase() == target)
-        return preset;
-      endif
+    "Find a preset by its label, ignoring case and surrounding whitespace; otherwise return false.";
+    const {search} = args;
+    typeof(search) == TYPE_STR || raise(E_TYPE, "Pronoun preset name must be a string.");
+    const label = search:trim();
+    for preset in (this:presets())
+      this:display(preset) == label && return preset;
     endfor
     return false;
   endmethod
 
   method list_presets owner: HACKER
-    "Return a list of available preset pronoun display names.";
-    presets = {this.he_him, this.she_her, this.they_them, this.it_its, this.spivak};
-    return { this:display(p) for p in (presets) };
+    "Return the labels available to pronoun selectors.";
+    return {this:display(preset) for preset in (this:presets())};
+  endmethod
+
+  method test_custom_sets owner: HACKER
+    "Custom words remain literal and agreement is an explicit boolean.";
+    const custom = this:mk("ze", "zir", "zir", "zirs", "zirself");
+    $test_utils:assert_eq(this:display(custom), "ze/zir", "custom label");
+    $test_utils:assert_eq({custom.verb_be, custom.verb_have}, {"is", "has"}, "singular agreement");
+    const plural = this:mk("they", "them", "their", "theirs", "themself", true);
+    $test_utils:assert_eq({plural.verb_be, plural.verb_have}, {"are", "have"}, "plural agreement");
+    const literal = this:mk("{n}", "<them>", "their", "theirs", "themself");
+    $test_utils:assert_eq(literal.ps, "{n}", "pronouns are literal words");
+    for preset in (this:presets())
+      $test_utils:assert_eq(this:lookup(this:display(preset)), preset, "preset roundtrip");
+    endfor
+    $test_utils:assert_eq(this:lookup(" THEY/THEM "), this.they_them, "preset normalization");
+    return true;
+  endmethod
+
+  method test_invalid_sets owner: HACKER
+    "Reject incomplete records, empty forms, and inconsistent agreement.";
+    const words = {"ze", "zir", "zir", "zirs", "zirself"};
+    for bad_flag in ({0, 1, "false", {}, #0})
+      $test_utils:assert_raises(E_TYPE, this, "mk", {@words, bad_flag}, "boolean agreement required");
+    endfor
+    for index in [1..5]
+      let invalid = words;
+      invalid[index] = " ";
+      $test_utils:assert_raises(E_INVARG, this, "mk", invalid, "nonempty forms required");
+      invalid[index] = 'word;
+      $test_utils:assert_raises(E_TYPE, this, "mk", invalid, "string forms required");
+    endfor
+    $test_utils:assert_raises(E_INVARG, this, "display", {<$pronouns, .ps = "ze">}, "incomplete set");
+    $test_utils:assert_raises(E_INVARG, this, "display", {<$sub, .display = "ze/zir">}, "wrong delegate");
+    const inconsistent = <this, .ps = "ze", .po = "zir", .pp = "zir", .pq = "zirs",
+      .pr = "zirself", .display = "ze/zir", .is_plural = true, .verb_be = "is", .verb_have = "has">;
+    $test_utils:assert_raises(E_INVARG, this, "validate", {inconsistent}, "inconsistent verbs");
+    return true;
+  endmethod
+
+  method test_object_accessors owner: HACKER
+    "Actors and things accept the same one-argument possessive selectors.";
+    for parent in ({$actor, $thing})
+      const object = parent:create(true);
+      object.pronouns = this.she_her;
+      $test_utils:assert_eq(object:pronoun_subject(), "she", "subject");
+      $test_utils:assert_eq(object:pronoun_object(), "her", "object");
+      $test_utils:assert_eq(object:pronoun_possessive('adj), "her", "possessive adjective");
+      $test_utils:assert_eq(object:pronoun_possessive('noun), "hers", "possessive noun");
+      $test_utils:assert_eq(object:pronoun_reflexive(), "herself", "reflexive");
+      $test_utils:assert_raises(E_INVARG, object, "pronoun_possessive", {}, "missing selector");
+      $test_utils:assert_raises(E_INVARG, object, "pronoun_possessive", {'bad}, "unknown selector");
+      object.pronouns = <$pronouns, .ps = "she">;
+      $test_utils:assert_raises(E_INVARG, object, "pronouns", {}, "bad stored set");
+    endfor
+    return true;
   endmethod
 endobject

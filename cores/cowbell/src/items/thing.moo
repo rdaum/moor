@@ -143,9 +143,9 @@ object THING [
   };
 
   method pronouns owner: ARCH_WIZARD
-    "Return the pronoun set for this object (object or flyweight).";
+    "Return the validated pronoun set for this object.";
     set_task_perms(caller_perms());
-    return this.pronouns;
+    return $pronouns:validate(this.pronouns);
   endmethod
 
   method is_plural owner: ARCH_WIZARD
@@ -177,16 +177,9 @@ object THING [
   endmethod
 
   method "pronoun_*" owner: ARCH_WIZARD
-    "Get pronoun from either preset object or custom flyweight.";
+    "Read a pronoun form; possessive takes one selector, 'adj or 'noun.";
     set_task_perms(caller_perms());
-    ptype = tosym(verb[9..length(verb)]);
-    p = this:pronouns();
-    ptype == 'subject && return p.ps;
-    ptype == 'object && return p.po;
-    ptype == 'possessive && args[1] == 'adj && return p.pp;
-    ptype == 'possessive && args[2] == 'noun && return p.pq;
-    ptype == 'reflexive && return p.pr;
-    raise(E_INVARG);
+    return $pronouns:form(this:pronouns(), tosym(verb[9..$]), @args);
   endmethod
 
   method can_get owner: ARCH_WIZARD
@@ -404,8 +397,8 @@ object THING [
     $test_utils:assert_false(thing:is_proper_noun(), "things should not be proper nouns by default");
     $test_utils:assert_eq(thing:pronoun_subject(), "it", "default subject pronoun");
     $test_utils:assert_eq(thing:pronoun_object(), "it", "default object pronoun");
-    $test_utils:assert_eq(thing:pronoun_possessive('adj, 0), "its", "default possessive adjective");
-    $test_utils:assert_eq(thing:pronoun_possessive(0, 'noun), "its", "default possessive noun");
+    $test_utils:assert_eq(thing:pronoun_possessive('adj), "its", "default possessive adjective");
+    $test_utils:assert_eq(thing:pronoun_possessive('noun), "its", "default possessive noun");
     $test_utils:assert_eq(thing:pronoun_reflexive(), "itself", "default reflexive pronoun");
     $test_utils:assert_false(thing:integrate_description(), "empty integrated description should be false");
     thing.integrated_description = "a test pebble rests here";
