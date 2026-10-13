@@ -100,6 +100,28 @@ pub async fn read_websocket_event(
     }
 }
 
+fn read_close_event(close_frame: Option<CloseFrame>) -> ReadEvent {
+    let close_code = close_frame.as_ref().map(|f| f.code);
+    let close_reason = close_frame.as_ref().map(|f| f.reason.to_string());
+
+    if let Some(frame) = &close_frame {
+        debug!(
+            "WebSocket close frame received: code={}, reason={:?}",
+            frame.code, frame.reason
+        );
+    }
+
+    let is_logout = close_reason.as_deref() == Some("LOGOUT");
+    if is_logout {
+        debug!("Detected explicit logout from close reason");
+    }
+
+    ReadEvent::ConnectionClose {
+        close_code,
+        is_logout,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,27 +148,5 @@ mod tests {
         assert!(
             matches!(read_websocket_event(&mut messages, false, &mut None).await, ReadEvent::Command(Message::Text(text)) if text == "go east")
         );
-    }
-}
-
-fn read_close_event(close_frame: Option<CloseFrame>) -> ReadEvent {
-    let close_code = close_frame.as_ref().map(|f| f.code);
-    let close_reason = close_frame.as_ref().map(|f| f.reason.to_string());
-
-    if let Some(frame) = &close_frame {
-        debug!(
-            "WebSocket close frame received: code={}, reason={:?}",
-            frame.code, frame.reason
-        );
-    }
-
-    let is_logout = close_reason.as_deref() == Some("LOGOUT");
-    if is_logout {
-        debug!("Detected explicit logout from close reason");
-    }
-
-    ReadEvent::ConnectionClose {
-        close_code,
-        is_logout,
     }
 }
