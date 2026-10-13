@@ -93,6 +93,8 @@ Cowbell entries.
 
 ### Fixed
 
+- `@builder` and `@programmer` can ask for confirmation when a player has no description.
+
 - Message templates reject unfinished braces and empty tokens immediately. Compilation has limits on
   source length, token count, and nesting depth.
 

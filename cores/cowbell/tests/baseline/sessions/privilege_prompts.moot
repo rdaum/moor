@@ -1,0 +1,21 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// An undescribed player requires confirmation for either authoring grant.
+@wizard
+; #90102.description = ""; #90102.pronouns = $pronouns.they_them; return true;
+true
+>> no
+% @builder #90102
+@text Builder status not granted.
+; return {#90102.is_builder, !!#90102.programmer};
+{false, false}
+>> no
+% @programmer #90102
+@text Programmer bit not granted.
+; return {#90102.is_builder, !!#90102.programmer};
+{false, false}
+>> yes
+% @builder #90102
+; return {#90102.authoring_features == $builder_features, #90102.is_builder, !!#90102.programmer};
+{true, true, false}

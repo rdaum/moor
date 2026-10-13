@@ -60,8 +60,8 @@ object WIZ_FEATURES [
       desc = target:description();
       if (!desc || desc == "")
         "Get pronouns for proper grammar";
-        pronouns = `target:pronouns() ! E_VERBNF => $pronouns:mk('they, 'them, 'their, 'theirs, 'themself, false)';
-        possessive = pronouns.possessive;
+        pronouns = `target:pronouns() ! E_VERBNF => $pronouns.they_them';
+        possessive = pronouns.pp;
         question = "Grant " + target:name() + " programmer bit despite " + possessive + " lack of description?";
         metadata = {{"input_type", "yes_no"}, {"prompt", question}};
         response = player:read_with_prompt(metadata);
@@ -153,8 +153,8 @@ object WIZ_FEATURES [
     if (!is_downgrade)
       desc = dobj:description();
       if (!desc || desc == "")
-        pronouns = `dobj:pronouns() ! E_VERBNF => $pronouns:mk('they, 'them, 'their, 'theirs, 'themself, false)';
-        possessive = pronouns.possessive;
+        pronouns = `dobj:pronouns() ! E_VERBNF => $pronouns.they_them';
+        possessive = pronouns.pp;
         question = "Grant " + dobj:name() + " builder status despite " + possessive + " lack of description?";
         metadata = {{"input_type", "yes_no"}, {"prompt", question}};
         response = player:read_with_prompt(metadata);
