@@ -231,51 +231,24 @@ object SUB [
     "Articles (a, an, the) are determined by the object's noun properties and the builder's template choice.",
     "Article substitutions render both the article and the binding's name (e.g., `{the d}` \u2192 \"the sword\"). Proper nouns or self-targets drop the article.",
     "",
-    "### Indefinite Articles (a/an)",
+    "### Articles",
+    "",
+    "$sub:a('d) inserts an object name with a or an. $sub:the('d) inserts its name with the.",
+    "Use ac or thec to capitalize the whole phrase. Neither constructor needs a separate name token.",
     "",
     "```moo",
-    "$sub:a('object_name)   # Returns \"a\" or \"an\" (lowercase)",
-    "$sub:ac('object_name)  # Returns \"A\" or \"An\" (capitalized)",
+    "content = {$sub:ac('d), \" glints.\"};",
     "```",
     "",
-    "Returns empty string if:",
-    "- The object is a proper noun (is_proper_noun() returns true)",
-    "- The object is plural (is_plural() returns true)",
+    "Proper names and the viewer's own name have no article. Plural and uncountable nouns omit a/an.",
+    "The object's is_plural(), is_countable(), and is_proper_noun() methods supply these choices.",
+    "Only the abbreviations nc, dc, ic, tc, and lc capitalize a name after its article.",
+    "Other binding names remain intact, including names ending in c.",
     "",
-    "Example:",
-    "```moo",
-    "sword = #123;  # countable, not proper noun, singular",
-    "msg = {$sub:a('sword), \" \", $sub:binding('sword), \" glints.\"};",
-    "# Renders as: \"a sword glints.\" or \"an ornate sword glints.\"",
-    "```",
+    "The a_or_an(word) helper guesses from spelling and common pronunciation exceptions.",
+    "Set a thing's indefinite_article property to \"a\" or \"an\" to override that guess.",
+    "An empty override uses automatic selection. Pronunciation can depend on dialect.",
     "",
-    "### Definite Article (the)",
-    "",
-    "```moo",
-    "$sub:the('object_name)   # Returns \"the\" (lowercase)",
-    "$sub:thec('object_name)  # Returns \"The\" (capitalized)",
-    "```",
-    "",
-    "Returns empty string if the object is a proper noun (is_proper_noun() returns true).",
-    "",
-    "Example:",
-    "```moo",
-    "msg = {$sub:the('sword), \" \", $sub:binding('sword), \" is sharp.\"};",
-    "# Renders as: \"the sword is sharp.\"",
-    "```",
-    "",
-    "### The a_or_an() Helper",
-    "",
-    "Determines whether a word should use \"a\" or \"an\" with special handling for u-words:",
-    "",
-    "```moo",
-    "article = $sub:a_or_an(\"unicycle\");  # Returns \"a\" (silent u)",
-    "article = $sub:a_or_an(\"ukulele\");   # Returns \"an\" (pronounced u)",
-    "article = $sub:a_or_an(\"apple\");     # Returns \"an\"",
-    "article = $sub:a_or_an(\"banana\");    # Returns \"a\"",
-    "```",
-    "",
-    "Used internally by the article system but can be called directly if needed.",
     "",
     "## Captured bindings",
     "",
@@ -347,8 +320,10 @@ object SUB [
       if (kind in {'article_a, 'article_the} && target != viewer && !target:is_proper_noun())
         if (kind == 'article_the)
           article = "the";
-        elseif (!target:is_plural())
-          article = $sub:a_or_an(label);
+        elseif (!target:is_plural() && target:is_countable())
+          article = `target.indefinite_article ! E_PROPNF => ""';
+          article in {"", "a", "an"} || raise(E_INVARG, "indefinite_article must be empty, a, or an.");
+          !article && (article = $sub:a_or_an(label));
         endif
       endif
       if (`this.capitalize_binding ! E_PROPNF => false')
@@ -495,40 +470,76 @@ object SUB [
     return <this, .type = 'binding, .binding_name = binding_name, .capitalize = capitalize>;
   endmethod
 
-  method "a*c" owner: HACKER
-    "Get indefinite article (a/an) for a binding. Returns article flyweight.";
-    capitalize_article = index(verb, "c") != 0;
-    {binding_name} = args;
-    name_str = tostr(binding_name);
-    capitalize_binding = name_str:ends_with("c") && length(name_str) > 1;
-    if (capitalize_binding)
-      binding_name = tosym(name_str[1..length(name_str) - 1]);
-    endif
-    return <this, .type = 'article_a, .binding_name = binding_name, .capitalize = capitalize_article, .capitalize_binding = capitalize_binding>;
-  endmethod
-
-  method "the*c" owner: HACKER
-    "Get definite article (the) for a binding. Returns article flyweight.";
-    capitalize_article = index(verb, "c") != 0;
-    {binding_name} = args;
-    name_str = tostr(binding_name);
-    capitalize_binding = name_str:ends_with("c") && length(name_str) > 1;
-    if (capitalize_binding)
-      binding_name = tosym(name_str[1..length(name_str) - 1]);
-    endif
-    return <this, .type = 'article_the, .binding_name = binding_name, .capitalize = capitalize_article, .capitalize_binding = capitalize_binding>;
+  method "a ac the thec" owner: HACKER
+    "Insert an object name with an article; only nc/dc/ic/tc/lc capitalize the binding.";
+    const {name} = args;
+    typeof(name) == TYPE_SYM || raise(E_TYPE, "Article binding must be a symbol.");
+    const capitalize_article = verb in {"ac", "thec"};
+    const capitalize_binding = name in {'nc, 'dc, 'ic, 'tc, 'lc};
+    const binding_name = capitalize_binding ? tosym(tostr(name)[1]) | name;
+    const type = verb in {"a", "ac"} ? 'article_a | 'article_the;
+    return <this, .type = type, .binding_name = binding_name,
+      .capitalize = capitalize_article, .capitalize_binding = capitalize_binding>;
   endmethod
 
   method a_or_an owner: HACKER
-    "Return 'a' or 'an' depending on the word. Handles exceptions like 'unicycle'.";
-    {word} = args;
-    typeof(word) != TYPE_STR || !length(word) && return "a";
-    first = word[1]:lowercase();
-    "Words starting with 'uni' or 'unu' use 'a' (pronounced 'yoo')";
-    if (length(word) >= 3 && first == "u" && word[2]:lowercase() == "n" && index("iu", word[3]:lowercase()))
-      return "a";
-    endif
-    return index("aeiou", first) ? "an" | "a";
+    "Guess an English indefinite article. Set an object's indefinite_article for ambiguous names.";
+    const {word} = args;
+    typeof(word) == TYPE_STR || raise(E_TYPE, "Article lookup needs a string.");
+    !word && return "a";
+    const lower = word:lowercase();
+    for prefix in ({"hour", "honest", "honor", "honour", "heir"})
+      lower:starts_with(prefix) && return "an";
+    endfor
+    for prefix in ({"user", "use", "usual", "utensil", "util", "ubiq", "euro", "eulog",
+      "euphem", "eucalypt", "unicorn", "unicycle", "uniform", "union", "unit", "univer",
+      "unique", "unison", "unilateral", "one", "once"})
+      lower:starts_with(prefix) && return "a";
+    endfor
+    return index("aeiou", lower[1], 1) ? "an" | "a";
+  endmethod
+
+  method test_articles_and_named_bindings owner: HACKER
+    "Article tokens retain exact capitalization and complete custom binding names.";
+    const item = $thing:create(true);
+    item.name = "apple";
+    for example in ({{"{a d}", "an apple"}, {"{A d}", "An apple"},
+      {"{an d}", "an apple"}, {"{An d}", "An apple"}, {"{The d}", "The apple"},
+      {"{the dc}", "the Apple"}, {"{the relic}", "the apple"}, {"{The relic}", "The apple"}})
+      const content = $sub_utils:compile(example[1]);
+      const event = $event:mk_test(player, @content):with_dobj(item):with_object_binding('relic, item);
+      const actual = $document:render(event:resolve(player), 'text_plain)['body];
+      $test_utils:assert_eq(strcmp(actual, example[2]), 0, example[1]);
+    endfor
+    return true;
+  endmethod
+
+  method test_article_noun_grammar owner: HACKER
+    "Mass nouns, plurals, proper names, and pronunciation overrides affect articles.";
+    const item = $thing:create(true);
+    const event = $event:mk_test(player, this:a('d), " / ", this:the('d)):with_dobj(item);
+    for example in ({{"water", false, false, false, "", "water / the water"},
+      {"boots", true, true, false, "", "boots / the boots"},
+      {"Henri", true, false, true, "", "Henri / Henri"},
+      {"MRI scanner", true, false, false, "an", "an MRI scanner / the MRI scanner"},
+      {"herb", true, false, false, "a", "a herb / the herb"}})
+      item.name = example[1];
+      item.is_countable_noun = example[2];
+      item.is_plural_noun = example[3];
+      item.is_proper_noun_name = example[4];
+      item.indefinite_article = example[5];
+      const actual = $document:render(event:resolve(player), 'text_plain)['body];
+      $test_utils:assert_eq(strcmp(actual, example[6]), 0, item.name);
+      $test_utils:assert_eq($document:render(event:resolve(item), 'text_plain)['body],
+        "you / you", "viewer has no articles");
+    endfor
+    for example in ({{"hour", "an"}, {"honest answer", "an"}, {"user", "a"},
+      {"unidentified object", "an"}, {"unusual object", "an"}, {"unicycle", "a"}})
+      $test_utils:assert_eq(this:a_or_an(example[1]), example[2], example[1]);
+    endfor
+    item.indefinite_article = "some";
+    $test_utils:assert_raises(E_INVARG, event, "resolve", {player}, "invalid override");
+    return true;
   endmethod
 
   method test_a_or_an_vowels owner: HACKER
@@ -620,9 +631,11 @@ object SUB [
 
   method test_article_a_eval owner: HACKER
     "Resolve indefinite articles through the document pipeline.";
-    const event = $event:mk_test(this, this:a('d)):with_dobj(this);
-    const result = $document:render(event:resolve(#0), 'text_plain)['body];
-    $test_utils:assert_eq(result, this:a_or_an(this.name) + " " + this.name, "Indefinite article");
+    const item = $thing:create(true);
+    item.name = "apple";
+    const event = $event:mk_test(player, this:a('d)):with_dobj(item);
+    const result = $document:render(event:resolve(player), 'text_plain)['body];
+    $test_utils:assert_eq(result, "an apple", "Indefinite article");
     return true;
   endmethod
 

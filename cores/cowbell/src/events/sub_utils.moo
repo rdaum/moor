@@ -276,7 +276,7 @@ object SUB_UTILS [
     "Articles from property";
     for pattern in (this.article_patterns)
       {prefix, skip, method} = pattern;
-      if (token_content:starts_with(prefix))
+      if (strcmp(token_content[1..min(length(prefix), length(token_content))], prefix) == 0)
         binding_name = tosym(token_content[skip..$]:trim());
         return $sub:(method)(binding_name);
       endif

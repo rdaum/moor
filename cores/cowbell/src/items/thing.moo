@@ -25,6 +25,7 @@ object THING [
     "."
   };
   property get_rule (owner: HACKER, flags: "rc") = 0;
+  property indefinite_article (owner: HACKER, flags: "rc") = "";
   property integrated_description (owner: HACKER, flags: "rc") = "";
   property is_countable_noun (owner: HACKER, flags: "rc") = true;
   property is_plural_noun (owner: HACKER, flags: "rc") = false;

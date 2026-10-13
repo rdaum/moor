@@ -93,6 +93,10 @@ Cowbell entries.
 
 ### Fixed
 
+- Article templates preserve capitalization and binding names ending in `c`. Mass nouns and plural
+  nouns omit indefinite articles. Common pronunciation exceptions select `a` or `an`; set a thing's
+  `indefinite_article` to override the guess, or leave it empty for automatic selection.
+
 - Actors and things accept `pronoun_possessive('noun)` and `pronoun_possessive('adj)` consistently.
   Pronoun sets reject empty forms, missing fields, and invalid agreement flags.
 
