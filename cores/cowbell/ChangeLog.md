@@ -8,6 +8,9 @@ Cowbell entries.
 
 ### Added
 
+- `@preview-message` shows draft messages from three example readers' perspectives before saving.
+  Reactions support `preview-message` and include example sentences in their existing previews.
+  Private reaction messages also supply the recipient as a named binding.
 - Message editors and reaction message steps check the bindings supplied by their producer. Mistakes
   include a character position and a suggested name. `@message-bindings` explains the available
   participants. Custom message producers must declare bindings before authors use them.

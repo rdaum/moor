@@ -42,7 +42,16 @@ Create the pebble:
 @create $thing named pebble
 ```
 
-The new pebble starts in your inventory. Change its pickup message:
+The new pebble starts in your inventory. Preview a pickup message:
+
+```text
+@preview-message pebble.get_msg {nc} {pick|picks} up {the d}.
+```
+
+The preview shows example readers named Alex, Sam, and Robin. It saves nothing and sends no pickup
+event. Alex sees “You pick up the pebble.” The other readers see “Alex picks up the pebble.”
+
+To save this message, use:
 
 ```text
 @set-message pebble.get_msg {nc} {pick|picks} up {the d}.
@@ -209,6 +218,16 @@ An `announce` step can use the same templates. For example, a welcome reaction o
 
 For this effect, `{nc}` refers to the person who triggered the reaction. `{d}` refers to the box.
 This example assumes that you already created the reaction.
+
+Before adding the step, you can preview its wording:
+
+```text
+@reaction cedarbox welcome preview-message announce "{nc} {open|opens} {the d}."
+```
+
+This command does not add or run a step. A normal reaction `preview` also shows the example
+sentences for its saved message steps. A `tell actor` preview uses the same example person as actor
+and recipient. Only the recipient gets the actual private message.
 
 The [rules and reactions guide](reactions.md#make-a-box-announce-a-message) explains how to create
 and enable it. A normal open command already announces opening the box, so choose a different

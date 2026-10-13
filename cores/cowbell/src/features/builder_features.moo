@@ -1445,12 +1445,12 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
-  verb "@message-bindings" (any any any) owner: ARCH_WIZARD flags: "rd"
-    "HINT: OBJECT.PROPERTY -- Explain which participants a message can name.";
+  verb "@message-bindings @preview-message" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "HINT: OBJECT.PROPERTY [TEMPLATE] -- Explain bindings or preview a draft without saving.";
     caller == player || raise(E_PERM);
     this:_require_builder_command(player);
     set_task_perms(player);
-    length(args) == 1 || raise(E_INVARG, "Use @message-bindings OBJECT.PROPERTY.");
+    length(args) >= 1 || raise(E_INVARG, "Use " + verb + " OBJECT.PROPERTY.");
     const parsed = $prog_utils:parse_target_spec(args[1]);
     (parsed && parsed['type] == 'compound && length(parsed['selectors]) == 1
       && parsed['selectors][1]['kind] == 'property)
@@ -1459,13 +1459,20 @@ object BUILDER_FEATURES [
     const property = parsed['selectors][1]['item_name];
     const bindings = target:message_bindings(property);
     let lines = {"Bindings for " + args[1] + ":"};
-    for name in (mapkeys(bindings))
-      lines = {@lines, "{" + tostr(name) + "}: " + bindings[name]['description]
-        + " (" + tostr(bindings[name]['kind]) + ")"};
-    endfor
-    if (!length(bindings))
-      lines = {@lines, "This message has no declared bindings. Literal text is allowed.",
-        "Its programmer must declare any participants before you can use their names or pronouns."};
+    if (verb == "@preview-message")
+      length(args) > 1 || raise(E_INVARG, "Use @preview-message OBJECT.PROPERTY TEMPLATE.");
+      const template = argstr[length(args[1]) + 1..$]:trim();
+      lines = $sub_utils:preview(template, bindings, target);
+    else
+      length(args) == 1 || raise(E_INVARG, "Use @message-bindings OBJECT.PROPERTY.");
+      for name in (mapkeys(bindings))
+        lines = {@lines, "{" + tostr(name) + "}: " + bindings[name]['description]
+          + " (" + tostr(bindings[name]['kind]) + ")"};
+      endfor
+      if (!length(bindings))
+        lines = {@lines, "This message has no declared bindings. Literal text is allowed.",
+          "Its programmer must declare any participants before you can use their names or pronouns."};
+      endif
     endif
     for line in (lines)
       player:inform_current($event:mk_info(player, line):with_audience('utility));
@@ -2901,6 +2908,7 @@ object BUILDER_FEATURES [
       for i in [1..length(reaction.effects)]
         const effect = reaction.effects[i];
         lines = {@lines, "Would run step " + tostr(i) + ": " + $builder_features:_author_step_text(effect, environment)};
+        lines = {@lines, @$reaction:preview_message(effect, host)};
         if (effect.type in {'set, 'increment, 'decrement})
           const old = environment['state][effect.prop];
           let amount = effect.type == 'set ? effect.value | effect.by;
@@ -2984,6 +2992,11 @@ object BUILDER_FEATURES [
       length(rest) == 0 || raise(E_INVARG, "Check takes no extra arguments.");
       $reaction:_definition(reaction);
       return {"Valid: " + tostr(name) + ". Action permissions are checked when each step runs."};
+    elseif (operation == "preview-message")
+      length(rest) > 0 || raise(E_INVARG, "Use preview-message announce, emote, or tell actor followed by a quoted message.");
+      const effect = $builder_features:_author_step(rest, scope, who, host, 0, reaction.parameters);
+      effect.type in {'announce, 'emote, 'tell} || raise(E_INVARG, "Choose announce, emote, or tell actor.");
+      return $reaction:preview_message(effect, host);
     elseif (operation == "preview")
       const supplied = length(rest) == 0 ? []
         | $builder_features:_author_preview_inputs(rest, scope, who);

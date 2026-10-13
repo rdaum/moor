@@ -166,13 +166,31 @@ determines the roles. The following table describes current callers:
 | Reaction `tell`               | Triggering actor | Unset            | Reacting object | Unset          |
 
 A reaction's private-message recipient is separate from the event's indirect object. Reaction
-`emote` also prefixes the reacting object's name before the template.
+`emote` also prefixes the reacting object's name before the template. Reaction `tell` supplies a
+named `recipient` binding for the actual recipient.
 
 Passage movement templates supply `actor`, `location`, and `this_obj`. They also supply object
 bindings `from_room` and `to_room`, plus text bindings `direction`, `from_direction`,
 `to_direction`, and `passage`. The arrival message uses the destination-side direction and location.
 
 Rule bindings, reaction state, and reaction inputs do not automatically become message bindings.
+
+### Preview a draft
+
+`@preview-message OBJECT.PROPERTY TEMPLATE` checks a draft and shows three example views without
+saving it. The examples use Alex with they/them, Sam with she/her, and Robin with he/him. Object
+examples preserve the host's name, pronouns, and noun properties. Other object values come from the
+producer's declared examples. These are examples, not a prediction of the next event.
+
+For reactions, use `@reaction OBJECT NAME preview-message announce "TEMPLATE"`. Replace `announce`
+with `emote` or `tell actor` as needed. This leaves the saved steps unchanged.
+`@reaction OBJECT NAME preview` also shows wording for saved message steps, including scheduled
+messages. It does not run those steps or start their timers.
+
+Previews use the document resolver. Reactions share the same event constructor between preview and
+delivery. A private message preview includes other views for comparison; delivery goes only to its
+recipient. Programmed content that cannot be expressed as a template is reported as unavailable for
+preview.
 
 ### Declare bindings for a new message
 

@@ -275,6 +275,8 @@ object REACTION [
     elseif (kind == 'tell)
       bindings['iobj] = ['kind -> 'object, 'description -> "The object with this reaction.",
         'example -> 'host];
+      bindings['recipient] = ['kind -> 'object, 'description -> "The person receiving this private message.",
+        'example -> 'recipient];
     else
       raise(E_INVARG, "This step does not produce a message.");
     endif
@@ -854,6 +856,41 @@ object REACTION [
     return msg;
   endmethod
 
+  method preview_message owner: ARCH_WIZARD
+    "Show example wording for a message or scheduled message without running the effect.";
+    set_task_perms(caller_perms());
+    const {effect, host} = args;
+    let message = effect;
+    let depth = 0;
+    while (message.type == 'schedule)
+      depth = depth + 1;
+      depth <= 16 || raise(E_INVARG, "Too many nested schedules.");
+      message = message.effect;
+    endwhile
+    !(message.type in {'announce, 'emote, 'tell}) && return {};
+    try
+      const template = typeof(message.msg) == TYPE_STR ? message.msg | $sub_utils:decompile(message.msg);
+      return $sub_utils:preview(template, $reaction:message_bindings(message.type), host, message);
+    except error (E_INVARG, E_TYPE, E_PERM, E_VERBNF, E_PROPNF)
+      return {"Cannot preview this message: " + error[2]};
+    endtry
+  endmethod
+
+  method message_event owner: ARCH_WIZARD
+    "Build message content for delivery or preview, without sending it.";
+    set_task_perms(caller_perms());
+    const {kind, actor, host, content, ?recipient = false} = args;
+    if (kind == 'announce)
+      return $event:mk_info(actor, @content):with_dobj(host);
+    elseif (kind == 'emote)
+      return $event:mk_emote(host, host.name, " ", @content):with_dobj(actor);
+    elseif (kind == 'tell)
+      (typeof(recipient) == TYPE_OBJ && valid(recipient)) || raise(E_INVARG, "A tell step needs a recipient.");
+      return $event:mk_info(actor, @content):with_iobj(host):with_object_binding('recipient, recipient);
+    endif
+    raise(E_INVARG, "This step does not produce a message.");
+  endmethod
+
   method execute_effect owner: ARCH_WIZARD
     "Execute a single parsed or raw effect against target using context bindings.";
     "Mutation effects also check threshold reactions on the same target.";
@@ -879,7 +916,7 @@ object REACTION [
     elseif (effect.type == 'announce)
       "Announce to actor's room - actor is the player, dobj is the reacting object";
       const msg = this:_resolve_msg(effect.msg, target);
-      const event = $event:mk_info(actor, @msg):with_dobj(target);
+      const event = $reaction:message_event('announce, actor, target, msg);
       const room = `context['Location] ! E_RANGE => target.location';
       if (valid(room) && isa(room, $room))
         room:announce(event);
@@ -887,7 +924,7 @@ object REACTION [
     elseif (effect.type == 'emote)
       "Object 'does' something - auto-prefix target name like emote command";
       const msg = this:_resolve_msg(effect.msg, target);
-      const event = $event:mk_emote(target, target.name, " ", @msg):with_dobj(actor);
+      const event = $reaction:message_event('emote, actor, target, msg);
       const room = `context['Location] ! E_RANGE => target.location';
       if (valid(room) && isa(room, $room))
         room:announce(event);
@@ -897,7 +934,7 @@ object REACTION [
       const recipient = context[effect.target];
       if (valid(recipient))
         const msg = this:_resolve_msg(effect.msg, target);
-        const event = $event:mk_info(actor, @msg):with_iobj(target);
+        const event = $reaction:message_event('tell, actor, target, msg, recipient);
         recipient:tell(event);
       endif
     elseif (effect.type == 'move)

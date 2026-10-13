@@ -251,6 +251,68 @@ object SUB_UTILS [
         'example -> 'location]];
   endmethod
 
+  method _preview_object owner: ARCH_WIZARD
+    "Make one temporary example with a fixed prototype; no world object is changed.";
+    const {name, pronouns, ?plural = false, ?proper = false, ?countable = true, ?article = ""} = args;
+    typeof(name) == TYPE_STR || raise(E_TYPE);
+    const checked = $pronouns:validate(pronouns);
+    const example = create($thing, caller_perms(), 1);
+    example.name = name;
+    example.pronouns = checked;
+    example.is_plural_noun = plural;
+    example.is_proper_noun_name = proper;
+    example.is_countable_noun = countable;
+    example.indefinite_article = article;
+    return example;
+  endmethod
+
+  method preview owner: ARCH_WIZARD
+    "Resolve a draft for example readers without saving it or delivering its event.";
+    "Only template content is accepted. Object grammar is read with the caller's permissions.";
+    set_task_perms(caller_perms());
+    const {template, bindings, host, ?effect = false} = args;
+    const effect_kind = typeof(effect) == TYPE_FLYWEIGHT ? effect.type | false;
+    const content = $sub_utils:compile(template, bindings);
+    const actor = $sub_utils:_preview_object("Alex", $pronouns.they_them, false, true);
+    const recipient = (effect_kind == 'emote || (effect_kind == 'tell && effect.target == 'Actor)) ? actor
+      | $sub_utils:_preview_object("Sam", $pronouns.she_her, false, true);
+    const observer = $sub_utils:_preview_object("Robin", $pronouns.he_him, false, true);
+    const subject = $sub_utils:_preview_object(host:name(), `host:pronouns() ! E_VERBNF => $pronouns.it_its',
+      host:is_plural(), host:is_proper_noun(), host:is_countable(), `host.indefinite_article ! E_PROPNF => ""');
+    const room = $sub_utils:_preview_object("example room", $pronouns.it_its);
+    const destination = $sub_utils:_preview_object("garden", $pronouns.it_its);
+    const item = $sub_utils:_preview_object("pebble", $pronouns.it_its);
+    const examples = ['actor -> actor, 'recipient -> recipient, 'host -> subject, 'item -> item,
+      'location -> room, 'from_room -> room, 'to_room -> destination];
+    let event;
+    if (typeof(effect_kind) == TYPE_SYM)
+      event = $reaction:message_event(effect_kind, actor, subject, content, recipient):with_location(room);
+    else
+      const actor_key = maphaskey(bindings, 'actor) ? bindings['actor]['example] | 'actor;
+      event = $event:mk_info(examples[actor_key], @content):with_location(room);
+      for name in (mapkeys(bindings))
+        const binding = bindings[name];
+        const value = binding['kind] == 'object ? examples[binding['example]] | binding['example];
+        if (name in {'actor, 'location, 'dobj, 'iobj, 'this_obj})
+          event.(name) = value;
+        else
+          event = event:("with_" + tostr(binding['kind]) + "_binding")(name, value);
+        endif
+      endfor
+    endif
+    let lines = {"Example wording only. Nothing is saved or sent.",
+      "Alex uses they/them; Sam uses she/her; Robin uses he/him."};
+    if (effect_kind == 'tell)
+      lines = {@lines, "A tell step delivers only the recipient's view. Other views below are comparisons."};
+    endif
+    for view in ({{"Actor", event.actor}, {"Recipient", recipient}, {"Observer", observer}})
+      const document = event:resolve(view[2]);
+      lines = {@lines, view[1] + " (" + view[2]:name() + "): "
+        + $document:render(document, 'text_plain)['body]};
+    endfor
+    return lines;
+  endmethod
+
   method _finish_token owner: HACKER
     "Build one token after its nested tokens have been compiled.";
     const {parts, left} = args;
@@ -417,6 +479,36 @@ object SUB_UTILS [
       length(token) || raise(E_INVARG, "Unknown substitution: " + tostr(kind));
     endif
     return capitalize ? "{cap " + token + "}" | token;
+  endmethod
+
+  method test_preview_wording owner: HACKER
+    "Draft previews use actual grammar and preserve the host's stored messages.";
+    const host = $thing:create(true);
+    host.name = "pebble";
+    const original = host.get_msg;
+    const lines = this:preview("{nc} {agree actor name:pick|picks} up {the d}.",
+      host:message_bindings("get_msg"), host);
+    $test_utils:assert_true(equal(lines[3..$], {"Actor (Alex): You pick up the pebble.",
+      "Recipient (Sam): Alex picks up the pebble.", "Observer (Robin): Alex picks up the pebble."}),
+      "all three readers use the document resolver");
+    let bindings = this:standard_bindings("The person giving the coat.");
+    bindings['recipient] = ['kind -> 'object, 'description -> "The recipient.", 'example -> 'recipient];
+    const named = this:preview("{nc} {give|gives} {recipient} {pronoun recipient pos_adj} coat.", bindings, host);
+    $test_utils:assert_true(equal(named[3..$], {"Actor (Alex): You give Sam her coat.",
+      "Recipient (Sam): Alex gives you your coat.", "Observer (Robin): Alex gives Sam her coat."}),
+      "a named recipient sees their own pronouns");
+    const emote = $reaction:parse_effect({'emote, "thanks {d}."});
+    const action = $reaction:preview_message(emote, host);
+    $test_utils:assert_true(equal(action[3..$], {"Actor (pebble): pebble thanks Alex.",
+      "Recipient (Alex): pebble thanks you.", "Observer (Robin): pebble thanks Alex."}),
+      "emote preserves its automatic prefix and reversed roles");
+    const tell = $reaction:parse_effect({'tell, 'Actor, "{nc} {see|sees} {recipient}."});
+    const private = $reaction:preview_message(tell, host);
+    $test_utils:assert_true(equal(private[4..$], {"Actor (Alex): You see you.",
+      "Recipient (Alex): You see you.", "Observer (Robin): Alex sees Alex."}),
+      "tell actor preserves actor and recipient identity");
+    $test_utils:assert_true(equal(host.get_msg, original), "draft preview leaves the stored message intact");
+    return true;
   endmethod
 
   method test_binding_diagnostics owner: HACKER

@@ -13,6 +13,12 @@ true
 ~~Declared visits
 % @reaction cedarbox welcome after open
 ~~disabled
+% @reaction cedarbox welcome preview-message announce "{nc} {open|opens} {the d}."
+~~Actor (Alex): You open the cedarbox.
+@wizard
+; const host = $match:match_object("cedarbox", #90102); return length(host.welcome_reaction.effects);
+0
+@nonprogrammer
 % @reaction cedarbox welcome if actor is me AND visits < 2
 ~~Saved
 % @reaction cedarbox welcome then add visits 1
