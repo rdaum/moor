@@ -274,3 +274,5 @@ rules/rule_engine.moo
 rules/condition.moo
 rules/world_facts.moo
 llm/agent_building_tools.moo:tool_test_rule
+
+relations/relation.moo

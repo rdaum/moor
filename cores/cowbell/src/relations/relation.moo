@@ -10,170 +10,221 @@ object RELATION [
 
   override description (owner: HACKER, flags: "rc") = "N-ary persistent data relation.";
 
+  property set_version (owner: HACKER, flags: "rc") = 0;
+
   method assert owner: ARCH_WIZARD
-    "Add a tuple to the relation. Returns the UUID of the tuple.";
-    set_task_perms(caller_perms());
+    "Store a tuple once and return its identity. The first write repairs legacy duplicates.";
+    const principal = caller_perms();
+    (principal == this.owner || principal.wizard) || raise(E_PERM);
+    set_task_perms(principal);
     const {tuple} = args;
-    typeof(tuple) != TYPE_LIST && raise(E_TYPE);
-    !length(tuple) && raise(E_INVARG);
-    const tuple_id = uuid();
-    add_property(this, "tuple_" + tuple_id, tuple, {this.owner, "r"});
-    "Index each scalar element (lists/flyweights can't be map keys)";
-    for i in [1..length(tuple)]
-      const element = tuple[i];
+    typeof(tuple) == TYPE_LIST || raise(E_TYPE);
+    length(tuple) > 0 || raise(E_INVARG);
+    this.set_version != 1 && $relation:repair(this);
+    const existing = $relation:_find_tuple_id(this, tuple);
+    existing != 0 && return existing;
+    const identity = uuid();
+    add_property(this, "tuple_" + identity, tuple, {this.owner, "r"});
+    $relation:_index_tuple(this, identity, tuple);
+    return identity;
+  endmethod
+
+  method _index_key owner: HACKER
+    "Hash an exact scalar value, treating both floating-point zero signs as the same value.";
+    let {value} = args;
+    if (typeof(value) == TYPE_FLOAT && value == 0.0)
+      value = 0.0;
+    endif
+    return "index_" + value_hash(value);
+  endmethod
+
+  method _index_tuple owner: ARCH_WIZARD
+    "Add one stored identity to each scalar index under the caller's write permissions.";
+    const {relation, identity, tuple} = args;
+    const principal = caller_perms();
+    (principal == relation.owner || principal.wizard) || raise(E_PERM);
+    set_task_perms(principal);
+    for element in (tuple)
       if (typeof(element) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
         continue;
       endif
-      const index_prop = "index_" + value_hash(element);
-      let index_map = `this.(index_prop) ! E_PROPNF => 0';
-      if (typeof(index_map) != TYPE_MAP)
-        index_map = [];
-        add_property(this, index_prop, index_map, {this.owner, "r"});
+      const name = $relation:_index_key(element);
+      const identities = `relation.(name) ! E_PROPNF => 0';
+      if (typeof(identities) == TYPE_LIST)
+        relation.(name) = setadd(identities, identity);
+      else
+        add_property(relation, name, {identity}, {relation.owner, "r"});
       endif
-      const uuid_list = maphaskey(index_map, element) ? index_map[element] | {};
-      index_map[element] = setadd(uuid_list, tuple_id);
-      this.(index_prop) = index_map;
     endfor
-    return tuple_id;
+  endmethod
+
+  method repair owner: ARCH_WIZARD
+    "Collapse legacy duplicates and rebuild indexes, retaining one original identity per tuple.";
+    "Requires relation ownership or wizard authority. No suspension or partial batch commits.";
+    const {?relation = this} = args;
+    const principal = caller_perms();
+    (principal == relation.owner || principal.wizard) || raise(E_PERM);
+    set_task_perms(principal);
+    const names = properties(relation);
+    let kept = [];
+    let duplicates = {};
+    for property in (names)
+      const name = tostr(property);
+      if (!name:starts_with("tuple_"))
+        continue;
+      endif
+      const tuple = relation.(property);
+      (typeof(tuple) == TYPE_LIST && length(tuple) > 0)
+        || raise(E_INVARG, "Invalid stored relation tuple: " + name);
+      let duplicate = false;
+      for original in (mapvalues(kept))
+        if (equal(original, tuple))
+          duplicate = true;
+          break;
+        endif
+      endfor
+      if (duplicate)
+        duplicates = {@duplicates, property};
+      else
+        kept[name[7..$]] = tuple;
+      endif
+    endfor
+    for property in (names)
+      if (tostr(property):starts_with("index_") || property in duplicates)
+        delete_property(relation, property);
+      endif
+    endfor
+    for identity in (mapkeys(kept))
+      $relation:_index_tuple(relation, identity, kept[identity]);
+    endfor
+    relation.set_version = 1;
+    return length(duplicates);
   endmethod
 
   method retract owner: ARCH_WIZARD
-    "Remove a tuple from the relation. Returns true if found and removed, false otherwise.";
-    set_task_perms(caller_perms());
+    "Remove a fact once. Return false when absent; repair legacy duplicates before removal.";
+    const principal = caller_perms();
+    (principal == this.owner || principal.wizard) || raise(E_PERM);
+    set_task_perms(principal);
     const {tuple} = args;
-    typeof(tuple) != TYPE_LIST && raise(E_TYPE);
-    const tuple_id = this:_find_tuple_id(tuple);
-    !tuple_id && return false;
-    "Remove from all indexes (skip non-scalars)";
-    for i in [1..length(tuple)]
-      const element = tuple[i];
+    typeof(tuple) == TYPE_LIST || raise(E_TYPE);
+    this.set_version != 1 && $relation:repair(this);
+    const identity = $relation:_find_tuple_id(this, tuple);
+    identity == 0 && return false;
+    for element in (tuple)
       if (typeof(element) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
         continue;
       endif
-      const index_prop = "index_" + value_hash(element);
-      if (!(index_prop in properties(this)))
+      const name = $relation:_index_key(element);
+      const previous = `this.(name) ! E_PROPNF => {}';
+      if (length(previous) == 0)
         continue;
       endif
-      let index_map = this.(index_prop);
-      let uuid_list = maphaskey(index_map, element) ? index_map[element] | {};
-      uuid_list = setremove(uuid_list, tuple_id);
-      "Update or remove the index entry";
-      if (length(uuid_list))
-        index_map[element] = uuid_list;
+      const identities = setremove(previous, identity);
+      if (length(identities) > 0)
+        this.(name) = identities;
       else
-        index_map = mapdelete(index_map, element);
-      endif
-      "Update or remove the index property";
-      if (length(index_map))
-        this.(index_prop) = index_map;
-      else
-        delete_property(this, index_prop);
+        delete_property(this, name);
       endif
     endfor
-    delete_property(this, "tuple_" + tuple_id);
+    delete_property(this, "tuple_" + identity);
     return true;
   endmethod
 
   method member owner: ARCH_WIZARD
-    "Check if a tuple exists in the relation.";
+    "Check exact tuple membership under the caller's read permissions.";
     set_task_perms(caller_perms());
     const {tuple} = args;
-    typeof(tuple) != TYPE_LIST && raise(E_TYPE);
-    return this:_find_tuple_id(tuple) ? true | false;
+    typeof(tuple) == TYPE_LIST || raise(E_TYPE);
+    return $relation:_find_tuple_id(this, tuple) != 0;
   endmethod
 
   method select owner: ARCH_WIZARD
-    "Find all tuples where tuple[position] == value. Position is 1-indexed.";
-    "Read and mutation authority is the calling principal; this method does not suspend.";
+    "Return distinct tuples with an exact value at a one-based position.";
     set_task_perms(caller_perms());
     const {position, value} = args;
-    typeof(position) != TYPE_INT && raise(E_TYPE);
-    position < 1 && raise(E_INVARG);
-    const index_map = `this.("index_" + value_hash(value)) ! E_PROPNF => 0';
-    typeof(index_map) != TYPE_MAP && return {};
-    const uuid_list = maphaskey(index_map, value) ? index_map[value] | {};
-    let result = {};
-    for tuple_id in (uuid_list)
-      const tuple = `this.("tuple_" + tuple_id) ! E_PROPNF => 0';
-      tuple != 0 && length(tuple) >= position && tuple[position] == value && (result = {@result, tuple});
-    endfor
-    return result;
+    typeof(position) == TYPE_INT || raise(E_TYPE);
+    position > 0 || raise(E_INVARG);
+    return {tuple for tuple in ($relation:select_containing(value, this))
+      if (length(tuple) >= position && equal(tuple[position], value))};
   endmethod
 
   method select_containing owner: ARCH_WIZARD
-    "Find all tuples containing value in any position.";
-    "Read and mutation authority is the calling principal; this method does not suspend.";
+    "Return distinct tuples containing an exact value, using scalar indexes when available.";
     set_task_perms(caller_perms());
-    const {value} = args;
-    const index_map = `this.("index_" + value_hash(value)) ! E_PROPNF => 0';
-    typeof(index_map) != TYPE_MAP && return {};
-    const uuid_list = maphaskey(index_map, value) ? index_map[value] | {};
+    const {value, ?relation = this} = args;
+    if (typeof(value) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP} || relation.set_version != 1)
+      let selected = {};
+      for tuple in ($relation:tuples(relation))
+        for element in (tuple)
+          if (equal(element, value))
+            selected = {@selected, tuple};
+            break;
+          endif
+        endfor
+      endfor
+      return selected;
+    endif
+    const identities = `relation.($relation:_index_key(value)) ! E_PROPNF => {}';
     let result = {};
-    for tuple_id in (uuid_list)
-      const tuple = `this.("tuple_" + tuple_id) ! E_PROPNF => 0';
-      tuple != 0 && (result = {@result, tuple});
+    for identity in (identities)
+      const tuple = relation.("tuple_" + identity);
+      for element in (tuple)
+        if (equal(element, value))
+          result = {@result, tuple};
+          break;
+        endif
+      endfor
     endfor
     return result;
   endmethod
 
   method tuples owner: ARCH_WIZARD
-    "Return all tuples in the relation.";
-    "Read and mutation authority is the calling principal; this method does not suspend.";
+    "Return distinct stored facts, including before legacy storage has been repaired.";
+    const {?relation = this} = args;
     set_task_perms(caller_perms());
-    let result = {};
-    for prop in (properties(this))
-      const prop_str = tostr(prop);
-      if (length(prop_str) < 6 || prop_str[1..6] != "tuple_")
-        continue;
-      endif
-      const tuple = `this.(prop) ! E_PROPNF => 0';
-      tuple != 0 && (result = {@result, tuple});
-    endfor
-    return result;
+    const tuples = {relation.(name) for name in (properties(relation)) if (tostr(name):starts_with("tuple_"))};
+    const matched = term_match({'var, 'Tuple}, tuples, [],
+      ['case_sensitive -> true, 'dedupe -> true,
+        'max_solutions -> max(1, length(tuples)), 'max_steps -> max(1, length(tuples))]);
+    return {row['Tuple] for row in (matched)};
   endmethod
 
   method clear owner: ARCH_WIZARD
-    "Remove all tuples from the relation.";
-    set_task_perms(caller_perms());
-    for prop in (properties(this))
-      const prop_str = tostr(prop);
-      length(prop_str) >= 6 && prop_str[1..6] in {"tuple_", "index_"} && delete_property(this, prop);
+    "Remove all tuples and indexes under the caller's write permissions.";
+    const principal = caller_perms();
+    (principal == this.owner || principal.wizard) || raise(E_PERM);
+    set_task_perms(principal);
+    for property in (properties(this))
+      const name = tostr(property);
+      if (name:starts_with("tuple_") || name:starts_with("index_"))
+        delete_property(this, property);
+      endif
     endfor
+    this.set_version = 1;
     return true;
   endmethod
 
   method _find_tuple_id owner: ARCH_WIZARD
-    "Internal: Find the UUID for a given tuple, or return 0 if not found.";
+    "Find an exact tuple's stored identity. Composite-only tuples require a scan.";
     set_task_perms(caller_perms());
-    const {tuple} = args;
-    !length(tuple) && return 0;
-    "Find first scalar element to use for index lookup";
-    let scalar_element = 0;
-    for elem in (tuple)
-      if (typeof(elem) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
-        continue;
-      endif
-      scalar_element = elem;
-      break;
-    endfor
-    "If no scalar elements, fall back to scanning all tuples";
-    if (scalar_element == 0 && typeof(tuple[1]) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
-      for prop in (properties(this))
-        const prop_str = tostr(prop);
-        if (length(prop_str) >= 6 && prop_str[1..6] == "tuple_")
-          let stored_tuple = `this.(prop) ! E_PROPNF => 0';
-          stored_tuple == tuple && return prop_str[7..$];
+    const {relation, tuple} = args;
+    let identities = 0;
+    if (relation.set_version == 1)
+      for element in (tuple)
+        if (typeof(element) in {TYPE_FLYWEIGHT, TYPE_LIST, TYPE_MAP})
+          continue;
         endif
+        identities = `relation.($relation:_index_key(element)) ! E_PROPNF => {}';
+        break;
       endfor
-      return 0;
     endif
-    "Use index for efficient lookup";
-    const index_map = `this.("index_" + value_hash(scalar_element)) ! E_PROPNF => 0';
-    typeof(index_map) != TYPE_MAP && return 0;
-    const uuid_list = maphaskey(index_map, scalar_element) ? index_map[scalar_element] | {};
-    for tuple_id in (uuid_list)
-      const stored_tuple = `this.("tuple_" + tuple_id) ! E_PROPNF => 0';
-      stored_tuple == tuple && return tuple_id;
+    if (typeof(identities) != TYPE_LIST)
+      const names = properties(relation);
+      identities = {tostr(name)[7..length(tostr(name))] for name in (names) if (tostr(name):starts_with("tuple_"))};
+    endif
+    for identity in (identities)
+      equal(relation.("tuple_" + identity), tuple) && return identity;
     endfor
     return 0;
   endmethod
@@ -269,17 +320,17 @@ object RELATION [
   endmethod
 
   method test_duplicate_assert owner: HACKER
-    "Test that asserting the same tuple twice preserves multiplicity.";
-    const rel = $relation:create(true);
-    rel:assert({#1, #2, "edge"});
-    rel:assert({#1, #2, "edge"});
-    let results = rel:tuples();
-    length(results) != 2 && raise(E_ASSERT, "Duplicate assert should create new tuple (UUIDs differ)");
-    "Both should be present as member check is equality based";
-    !rel:member({#1, #2, "edge"}) && raise(E_ASSERT, "Tuple should be present");
-    "Query should preserve tuple multiplicity.";
-    results = rel:query({#1, {'var, 'to}, {'var, 'label}});
-    length(results) != 2 && raise(E_ASSERT, "Duplicate tuples should produce duplicate query bindings");
+    "Repeated assertion keeps one identity, one fact, and one query answer.";
+    const relation = $relation:create(true);
+    const first = relation:assert({#1, #2, "edge"});
+    const again = relation:assert({#1, #2, "edge"});
+    $test_utils:assert_eq(first, again, "Assertion is idempotent");
+    $test_utils:assert_eq(relation:count(), 1, "One stored fact");
+    $test_utils:assert_eq(relation:query({#1, {'var, 'To}, {'var, 'Label}}),
+      {['To -> #2, 'Label -> "edge"]}, "One binding map");
+    $test_utils:assert_true(relation:retract({#1, #2, "edge"}), "One retraction removes the fact");
+    $test_utils:assert_false(relation:member({#1, #2, "edge"}), "No duplicate remains");
+    return true;
   endmethod
 
   method test_bidirectional_indexing owner: HACKER
@@ -322,16 +373,87 @@ object RELATION [
     {#39, #40, "south"} in from_39 || raise(E_ASSERT, "Missing south passage (pos 1)");
   endmethod
 
-  method query owner: ARCH_WIZARD
-    "Match pattern with variables against tuples, return bindings. Variables use {'var, 'name} terms.";
-    "Read and mutation authority is the calling principal; this method does not suspend.";
+  method query_result owner: ARCH_WIZARD
+    "Return distinct binding maps and whether the requested scope was searched completely.";
     set_task_perms(caller_perms());
-    let {pattern, ?bindings = [], ?options = []} = args;
-    typeof(pattern) != TYPE_LIST && raise(E_TYPE);
-    typeof(bindings) != TYPE_MAP && raise(E_TYPE);
-    typeof(options) != TYPE_MAP && raise(E_TYPE);
-    !maphaskey(options, 'dedupe) && (options['dedupe] = false);
-    return term_query(pattern, this:tuples(), {}, bindings, options);
+    return $relation:_query_result(this, @args);
+  endmethod
+
+  method query_rows owner: ARCH_WIZARD
+    "Read named, typed columns from one relation without invoking its overridable verbs.";
+    set_task_perms(caller_perms());
+    const {relation, columns, schema, values, limit} = args;
+    $behavior_schema:bindings(values, schema['inputs], "relation inputs");
+    const pattern = {{'var, column} for column in (columns)};
+    const types = {maphaskey(schema['inputs], field)
+      ? schema['inputs][field] | schema['outputs][field] for field in (columns)};
+    const result = $relation:_query_result(relation, pattern, values,
+      ['max_solutions -> limit], types);
+    let rows = {};
+    for binding in (result['rows])
+      let row = [];
+      for output in (mapkeys(schema['outputs]))
+        row[output] = binding[output];
+      endfor
+      rows = {@rows, row};
+    endfor
+    return ['rows -> rows, 'complete -> result['complete]];
+  endmethod
+
+  method _query_result owner: ARCH_WIZARD
+    "Match stored facts with explicit result completeness. This method does not mutate or suspend.";
+    set_task_perms(caller_perms());
+    let {relation, pattern, ?bindings = [], ?options = [], ?types = {}} = args;
+    isa(relation, $relation) || raise(E_INVARG, "Expected a relation");
+    typeof(pattern) == TYPE_LIST || raise(E_TYPE);
+    typeof(bindings) == TYPE_MAP || raise(E_TYPE);
+    typeof(options) == TYPE_MAP || raise(E_TYPE);
+    const limit = `options['max_solutions] ! E_RANGE => 256';
+    (typeof(limit) == TYPE_INT && limit > 0 && limit <= 4096)
+      || raise(E_INVARG, "Relation result limit must be between 1 and 4096");
+    options['case_sensitive] = true;
+    options['dedupe] = true;
+    options['max_solutions] = limit + 1;
+    term_variables(pattern);
+    let identities = 0;
+    if (relation.set_version == 1)
+      for value in (pattern)
+        let bound = value;
+        if (typeof(value) == TYPE_LIST && length(value) == 2 && value[1] == 'var)
+          bound = `bindings[value[2]] ! E_RANGE => {}';
+        endif
+        if (!(typeof(bound) in {TYPE_LIST, TYPE_MAP, TYPE_FLYWEIGHT}))
+          identities = `relation.($relation:_index_key(bound)) ! E_PROPNF => {}';
+          break;
+        endif
+      endfor
+    endif
+    if (typeof(identities) != TYPE_LIST)
+      const names = properties(relation);
+      identities = {tostr(name)[7..length(tostr(name))] for name in (names) if (tostr(name):starts_with("tuple_"))};
+    endif
+    length(identities) <= 4096 || raise(E_QUOTA, "Relation query needs a narrower input scope");
+    const candidates = {relation.("tuple_" + identity) for identity in (identities)};
+    for tuple in (candidates)
+      (typeof(tuple) == TYPE_LIST && length(tuple) > 0)
+        || raise(E_INVARG, "Invalid stored relation fact");
+      if (length(types) > 0)
+        length(tuple) == length(types) || raise(E_INVARG, "Stored fact has the wrong number of fields");
+        for i in [1..length(types)]
+          $behavior_schema:_type(tuple[i], types[i], "relation field " + tostr(i));
+        endfor
+      endif
+    endfor
+    const rows = term_match(pattern, candidates, bindings, options);
+    return ['rows -> rows[1..min(length(rows), limit)], 'complete -> length(rows) <= limit];
+  endmethod
+
+  method query owner: ARCH_WIZARD
+    "Return distinct complete query answers. Raise E_QUOTA instead of returning a silent prefix.";
+    set_task_perms(caller_perms());
+    const result = $relation:_query_result(this, @args);
+    result['complete] || raise(E_QUOTA, "Relation query exceeded its result limit");
+    return result['rows];
   endmethod
 
   method reachable_from owner: ARCH_WIZARD
@@ -344,7 +466,7 @@ object RELATION [
     while (length(frontier) > 0)
       const current = frontier[1];
       frontier = listdelete(frontier, 1);
-      for tuple in (this:select_containing(current))
+      for tuple in ($relation:select_containing(current, this))
         length(tuple) != 2 && raise(E_INVARG, "reachable_from requires binary relation");
         const {val_a, val_b} = tuple;
         const other = val_a == current ? val_b | val_a;
@@ -400,14 +522,8 @@ object RELATION [
   endmethod
 
   method count owner: ARCH_WIZARD
-    "Return the number of tuples in the relation.";
-    "Read and mutation authority is the calling principal; this method does not suspend.";
+    "Count distinct facts under the caller's read permissions, including legacy storage.";
     set_task_perms(caller_perms());
-    let count = 0;
-    for prop in (properties(this))
-      const prop_str = tostr(prop);
-      length(prop_str) >= 6 && prop_str[1..6] == "tuple_" && (count = count + 1);
-    endfor
-    return count;
+    return length($relation:tuples(this));
   endmethod
 endobject

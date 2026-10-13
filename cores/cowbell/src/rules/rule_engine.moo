@@ -82,14 +82,47 @@ object RULE_ENGINE [
     (typeof(provider) == TYPE_OBJ && valid(provider) && typeof(method) == TYPE_STR)
       || raise(E_INVARG, "Invalid predicate provider");
     $behavior_schema:_vocabulary(['triggers -> [], 'actions -> [], 'predicates -> [name -> schema]]);
-    $rule_engine.predicate_sources[name] = ['schema -> schema, 'provider -> provider, 'method -> method];
+    $rule_engine.predicate_sources[name] = ['kind -> 'provider, 'schema -> schema, 'provider -> provider, 'method -> method];
+  endmethod
+
+  method register_relation owner: ARCH_WIZARD
+    "Name a typed view of one owned relation. Registration grants no permission to read its facts.";
+    const {name, relation, columns, schema} = args;
+    const principal = caller_perms();
+    isa(relation, $relation) || raise(E_INVARG, "Expected a relation");
+    (principal == relation.owner || principal.wizard) || raise(E_PERM);
+    $behavior_schema:_name(name, "relation query");
+    !maphaskey($world_facts:schemas(), name) || raise(E_INVARG, "Cannot replace a core predicate");
+    if (maphaskey($rule_engine.predicate_sources, name))
+      const previous = $rule_engine.predicate_sources[name];
+      (principal.wizard || (previous['kind] == 'relation && previous['relation] == relation))
+        || raise(E_PERM, "That query name is already in use");
+    endif
+    $behavior_schema:_vocabulary(['triggers -> [], 'actions -> [], 'predicates -> [name -> schema]]);
+    typeof(columns) == TYPE_LIST || raise(E_TYPE);
+    length(columns) > 0 || raise(E_INVARG, "A relation needs at least one field");
+    length(columns) == length(schema['inputs]) + length(schema['outputs])
+      || raise(E_INVARG, "Each relation field must be declared once");
+    let seen = {};
+    for column in (columns)
+      $behavior_schema:_name(column, "relation field");
+      !(column in seen) || raise(E_INVARG, "Repeated relation field");
+      seen = {@seen, column};
+      (maphaskey(schema['inputs], column) != maphaskey(schema['outputs], column))
+        || raise(E_INVARG, "Each relation field must be an input or an output");
+    endfor
+    $rule_engine.predicate_sources[name] = ['kind -> 'relation, 'schema -> schema,
+      'relation -> relation, 'columns -> columns];
   endmethod
 
   method unregister_predicate owner: ARCH_WIZARD
-    "Remove a registered provider. Rules that refer to it then fail validation.";
-    caller_perms().wizard || raise(E_PERM);
+    "Remove a query as its relation owner or a wizard. Dependent rules then fail validation.";
     const {name} = args;
+    const principal = caller_perms();
     if (maphaskey($rule_engine.predicate_sources, name))
+      const source = $rule_engine.predicate_sources[name];
+      (principal.wizard || (source['kind] == 'relation && principal == source['relation].owner))
+        || raise(E_PERM);
       $rule_engine.predicate_sources = mapdelete($rule_engine.predicate_sources, name);
     endif
   endmethod
@@ -150,6 +183,8 @@ object RULE_ENGINE [
     "Call one registered provider with the caller's permissions and validate its complete row shape.";
     set_task_perms(caller_perms());
     const {name, values, limit} = args;
+    (typeof(limit) == TYPE_INT && limit > 0 && limit <= 256)
+      || raise(E_INVARG, "Query result limit must be between 1 and 256");
     const schemas = $rule_engine:schemas();
     maphaskey(schemas, name) || raise(E_INVARG, "Unknown predicate: " + tostr(name));
     const schema = schemas[name];
@@ -157,7 +192,11 @@ object RULE_ENGINE [
     let result;
     if (maphaskey($rule_engine.predicate_sources, name))
       const source = $rule_engine.predicate_sources[name];
-      result = source['provider]:(source['method])(name, values, limit);
+      if (source['kind] == 'relation)
+        result = $relation:query_rows(source['relation], source['columns], schema, values, limit);
+      else
+        result = source['provider]:(source['method])(name, values, limit);
+      endif
     else
       result = $world_facts:query(name, values, limit);
     endif

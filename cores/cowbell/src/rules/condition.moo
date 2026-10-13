@@ -342,24 +342,13 @@ object CONDITION [
         arguments[name] = $condition:resolve(tree['arguments][name], environment);
       endfor
       const result = provider(tree['name], arguments, limit);
-      let bindings = {};
-      for row in (result['rows])
-        let candidate = initial;
-        let matches = true;
-        for output in (mapkeys(tree['bind]))
-          const name = tree['bind][output];
-          if (maphaskey(candidate, name) && !equal(candidate[name], row[output]))
-            matches = false;
-            break;
-          endif
-          candidate[name] = row[output];
-        endfor
-        if (matches)
-          bindings = $condition:_unique_add(bindings, candidate);
-          length(bindings) > limit && return ['bindings -> bindings[1..limit], 'complete -> false];
-        endif
-      endfor
-      return ['bindings -> bindings, 'complete -> result['complete]];
+      const outputs = mapkeys(tree['bind]);
+      const pattern = {{'var, tree['bind][output]} for output in (outputs)};
+      const rows = {{row[field] for field in (outputs)} for row in (result['rows])};
+      const bindings = term_match(pattern, rows, initial,
+        ['case_sensitive -> true, 'dedupe -> true, 'max_solutions -> limit + 1]);
+      return ['bindings -> bindings[1..min(length(bindings), limit)],
+        'complete -> result['complete] && length(bindings) <= limit];
     endif
     kind in {'all, 'any} || raise(E_INVARG, "Unknown condition kind");
     let bindings = kind == 'all ? {initial} | {};

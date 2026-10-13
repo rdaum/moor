@@ -42,3 +42,22 @@ E_INVARG
 
 ; return term_query({'reachable, #1, {'var, 'Where}}, {{'edge, #1, #2}}, {{{'reachable, {'var, 'A}, {'var, 'B}}, {{'edge, {'var, 'A}, {'var, 'C}}}}});
 E_INVARG
+
+// Explicit case-sensitive matching keeps exact values and distinct answers.
+; return term_unify("Key", "key", [], ['case_sensitive -> 1]);
+0
+
+; return term_unify("Key", "key");
+[]
+
+; return term_unify({'var, 'X}, "key", ['X -> "Key"], ['case_sensitive -> 1]);
+0
+
+; return term_match({'var, 'X}, {"Key", "key", "Key"}, [], ['case_sensitive -> 1]);
+{['X -> "Key"], ['X -> "key"]}
+
+; return term_query({'var, 'X}, {"Key", "key", "Key"}, {}, [], ['case_sensitive -> 1]);
+{['X -> "Key"], ['X -> "key"]}
+
+; return term_unify(["Key" -> {'var, 'X}], ["key" -> 1], [], ['case_sensitive -> 1]);
+0

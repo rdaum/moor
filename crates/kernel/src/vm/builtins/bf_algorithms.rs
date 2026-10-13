@@ -18,12 +18,13 @@
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::sync::LazyLock;
 
 use ahash::HashMap;
 use moor_compiler::offset_for_builtin;
 use moor_var::{
-    Associative, E_ARGS, E_INVARG, E_MAXREC, E_TYPE, Symbol, Var, Variant, v_int, v_list,
+    Associative, E_ARGS, E_INVARG, E_MAXREC, E_TYPE, Map, Symbol, Var, Variant, v_int, v_list,
     v_list_iter, v_map, v_sym,
 };
 
@@ -39,6 +40,7 @@ static MAX_DEPTH_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_depth"
 static MAX_BINDINGS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_bindings"));
 static MAX_SOLUTIONS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_solutions"));
 static MAX_STEPS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("max_steps"));
+static CASE_SENSITIVE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("case_sensitive"));
 static DEDUPE_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("dedupe"));
 static NOT_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("not"));
 static DIRECTIONS_SYM: LazyLock<Symbol> = LazyLock::new(|| Symbol::mk("directions"));
@@ -64,6 +66,7 @@ const INTERNAL_QUERY_VAR_PREFIX: &str = "__term_query:";
 #[derive(Clone, Copy)]
 struct TermOptions {
     unbound: UnboundMode,
+    case_sensitive: bool,
     max_depth: usize,
     max_bindings: usize,
 }
@@ -78,9 +81,95 @@ impl Default for TermOptions {
     fn default() -> Self {
         Self {
             unbound: UnboundMode::Raise,
+            case_sensitive: false,
             max_depth: DEFAULT_TERM_MAX_DEPTH,
             max_bindings: DEFAULT_TERM_MAX_BINDINGS,
         }
+    }
+}
+
+impl TermOptions {
+    fn equal(&self, left: &Var, right: &Var) -> bool {
+        if self.case_sensitive {
+            left.eq_case_sensitive(right)
+        } else {
+            left == right
+        }
+    }
+
+    fn key(&self, value: Var) -> TermKey {
+        TermKey {
+            value,
+            case_sensitive: self.case_sensitive,
+        }
+    }
+
+    fn map_value(&self, map: &Map, key: &Var) -> Option<Var> {
+        if self.case_sensitive {
+            map.iter_ref()
+                .find(|(candidate, _)| candidate.eq_case_sensitive(key))
+                .map(|(_, value)| value.clone())
+        } else {
+            map.get(key).ok()
+        }
+    }
+}
+
+// Matching, result deduplication, and recursive-state detection must agree on
+// equality. Case-folded string hashes are valid for exact equality too: case
+// variants can share a hash but remain distinct keys. Float zero signs must
+// share a hash because both comparison modes consider them equal.
+#[derive(Clone)]
+struct TermKey {
+    value: Var,
+    case_sensitive: bool,
+}
+
+impl PartialEq for TermKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.case_sensitive == other.case_sensitive
+            && if self.case_sensitive {
+                self.value.eq_case_sensitive(&other.value)
+            } else {
+                self.value == other.value
+            }
+    }
+}
+
+impl Eq for TermKey {}
+
+impl Hash for TermKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.case_sensitive.hash(state);
+        hash_term_value(&self.value, state);
+    }
+}
+
+fn hash_term_value<H: Hasher>(value: &Var, state: &mut H) {
+    match value.variant() {
+        Variant::Float(0.0) => 0_u64.hash(state),
+        Variant::List(items) => {
+            for item in items.iter_ref() {
+                hash_term_value(item, state);
+            }
+        }
+        Variant::Map(items) => {
+            for (key, item) in items.iter_ref() {
+                hash_term_value(key, state);
+                hash_term_value(item, state);
+            }
+        }
+        Variant::Flyweight(flyweight) => {
+            flyweight.delegate().hash(state);
+            for (name, item) in flyweight.slots_storage().iter() {
+                name.hash(state);
+                hash_term_value(item, state);
+            }
+            for item in flyweight.contents().iter_ref() {
+                hash_term_value(item, state);
+            }
+        }
+        _ => value.hash(state),
     }
 }
 
@@ -266,6 +355,8 @@ fn parse_term_options(value: Option<&Var>) -> Result<TermOptions, BfErr> {
             }
         } else if key == *MAX_DEPTH_SYM {
             options.max_depth = positive_usize_option(value, "max_depth")?;
+        } else if key == *CASE_SENSITIVE_SYM {
+            options.case_sensitive = value.is_true();
         } else if key == *MAX_BINDINGS_SYM {
             options.max_bindings = positive_usize_option(value, "max_bindings")?;
         } else {
@@ -299,6 +390,8 @@ fn parse_query_options(value: Option<&Var>) -> Result<QueryOptions, BfErr> {
             options.max_solutions = positive_usize_option(value, "max_solutions")?;
         } else if key == *MAX_STEPS_SYM {
             options.max_steps = positive_usize_option(value, "max_steps")?;
+        } else if key == *CASE_SENSITIVE_SYM {
+            options.term.case_sensitive = value.is_true();
         } else if key == *DEDUPE_SYM {
             options.dedupe = value.is_true();
         } else {
@@ -332,6 +425,8 @@ fn parse_match_options(value: Option<&Var>) -> Result<MatchOptions, BfErr> {
             options.max_solutions = positive_usize_option(value, "max_solutions")?;
         } else if key == *MAX_STEPS_SYM {
             options.max_steps = positive_usize_option(value, "max_steps")?;
+        } else if key == *CASE_SENSITIVE_SYM {
+            options.term.case_sensitive = value.is_true();
         } else if key == *DEDUPE_SYM {
             options.dedupe = value.is_true();
         } else {
@@ -606,7 +701,7 @@ fn bind_term_unify_variable(
     options: &TermOptions,
 ) -> Result<bool, BfErr> {
     if let Some(bound) = bindings.get(&name) {
-        return Ok(bound == datum);
+        return Ok(options.equal(bound, datum));
     }
     if bindings.len() >= options.max_bindings {
         return Err(BfErr::ErrValue(
@@ -647,9 +742,8 @@ fn term_unify_inner(
                 return Ok(false);
             }
             for (key, pattern_value) in pattern_map.iter_ref() {
-                let datum_value = match datum_map.get(key) {
-                    Ok(value) => value,
-                    Err(_) => return Ok(false),
+                let Some(datum_value) = options.map_value(datum_map, key) else {
+                    return Ok(false);
                 };
                 if !term_unify_inner(pattern_value, &datum_value, bindings, options, depth + 1)? {
                     return Ok(false);
@@ -657,7 +751,7 @@ fn term_unify_inner(
             }
             Ok(true)
         }
-        _ => Ok(pattern == datum),
+        _ => Ok(options.equal(pattern, datum)),
     }
 }
 
@@ -718,7 +812,7 @@ fn term_match_values(
             continue;
         }
         let result = bindings_to_var(bindings);
-        if options.dedupe && !seen.insert(result.clone()) {
+        if options.dedupe && !seen.insert(options.term.key(result.clone())) {
             continue;
         }
         results.push(result);
@@ -1128,9 +1222,8 @@ fn term_query_match_inner(
                 return Ok(false);
             }
             for (key, left_value) in left_map.iter_ref() {
-                let right_value = match right_map.get(key) {
-                    Ok(value) => value,
-                    Err(_) => return Ok(false),
+                let Some(right_value) = options.map_value(right_map, key) else {
+                    return Ok(false);
                 };
                 if !term_query_match_inner(left_value, &right_value, bindings, options, depth + 1)?
                 {
@@ -1139,7 +1232,7 @@ fn term_query_match_inner(
             }
             Ok(true)
         }
-        _ => Ok(left == right),
+        _ => Ok(options.equal(&left, &right)),
     }
 }
 
@@ -1375,8 +1468,8 @@ struct QueryEngine<'a> {
     fresh_scope: usize,
     steps: usize,
     solutions: Vec<Var>,
-    seen_solutions: HashSet<Var>,
-    active_states: HashSet<Var>,
+    seen_solutions: HashSet<TermKey>,
+    active_states: HashSet<TermKey>,
 }
 
 impl QueryEngine<'_> {
@@ -1428,7 +1521,11 @@ impl QueryEngine<'_> {
 
     fn add_solution(&mut self, bindings: &TermBindings) -> Result<(), BfErr> {
         let solution = self.project_solution(bindings)?;
-        if self.options.dedupe && !self.seen_solutions.insert(solution.clone()) {
+        if self.options.dedupe
+            && !self
+                .seen_solutions
+                .insert(self.options.term.key(solution.clone()))
+        {
             return Ok(());
         }
         self.solutions.push(solution);
@@ -1456,7 +1553,11 @@ impl QueryEngine<'_> {
         }
 
         let state_key = if self.options.dedupe {
-            Some(self.query_state_key(&goals, &bindings)?)
+            Some(
+                self.options
+                    .term
+                    .key(self.query_state_key(&goals, &bindings)?),
+            )
         } else {
             None
         };
@@ -2380,7 +2481,7 @@ pub(crate) fn register_bf_algorithms(builtins: &mut [BuiltinFunction]) {
 
 #[cfg(test)]
 mod tests {
-    use moor_var::{Associative, v_empty_list, v_int, v_str};
+    use moor_var::{Associative, v_empty_list, v_float, v_int, v_str};
 
     use super::*;
 
@@ -2415,6 +2516,16 @@ mod tests {
         rules: Vec<Var>,
         bindings: TermBindings,
     ) -> Result<Var, BfErr> {
+        query_with_options(query, facts, rules, bindings, QueryOptions::default())
+    }
+
+    fn query_with_options(
+        query: Var,
+        facts: Vec<Var>,
+        rules: Vec<Var>,
+        bindings: TermBindings,
+        options: QueryOptions,
+    ) -> Result<Var, BfErr> {
         let rule_list = v_list(&rules);
         let parsed_rules = parse_query_rules(&rule_list)?;
         let mut public_variables = Vec::new();
@@ -2428,7 +2539,7 @@ mod tests {
             facts,
             rules: parsed_rules,
             public_variables: &public_variables,
-            options: QueryOptions::default(),
+            options,
             tick_budget: None,
             fresh_scope: 0,
             steps: 0,
@@ -2716,6 +2827,134 @@ mod tests {
         .unwrap();
 
         assert_eq!(results, vec![v_map(&[(v_sym("To"), v_int(2))])]);
+    }
+
+    #[test]
+    fn term_matching_case_sensitive_values_and_keys() {
+        let options = MatchOptions {
+            term: TermOptions {
+                case_sensitive: true,
+                ..TermOptions::default()
+            },
+            ..MatchOptions::default()
+        };
+        let values = [v_str("Key"), v_str("key"), v_str("Key")];
+        let exact = term_match_values(&var("X"), &values, &TermBindings::default(), &options, None)
+            .unwrap();
+        assert_eq!(exact.len(), 2);
+        assert!(exact[0].eq_case_sensitive(&v_map(&[(v_sym("X"), v_str("Key"))])));
+        assert!(exact[1].eq_case_sensitive(&v_map(&[(v_sym("X"), v_str("key"))])));
+        let ordinary = term_match_values(
+            &var("X"),
+            &values,
+            &TermBindings::default(),
+            &MatchOptions::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(ordinary.len(), 1);
+
+        for (pattern, datum) in [
+            (
+                v_list(&[var("X"), var("X")]),
+                v_list(&[v_str("Key"), v_str("key")]),
+            ),
+            (
+                v_map(&[(v_str("Key"), var("X"))]),
+                v_map(&[(v_str("key"), v_int(1))]),
+            ),
+            (v_list(&[v_str("Key")]), v_list(&[v_str("key")])),
+        ] {
+            assert!(
+                !term_unify_inner(
+                    &pattern,
+                    &datum,
+                    &mut TermBindings::default(),
+                    &options.term,
+                    0
+                )
+                .unwrap()
+            );
+        }
+        let mut initial = TermBindings::default();
+        initial.insert(Symbol::mk("X"), v_str("Key"));
+        assert!(
+            !term_unify_inner(&var("X"), &v_str("key"), &mut initial, &options.term, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn term_match_deduplicates_equal_float_zero_signs() {
+        let values = [
+            v_map(&[(v_sym("value"), v_float(0.0))]),
+            v_map(&[(v_sym("value"), v_float(-0.0))]),
+        ];
+        for case_sensitive in [false, true] {
+            let options = MatchOptions {
+                term: TermOptions {
+                    case_sensitive,
+                    ..TermOptions::default()
+                },
+                ..MatchOptions::default()
+            };
+            let results =
+                term_match_values(&var("X"), &values, &TermBindings::default(), &options, None)
+                    .unwrap();
+            assert_eq!(results.len(), 1);
+        }
+    }
+
+    #[test]
+    fn term_query_case_sensitive_recursive_states_and_answers() {
+        let rules = vec![
+            v_list(&[
+                term("reach", &[var("X"), var("Y")]),
+                v_list(&[term("edge", &[var("X"), var("Y")])]),
+            ]),
+            v_list(&[
+                term("reach", &[var("X"), var("Y")]),
+                v_list(&[
+                    term("edge", &[var("X"), var("Z")]),
+                    term("reach", &[var("Z"), var("Y")]),
+                ]),
+            ]),
+        ];
+        let result = query_with_options(
+            term("reach", &[v_str("a"), var("To")]),
+            vec![
+                term("edge", &[v_str("a"), v_str("A")]),
+                term("edge", &[v_str("A"), v_str("end")]),
+            ],
+            rules,
+            TermBindings::default(),
+            QueryOptions {
+                term: TermOptions {
+                    case_sensitive: true,
+                    ..TermOptions::default()
+                },
+                ..QueryOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(result.eq_case_sensitive(&v_list(&[
+            v_map(&[(v_sym("To"), v_str("A"))]),
+            v_map(&[(v_sym("To"), v_str("end"))]),
+        ])));
+        let answers = query_with_options(
+            var("X"),
+            vec![v_str("a"), v_str("A"), v_str("a")],
+            vec![],
+            TermBindings::default(),
+            QueryOptions {
+                term: TermOptions {
+                    case_sensitive: true,
+                    ..TermOptions::default()
+                },
+                ..QueryOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(answers.as_list().unwrap().len(), 2);
     }
 
     #[test]

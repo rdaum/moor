@@ -19,6 +19,12 @@ Cowbell entries.
 
 ### Changed
 
+- Relations store each tuple once. Repeated assertion returns the existing identity, and one
+  retraction removes the fact. The first write repairs duplicate records and indexes from older
+  worlds. Owners can also run `relation:repair()` explicitly.
+- Relation queries return distinct, case-sensitive answers. `query` raises an error if its result
+  limit prevents a complete answer. `query_result` returns rows with an explicit completeness flag.
+
 - Rule conditions now use named predicate arguments and explicit input references. For example,
   `This owner_is(Accessor)?` becomes `owner_is(object: input.This, owner: input.Accessor)`. Recreate
   saved rules and reaction conditions in the new format. The previous nested-list rule
