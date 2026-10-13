@@ -95,13 +95,13 @@ object REACTION [
     "",
     "Conditions use the `$rule_engine` syntax to define prerequisites for effects to run:",
     "```moo",
-    "reaction = $reaction:mk('on_pet, \"NOT This is_grouchy?\", {",
+    "reaction = $reaction:mk('on_pet, \"NOT property_is(object: input.This, field: 'mood, value: \\\"grouchy\\\")\", {",
     "  {'increment, 'pets_received},",
     "  {'emote, \"purrs contentedly.\"}",
     "});",
     "```",
     "",
-    "This reaction will only fire if the `on_pet` event occurs *and* the object (`This`) is *not* `is_grouchy?`.",
+    "This reaction will only fire if the `on_pet` event occurs *and* the object (`This`) does not have a grouchy mood.",
     "",
     "### Threshold Triggers",
     "",
@@ -210,7 +210,7 @@ object REACTION [
     "Parse when clause if provided";
     let parsed_when = 0;
     if (typeof(when_clause) == TYPE_STR && length(when_clause) > 0)
-      parsed_when = $rule_engine:parse_expression(when_clause);
+      parsed_when = $rule_engine:parse_expression(when_clause, 'reaction_condition, $rule_engine:trigger_scope(trigger));
     elseif (typeof(when_clause) != TYPE_INT || when_clause != 0)
       raise(E_INVARG, "Reaction condition must be zero or a nonempty rule string");
     endif
@@ -597,7 +597,7 @@ object REACTION [
 
   method test_mk_with_condition owner: HACKER
     "Test creating a reaction with a when condition.";
-    reaction = this:mk('on_pet, "NOT This is_grouchy?", {});
+    reaction = this:mk('on_pet, "NOT property_is(object: input.This, field: 'mood, value: \"grouchy\")", {});
     $test_utils:assert_type(reaction, TYPE_FLYWEIGHT, "mk() should return a flyweight");
     $test_utils:assert_true(reaction.when != 0, "string when clause should be parsed");
     $test_utils:assert_type(reaction.when, TYPE_FLYWEIGHT, "when clause should be a rule flyweight");
@@ -752,9 +752,7 @@ object REACTION [
     target = $test_utils:anonymous($root);
     add_property(target, "ready", false, {this.owner, "r"});
     add_property(target, "fired", false, {this.owner, "r"});
-    add_verb(target, {this.owner, "rxd", "fact_ready"}, {"this", "none", "this"});
-    set_verb_code(target, "fact_ready", {"return this.ready;"});
-    reaction = this:mk('on_ready, "This ready?", {{'set, 'fired, true}});
+    reaction = this:mk('on_ready, "property_is(object: input.This, field: 'ready, value: true)", {{'set, 'fired, true}});
     $reaction:install(target, "ready_reaction", reaction);
     target:fire_trigger('on_ready, ['Actor -> player]);
     $test_utils:assert_false(target.fired, "failed when clause should block effects");

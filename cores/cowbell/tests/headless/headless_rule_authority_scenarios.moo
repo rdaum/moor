@@ -47,7 +47,7 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
       add_property(target, "audit_value", 0, {#90101, ""});
       target.open = false;
       target.locked = false;
-      $reaction:install(target, "probe_reaction", $reaction:mk('on_open, "Actor is(#90102)?", {{'set, 'audit_value, 7}}));
+      $reaction:install(target, "probe_reaction", $reaction:mk('on_open, "input.Actor == #90102", {{'set, 'audit_value, 7}}));
       $reaction:install(target, "threshold_reaction", $reaction:mk({'when, 'audit_value, 'ge, 5}, 0, {{'set, 'audit_value, 9}}));
       for attack in ({"event", "threshold", "dispatch", "continuation", "actor"})
         $test_utils:assert_raises(E_PERM, this, "_trigger_as_guest", {target, attack}, "Guests cannot forge owner events or internal dispatch");
@@ -228,21 +228,46 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
 
   method test_rule_predicate_preserves_caller owner: RUNTIME_WIZARD
     "Nested engine and flyweight entries must pass the original caller to predicates.";
-    const rule = $rule:mk('audit, 'audit, {{'audit_principal, this, {'var, 'Principal}}});
-    for entry in ({"engine", "rule"})
-      const result = this:_evaluate_as_programmer(entry, rule);
-      $test_utils:assert_true(result['success], "Principal predicate must succeed");
-      $test_utils:assert_eq(result['bindings]['Principal], #90101, "Predicate caller must be the invoking programmer");
-    endfor
+    $rule_engine:register_predicate('audit_principal,
+      ['description -> "Observe the incoming principal.", 'inputs -> [],
+        'outputs -> ['principal -> 'object]], this, "query_principal");
+    try
+      const rule = $rule_engine:parse_expression("audit_principal() -> (principal: Principal)");
+      for entry in ({"engine", "rule"})
+        const result = this:_evaluate_as_programmer(entry, rule);
+        $test_utils:assert_true(result['success], "Principal predicate must succeed");
+        $test_utils:assert_eq(result['bindings]['Principal], #90101,
+          "Predicate caller must be the invoking programmer");
+      endfor
+    finally
+      $rule_engine:unregister_predicate('audit_principal);
+    endtry
     return true;
   endmethod
 
   method test_rule_cartesian_alternatives owner: RUNTIME_WIZARD
     "Independent two-valued predicates retain all four conjunction bindings.";
-    const rule = $rule:mk('audit, 'audit, {{'audit_numbers, this, {'var, 'N}}, {'audit_letters, this, {'var, 'L}}});
-    const result = $rule_engine:evaluate(rule);
-    $test_utils:assert_true(result['success], "A conjunction solution exists");
-    $test_utils:assert_eq(1 + length(result['alternatives]), 4, "All conjunction combinations must remain available");
+    $rule_engine:register_predicate('audit_numbers,
+      ['description -> "Two numbers.", 'inputs -> [], 'outputs -> ['value -> 'integer]],
+      this, "query_numbers");
+    $rule_engine:register_predicate('audit_letters,
+      ['description -> "Two letters.", 'inputs -> [], 'outputs -> ['value -> 'string]],
+      this, "query_letters");
+    try
+      const rule = $rule_engine:parse_expression(
+        "audit_numbers() -> (value: N) AND audit_letters() -> (value: L)");
+      const result = $rule_engine:evaluate(rule);
+      $test_utils:assert_true(result['success], "A conjunction solution exists");
+      const rows = {result['bindings], @result['alternatives]};
+      $test_utils:assert_eq(length(rows), 4, "All conjunction combinations remain available");
+      for expected in ({['N -> 1, 'L -> "a"], ['N -> 1, 'L -> "b"],
+        ['N -> 2, 'L -> "a"], ['N -> 2, 'L -> "b"]})
+        $test_utils:assert_true(expected in rows, "Each independent combination is present");
+      endfor
+    finally
+      $rule_engine:unregister_predicate('audit_numbers);
+      $rule_engine:unregister_predicate('audit_letters);
+    endtry
     return true;
   endmethod
 
@@ -267,44 +292,50 @@ object HEADLESS_RULE_AUTHORITY_SCENARIOS
     raise(E_INVARG);
   endmethod
 
-  method fact_audit_principal owner: RUNTIME_WIZARD
+  method query_principal owner: RUNTIME_WIZARD
     "Observe the principal passed by the engine's predicate call.";
-    return {caller_perms()};
+    return ['rows -> {['principal -> caller_perms()]}, 'complete -> true];
   endmethod
 
-  method fact_audit_numbers owner: RUNTIME_WIZARD
+  method query_numbers owner: RUNTIME_WIZARD
     "Enumerate two independent number bindings.";
-    return {1, 2};
+    return ['rows -> {['value -> 1], ['value -> 2]}, 'complete -> true];
   endmethod
 
-  method fact_audit_letters owner: RUNTIME_WIZARD
+  method query_letters owner: RUNTIME_WIZARD
     "Enumerate two independent letter bindings.";
-    return {"a", "b"};
+    return ['rows -> {['value -> "a"], ['value -> "b"]}, 'complete -> true];
   endmethod
+
   method test_invalid_conditions_fail_closed owner: RUNTIME_WIZARD
-    "Missing predicates and errors inside predicates must remain errors under negation.";
-    for predicate in ({'audit_missing, 'audit_broken})
-      const rule = $rule:mk('guard, 'guard, {{'not, {predicate, this}}});
-      $test_utils:assert_raises(E_VERBNF, $rule_engine, "evaluate", {rule}, "Negation must not turn an evaluation error into success");
+    "Unknown predicates fail authoring, and failed queries cannot satisfy negation.";
+    $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression", {"NOT audit_missing()"},
+      "An unknown predicate cannot become an installed condition");
+    $rule_engine:register_predicate('audit_broken,
+      ['description -> "An implementation error.", 'inputs -> [], 'outputs -> []],
+      this, "query_broken");
+    try
+      const rule = $rule_engine:parse_expression("NOT audit_broken()");
+      $test_utils:assert_raises(E_VERBNF, $rule_engine, "evaluate", {rule},
+        "Negation must not turn an evaluation error into success");
+    finally
+      $rule_engine:unregister_predicate('audit_broken);
+    endtry
+    const valid_rule = $rule_engine:parse_expression("NOT FALSE");
+    $test_utils:assert_true($rule_engine:evaluate(valid_rule)['success], "An ordinary false result supports negation");
+    for condition in ({valid_rule, {}, [], false, 1, ""})
+      $test_utils:assert_raises(E_INVARG, $reaction, "mk", {'probe, condition, {}},
+        "Unsupported conditions must not produce unconditional reactions");
     endfor
-    const valid_rule = $rule:mk('guard, 'guard, {{'not, {'audit_false, this}}});
-    $test_utils:assert_true($rule_engine:evaluate(valid_rule)['success], "An ordinary false predicate still supports negation");
-    const parsed = $rule_engine:parse_expression("This is(#-1)?");
-    for condition in ({parsed, {}, [], false, 1, ""})
-      $test_utils:assert_raises(E_INVARG, $reaction, "mk", {'probe, condition, {}}, "Unsupported conditions must not produce unconditional reactions");
-    endfor
-    for expression in ({"This is(#-1)? garbage", "This is(#-1)?)", "This is(#-1)? This is(#1)?"})
-      $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression", {expression}, "The parser must consume the complete condition");
+    for expression in ({"TRUE garbage", "TRUE)", "TRUE FALSE"})
+      $test_utils:assert_raises(E_INVARG, $rule_engine, "parse_expression", {expression},
+        "The parser must consume the complete condition");
     endfor
     return true;
   endmethod
 
-  method fact_audit_broken owner: RUNTIME_WIZARD
+  method query_broken owner: RUNTIME_WIZARD
     "A broken predicate must not look like an ordinary negative result.";
     return this:audit_missing_internal_method();
-  endmethod
-
-  method fact_audit_false owner: RUNTIME_WIZARD
-    return false;
   endmethod
 endobject

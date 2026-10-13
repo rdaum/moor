@@ -7,59 +7,21 @@ object RULE [
   owner: ARCH_WIZARD
   readable: true
 
-  override description (owner: ARCH_WIZARD, flags: "rc") = "Flyweight delegate for Datalog-style rules. Rules consist of a head predicate and a body of goals.";
+  override description (owner: ARCH_WIZARD, flags: "rc") = "A validated condition tree with declared input, parameter, and state types.";
 
-  method mk owner: ARCH_WIZARD
-    "Create a new rule flyweight.";
-    "Args: name, head_predicate, body_goals";
-    "Example: $rule:mk('trusted, 'trusted, {{member, 'X, #guild}, {reputation, #guild, 5}})";
-    {rule_name, head_predicate, body_goals} = args;
-    typeof(head_predicate) == TYPE_SYM || typeof(head_predicate) == TYPE_STR || raise(E_TYPE, "head_predicate must be symbol or string");
-    typeof(body_goals) == TYPE_LIST || raise(E_TYPE, "body_goals must be list");
-    "Extract variables from body";
-    variables = this:_extract_variables(body_goals);
-    return <this, .name = rule_name, .head = tosym(head_predicate), .body = body_goals, .variables = variables>;
-  endmethod
-
-  method _extract_variables owner: HACKER
-    "Extract all normalized variable names from goals.";
-    {goals} = args;
-    variables = {};
-    return this:_collect_variables(goals, variables);
-  endmethod
-
-  method _collect_variables owner: HACKER
-    "Append normalized variable names found in value to variables.";
-    {value, variables} = args;
-    if (typeof(value) == TYPE_LIST && length(value) == 2 && value[1] == 'var && typeof(value[2]) == TYPE_SYM)
-      !(value[2] in variables) && (variables = {@variables, value[2]});
-      return variables;
-    endif
-    if (typeof(value) == TYPE_LIST)
-      for item in (value)
-        variables = this:_collect_variables(item, variables);
-      endfor
-    endif
-    return variables;
+  method mk owner: HACKER
+    "Construct one rule from a canonical condition tree and its declared scope.";
+    const {name, condition, ?scope = $rule_engine:scope()} = args;
+    const rule = <$rule, .name = tosym(name), .condition = condition, .scope = scope>;
+    const validation = $rule_engine:validate_rule(rule);
+    validation['valid] || raise(E_INVARG, validation['warnings]:join("; "));
+    return rule;
   endmethod
 
   method evaluate owner: ARCH_WIZARD
-    "Evaluate this rule with initial bindings under the invoking principal.";
+    "Evaluate with explicit input values, parameters, and local state under caller authority.";
     set_task_perms(caller_perms());
-    "Returns: {success: bool, bindings: map, alternatives: list}";
-    const {?initial_bindings = []} = args;
-    "Delegate to rule engine";
-    return $rule_engine:evaluate(this, initial_bindings);
-  endmethod
-
-  method test_rule_creation owner: HACKER
-    "Test creating a simple rule.";
-    guild_obj = this;
-    goal = {'member, {'var, 'X}, guild_obj};
-    rule = this:mk('test_rule, 'test_rule, {goal});
-    typeof(rule) == TYPE_FLYWEIGHT || raise(E_ASSERT, "Should return flyweight");
-    rule.head != 'test_rule && raise(E_ASSERT, "Head should be test_rule");
-    length(rule.body) != 1 && raise(E_ASSERT, "Body should have 1 goal");
-    return true;
+    const {?inputs = [], ?parameters = [], ?state = []} = args;
+    return $rule_engine:evaluate(this, inputs, parameters, state);
   endmethod
 endobject

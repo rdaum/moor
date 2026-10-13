@@ -19,6 +19,12 @@ Cowbell entries.
 
 ### Changed
 
+- Rule conditions now use named predicate arguments and explicit input references. For example,
+  `This owner_is(Accessor)?` becomes `owner_is(object: input.This, owner: input.Accessor)`. Recreate
+  saved rules and reaction conditions in the new format. The previous nested-list rule
+  representation and implicit object-name matching are no longer supported.
+- Custom rule predicates require named input and output declarations through
+  `$rule_engine:register_predicate`. Rules no longer discover arbitrary `fact_*` verbs on objects.
 - Install custom reactions with `$reaction:install(host, property, reaction)` or the builder
   commands. Raw property assignment no longer authorizes execution. Reinstall approved reactions
   after an ownership transfer or definition change. Shipped objects use the same installer during
@@ -48,6 +54,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Nested rule conditions preserve their grouping during evaluation and when displayed for editing.
+  Negation accepts inputs supplied by the operation. Unknown inputs and predicates are rejected
+  before a condition is saved.
 - Reaction dispatch no longer borrows a new owner's authority after an ownership transfer. Copied or
   edited installation grants cannot authorize effects. Delayed effects recheck the installation
   before execution. State effects cannot change built-in object properties.

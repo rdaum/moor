@@ -22,7 +22,9 @@ object KIBBLE_CUPBOARD [
   };
   override description (owner: ARCH_WIZARD, flags: "rc") = "A sturdy wooden cupboard with a brass lock on the door. It has a faint aroma of cat food emanating from within.";
   override get_denied_msg (owner: ARCH_WIZARD, flags: "rc") = {"The cupboard is far too heavy and unwieldy to pick up."};
-  override get_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE, .name = 'is_portable, .body = {{'is_portable, {'var, 'This}}}, .variables = {'This}, .head = 'is_portable>;
+  override get_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE,
+    .name = 'is_portable, .condition = ['kind -> 'any, 'children -> {}],
+    .scope = ['input -> [], 'parameter -> [], 'state -> [], 'binding -> []]>;
   override lock_denied_msg (owner: ARCH_WIZARD, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'iobj>,
     " won't lock without the proper key."
@@ -37,7 +39,12 @@ object KIBBLE_CUPBOARD [
     <SUB, .capitalize = false, .type = 'dobj>,
     " with a satisfying click."
   };
-  override lock_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE, .name = 'cupboard_lock_rule, .body = {{'is, {'var, 'Key}, BRASS_KEY}}, .variables = {'Key}, .head = 'cupboard_lock_rule>;
+  override lock_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE,
+    .name = 'cupboard_lock_rule,
+    .condition = ['kind -> 'compare, 'op -> 'eq,
+      'left -> ['kind -> 'input, 'name -> 'Key],
+      'right -> ['kind -> 'literal, 'value -> BRASS_KEY]],
+    .scope = ['input -> ['Key -> 'object], 'parameter -> [], 'state -> [], 'binding -> []]>;
   override locked (owner: HACKER, flags: "r") = true;
   override open (owner: HACKER, flags: "r") = false;
   override open_locked_msg (owner: ARCH_WIZARD, flags: "rc") = {
@@ -74,7 +81,12 @@ object KIBBLE_CUPBOARD [
     <SUB, .capitalize = false, .type = 'dobj>,
     ". The brass lock clicks open."
   };
-  override unlock_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE, .name = 'cupboard_unlock_rule, .body = {{'is, {'var, 'Key}, BRASS_KEY}}, .variables = {'Key}, .head = 'cupboard_unlock_rule>;
+  override unlock_rule (owner: ARCH_WIZARD, flags: "rc") = <RULE,
+    .name = 'cupboard_unlock_rule,
+    .condition = ['kind -> 'compare, 'op -> 'eq,
+      'left -> ['kind -> 'input, 'name -> 'Key],
+      'right -> ['kind -> 'literal, 'value -> BRASS_KEY]],
+    .scope = ['input -> ['Key -> 'object], 'parameter -> [], 'state -> [], 'binding -> []]>;
 
   method fact_is_portable owner: ARCH_WIZARD
     "Cupboards are not portable.";
@@ -87,7 +99,9 @@ object KIBBLE_CUPBOARD [
     principal == this.owner || principal.wizard || raise(E_PERM);
     set_task_perms(principal);
     pass(@args);
-    $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_take, .when = <$rule, .name = 'kibble_check, .body = {{'isa, {'var, 'Item}, $cat_kibble}}, .variables = {'Item}, .head = 'kibble_check>, .effects = {{'trigger, $henri, 'on_kibble_taken}}, .fired_at = 0>);
+    const condition = "isa(object: input.Item, prototype: " + tostr($cat_kibble) + ")";
+    $reaction:install(this, "kibble_taken_reaction",
+      $reaction:mk('on_take, condition, {{'trigger, $henri, 'on_kibble_taken}}));
     $reaction:install(this, "waft_reaction", <$reaction, .enabled = true, .trigger = 'on_open, .when = 0, .effects = {
       {'announce, "A waft of kibble-scented air escapes from the cupboard."},
       {'trigger, $henri, 'on_cupboard_open}

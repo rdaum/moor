@@ -7,8 +7,14 @@ true
 @nonprogrammer
 % @add-reaction me.counter_reaction 'probe 0 {{'increment, 'counter}}
 ~~Set
-% @set-rule me.audit_rule #90102 is(#90102)?
+% @set-rule me.audit_rule NOT (FALSE AND TRUE)
 ~~Set rule
+% @show-rule me.audit_rule
+~~NOT
+% @set-rule me.audit_rule TRUE garbage
+~~Unexpected token at character
+% @set-rule me.audit_rule missing_check()
+~~unknown
 @wizard
 ; #90102:fire_trigger('probe); return #90102.counter == 1 && $rule_engine:evaluate(#90102.audit_rule)['success];
 true

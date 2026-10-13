@@ -101,7 +101,7 @@ object HEADLESS_WORLD_SCENARIOS
     move(#90100, #-1);
     try
       container.open = false;
-      container.open_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'owner_open);
+      container.open_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_open, $rule_engine:policy_scope('open_rule));
       const result = `this:call_as_programmer(container, "action_open", #90100, []) ! E_PERM => E_PERM';
       $test_utils:assert_eq(result, E_PERM, "supplied foreign actor denied");
       $test_utils:assert_eq(container.open, false, "denial preserves closed state");
@@ -147,7 +147,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_eq(this:call_as_programmer(container, "action_take_from", #90101, [], item), true, "public take succeeds");
       $test_utils:assert_eq(item.location, #90101, "item received");
       container.open = false;
-      container.open_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'owner_open);
+      container.open_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_open, $rule_engine:policy_scope('open_rule));
       $test_utils:assert_eq(this:call_as_programmer(container, "action_open", #90101, []), false, "restricted actor denied");
       $test_utils:assert_eq(container.open, false, "restricted denial preserves state");
     finally
@@ -299,7 +299,7 @@ object HEADLESS_WORLD_SCENARIOS
       this:call_as_test_player(item, "get");
       $test_utils:assert_eq(item.location, box, "closed container cannot be bypassed by Take");
       box.open = true;
-      box.take_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'owner_take);
+      box.take_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_take, $rule_engine:policy_scope('take_rule));
       this:call_as_test_player(item, "get");
       $test_utils:assert_eq(item.location, box, "container take policy still applies");
       box.take_rule = 0;
@@ -467,7 +467,7 @@ object HEADLESS_WORLD_SCENARIOS
       $test_utils:assert_true(!box:suggestion_eligibility("contents", {beta_ref})[beta_ref]["eligible"], "closed content eligibility reveals no label");
       $test_utils:assert_eq(box:suggestions("contents", "")["items"], {}, "closed contents stay private");
       box.open = true;
-      box.take_rule = $rule_engine:parse_expression("This owner_is(Accessor)?", 'owner_view);
+      box.take_rule = $rule_engine:parse_expression("owner_is(object: input.This, owner: input.Accessor)", 'owner_view, $rule_engine:policy_scope('take_rule));
       box.owner = player;
       $test_utils:assert_eq({owner_row["value"] for owner_row in (box:suggestions("contents", "")["items"])}, {tostr(beta)}, "viewing rules allow the owner to see contents");
       $test_utils:assert_true(box:suggestion_eligibility("contents", {beta_ref})[beta_ref]["eligible"], "owner-visible contents remain eligible");

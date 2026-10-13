@@ -80,11 +80,6 @@ messaging/letter.moo:reply
 rules/reaction.moo:execute
 rules/reaction.moo:execute_effect
 rules/reaction.moo:_resolve_msg
-rules/rule.moo:evaluate
-rules/rule_engine.moo:evaluate
-rules/rule_engine.moo:_prove_alternatives
-rules/rule_engine.moo:_prove_goals
-rules/rule_engine.moo:_solve_goal
 root.moo:get_reactions
 root.moo:_get_reactions_for
 root.moo:fire_trigger
@@ -273,3 +268,9 @@ features/builder_features.moo:@add-reaction
 features/builder_features.moo:@enable-reaction
 features/builder_features.moo:@disable-reaction
 rules/behavior_schema.moo
+
+rules/rule.moo
+rules/rule_engine.moo
+rules/condition.moo
+rules/world_facts.moo
+llm/agent_building_tools.moo:tool_test_rule

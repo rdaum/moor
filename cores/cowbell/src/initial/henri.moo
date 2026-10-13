@@ -49,11 +49,21 @@ object HENRI [
     <SUB, .capitalize = false, .type = 'pos_adj>,
     " nose up at the offering with disdain."
   };
-  property feed_rule (owner: HACKER, flags: "r") = <RULE, .name = 'henri_feed_rule, .body = {
-      {'is_grouchy, {'var, 'This}},
-      {'isa, {'var, 'Food}, CAT_KIBBLE},
-      {'location_is, {'var, 'Food}, {'var, 'Accessor}}
-    }, .variables = {'This, 'Food, 'Accessor}, .head = 'henri_feed_rule>;
+  property feed_rule (owner: HACKER, flags: "r") = <RULE,
+    .name = 'henri_feed_rule,
+    .condition = ['kind -> 'all, 'children -> {
+      ['kind -> 'predicate, 'name -> 'property_is,
+        'arguments -> ['object -> ['kind -> 'input, 'name -> 'This],
+          'field -> ['kind -> 'literal, 'value -> 'mood],
+          'value -> ['kind -> 'literal, 'value -> "grouchy"]], 'bind -> []],
+      ['kind -> 'predicate, 'name -> 'isa,
+        'arguments -> ['object -> ['kind -> 'input, 'name -> 'Food],
+          'prototype -> ['kind -> 'literal, 'value -> CAT_KIBBLE]], 'bind -> []],
+      ['kind -> 'predicate, 'name -> 'location_is,
+        'arguments -> ['object -> ['kind -> 'input, 'name -> 'Food],
+          'location -> ['kind -> 'input, 'name -> 'Accessor]], 'bind -> []]}],
+    .scope = ['input -> ['This -> 'object, 'Food -> 'object, 'Accessor -> 'object],
+      'parameter -> [], 'state -> [], 'binding -> []]>;
   property kibble_taken_msg_bag (owner: HACKER, flags: "r") = <MSG_BAG, {{
       <SUB, .capitalize = true, .type = 'dobj>,
       " starts weaving around ",
@@ -190,7 +200,14 @@ object HENRI [
       <SUB, .capitalize = true, .type = 'actor>,
       " murmurs something that sounds like \"The vibrations are almost as good as the old heating vent... almost.\""
     }}>;
-  property pet_rule (owner: HACKER, flags: "r") = <RULE, .name = 'henri_pet_rule, .body = {{'not, {'is_grouchy, {'var, 'This}}}}, .variables = {'This}, .head = 'henri_pet_rule>;
+  property pet_rule (owner: HACKER, flags: "r") = <RULE,
+    .name = 'henri_pet_rule,
+    .condition = ['kind -> 'not,
+      'child -> ['kind -> 'predicate, 'name -> 'property_is,
+        'arguments -> ['object -> ['kind -> 'input, 'name -> 'This],
+          'field -> ['kind -> 'literal, 'value -> 'mood],
+          'value -> ['kind -> 'literal, 'value -> "grouchy"]], 'bind -> []]],
+    .scope = ['input -> ['This -> 'object], 'parameter -> [], 'state -> [], 'binding -> []]>;
   property pets_received (owner: HACKER, flags: "rc") = 33;
   property scheduled_behaviours (owner: HACKER, flags: "rc") = [];
   property sleepy_threshold_msg (owner: HACKER, flags: "r") = {
@@ -786,8 +803,12 @@ object HENRI [
     $reaction:install(this, "couch_intruder_reaction", <$reaction, .enabled = true, .trigger = 'on_couch_intruder, .when = 0, .effects = {{'announce, 'couch_intruder_msg}}, .fired_at = 0>);
     $reaction:install(this, "cupboard_open_reaction", <$reaction, .enabled = true, .trigger = 'on_cupboard_open, .when = 0, .effects = {{'announce, 'cupboard_open_msg}}, .fired_at = 0>);
     $reaction:install(this, "kibble_taken_reaction", <$reaction, .enabled = true, .trigger = 'on_kibble_taken, .when = 0, .effects = {{'action, 'stand, $couch}, {'announce, 'kibble_taken_msg_bag}}, .fired_at = 0>);
-    $reaction:install(this, "on_pet_grouchy_reaction", <$reaction, .enabled = true, .trigger = 'on_pet, .when = <$rule, .name = 'grouchy_rule, .body = {{'is_grouchy, {'var, 'This}}}, .variables = {'This}, .head = 'grouchy_rule>, .effects = {{'announce, 'pet_grouchy_msg}}, .fired_at = 0>);
-    $reaction:install(this, "on_pet_playful_reaction", <$reaction, .enabled = true, .trigger = 'on_pet, .when = <$rule, .name = 'playful_rule, .body = {{'is_playful, {'var, 'This}}}, .variables = {'This}, .head = 'playful_rule>, .effects = {{'announce, 'pet_playful_msg}}, .fired_at = 0>);
+    $reaction:install(this, "on_pet_grouchy_reaction", $reaction:mk('on_pet,
+      "property_is(object: input.This, field: 'mood, value: \"grouchy\")",
+      {{'announce, 'pet_grouchy_msg}}));
+    $reaction:install(this, "on_pet_playful_reaction", $reaction:mk('on_pet,
+      "property_is(object: input.This, field: 'mood, value: \"playful\")",
+      {{'announce, 'pet_playful_msg}}));
     $reaction:install(this, "sleepy_threshold_reaction", <$reaction, .enabled = true, .trigger = {'when, 'pets_received, 'ge, 4}, .when = 0, .effects = {
       {'set, 'mood, "sleepy"},
       {'announce, 'sleepy_threshold_msg},
