@@ -9,7 +9,8 @@ call a verb. You can get the command reference at any time by typing `help #` or
 the world.
 
 Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
-See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+See [names and grammar](../building/names-and-grammar.md) for aliases, plural names, and
+room-listing choices.
 
 ## Before you begin
 
@@ -249,9 +250,9 @@ All ordinary permissions still apply. If you get a permission error, check wheth
 object and whether you have the required privileges. `#` gives you a shorter way to ask; it does not
 give you another person's authority.
 
-For more practice, [make a pet rock](programming-with-rules-and-reactions.md) or
-[make room for Henri](henri-and-the-cupboard.md). Both lessons use `#` to work with their objects.
-For a reminder of the syntax while building, type `help #`.
+For more practice, [make a pet rock](pet-rock.md) or
+[make room for Henri](../actors/henri-and-the-cupboard.md). Both lessons use `#` to work with their
+objects. For a reminder of the syntax while building, type `help #`.
 
 ## Where this command came from
 

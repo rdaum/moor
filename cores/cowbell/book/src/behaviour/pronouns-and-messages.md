@@ -6,9 +6,9 @@ pebble.” You can write one message that produces both versions.
 Cowbell calls this a **message template**. A template contains ordinary text and tokens in braces,
 such as `{nc}`. Each token supplies a name, a pronoun, or a choice of words.
 
-The [template reference](message-template-reference.md) lists the tokens and explains the
-programming interface. In the world, use `help pronouns` to choose your pronouns or `help messages`
-for a short authoring tutorial.
+The [template reference](../reference/message-template-reference.md) lists the tokens and explains
+the programming interface. In the world, use `help pronouns` to choose your pronouns or
+`help messages` for a short authoring tutorial.
 
 ## Choose your own pronouns
 
@@ -56,7 +56,8 @@ A name such as `pet rock` stays separate from the article in “a pet rock” or
 `@grammar boots number plural` for “some boots” and `@grammar water kind mass` for “some water.”
 Actors inherit complete-name grammar, so Henri needs no added article. These choices do not change
 pronouns: “Henri is here” and “They are here” can both be correct. The
-[naming lesson](../docs/names-and-grammar.md) walks through names, aliases, listings, and previews.
+[naming lesson](../building/names-and-grammar.md) walks through names, aliases, listings, and
+previews.
 
 ## Choose pronouns for an NPC
 
@@ -106,7 +107,8 @@ player.location:announce(this:message_event(player, "pet_msg"));
 person with `player:inform_current(...)`.
 
 Custom participants, such as a named recipient or destination, need a declaration and a supplied
-value. Those are advanced extensions. The [reference](message-template-reference.md) describes them.
+value. Those are advanced extensions. The [reference](../reference/message-template-reference.md)
+describes them.
 
 ## Give an object a different pickup message
 
@@ -282,8 +284,8 @@ Some interactions supply a participant by name, such as `recipient`. For these m
 `{pronoun recipient pos_adj} coat` means “their coat” to others and “your coat” to the recipient.
 The name must come from the interaction; writing `recipient` does not select someone automatically.
 
-The [reference](message-template-reference.md#which-roles-does-a-message-supply) lists the roles
-supplied by common interactions and reaction effects.
+The [reference](../reference/message-template-reference.md#which-roles-does-a-message-supply) lists
+the roles supplied by common interactions and reaction effects.
 
 ## Use messages in reactions
 
@@ -325,7 +327,7 @@ message when you want an additional response.
 For an item named “water,” use `@grammar water kind mass` to get “some water” and “the water.” For a
 name with an unusual pronunciation, use `@grammar OBJECT article a` or `article an`. These commands
 require permission to edit the object. See `help @grammar` or the
-[naming lesson](../docs/names-and-grammar.md) for examples.
+[naming lesson](../building/names-and-grammar.md) for examples.
 
 Message templates and Djot descriptions are different authoring formats. A template does not
 automatically interpret asterisks as emphasis. A room description does not automatically interpret

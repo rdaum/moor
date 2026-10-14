@@ -16,6 +16,14 @@ code, including rooms, player characters, commands, and tools to extend them. In
 this starting database is a **core**. [Meadow](../../clients/meadow/README.md) is the browser client
 through which people interact with the world. Cowbell supports plain text terminal clients too.
 
+The [Cowbell Book](book/src/index.md) collects the building and programming tutorials in one place.
+Its [contents](book/src/SUMMARY.md) also outline the guides for visitors, NPC authors, and world
+operators. Chapters marked planned still need to be written. The
+[book coverage notes](book/README.md) identify those gaps and the existing source material.
+
+To build or preview the book locally, use `make -C cores/cowbell book` or
+`make -C cores/cowbell book-serve` from the repository root. Both require mdBook.
+
 ## What you can do
 
 - **Meet and explore.** Talk, whisper, gesture, and move between rooms. The starting world includes
@@ -43,23 +51,24 @@ action to a response. A reaction can make a cat purr after someone pets it. Buil
 rules and reactions without a program for each interaction. Programmers can add new behaviors in MOO
 code.
 
-The [introduction to rules, reactions, and relations](docs/rules-reactions-relations.md) explains
-how these parts fit together. The [builder's guide](manual/reactions.md) gives commands for a
-responsive box, club membership, and a timed puzzle. These examples require builder privileges, with
-no MOO programming.
+The
+[introduction to rules, reactions, and relations](book/src/behaviour/rules-reactions-relations.md)
+explains how these parts fit together. The [builder's guide](book/src/behaviour/reactions.md) gives
+commands for a responsive box, club membership, and a timed puzzle. These examples require builder
+privileges, with no MOO programming.
 
-For a first programming project, try
-[Let's make a pet rock](docs/programming-with-rules-and-reactions.md). Then
-[make room for Henri](docs/henri-and-the-cupboard.md), a cat with moods, a food cupboard, and a
-favourite couch. Both tutorials create their own objects and run in the test suite. The
-[naming tutorial](docs/names-and-grammar.md) explains names, aliases, articles, and room listings.
-The [object shortcuts tutorial](docs/object-shortcuts.md) introduces `#`, a handy command for
-finding objects, inspecting properties, and calling verbs.
+For a first programming project, try [Let's make a pet rock](book/src/programming/pet-rock.md). Then
+[make room for Henri](book/src/actors/henri-and-the-cupboard.md), a cat with moods, a food cupboard,
+and a favourite couch. Both tutorials create their own objects and run in the test suite. The
+[naming tutorial](book/src/building/names-and-grammar.md) explains names, aliases, articles, and
+room listings. The [object shortcuts tutorial](book/src/programming/object-shortcuts.md) introduces
+`#`, a handy command for finding objects, inspecting properties, and calling verbs.
 
-The [rooms and passages guide](manual/rooms-and-passages.md) walks through building a workshop,
-connecting its rooms, and adding a keyed door. The [portal tutorial](manual/custom-exits.md) shows
-programmers how custom travel can appear in room descriptions and exit lists. Both tutorials run in
-the test suite. In a fresh world, type `examples` in the First Room to visit the travel examples.
+The [rooms and passages guide](book/src/building/rooms-and-passages.md) walks through building a
+workshop, connecting its rooms, and adding a keyed door. The
+[portal tutorial](book/src/programming/custom-exits.md) shows programmers how custom travel can
+appear in room descriptions and exit lists. Both tutorials run in the test suite. In a fresh world,
+type `examples` in the First Room to visit the travel examples.
 
 Objects also have owners and permissions. Cowbell provides ways to grant specific operations on an
 object without handing over ownership. This lets people share building work and give tools limited
@@ -138,7 +147,6 @@ Developer references cover specific parts of the project:
 - [Capabilities](CAPABILITIES.md): permissions and delegated authority.
 - [Rule and reaction data](manual/behavior-model.md): internal condition representation and proposed
   reaction records.
-- [Contextual suggestions](docs/suggestions.md): choices offered in Meadow's command inputs.
 - [Audit matrix](AUDIT.md): review coverage and remaining work.
 
 Contributions and questions are welcome on [Discord](https://discord.gg/Ec94y5983z).

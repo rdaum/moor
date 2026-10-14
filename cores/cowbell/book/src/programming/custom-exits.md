@@ -8,9 +8,8 @@ We will build a blue arch that takes visitors to another room. A visitor will se
 description and in `exits`, then type `enter portal` to use it. Later, we will close it for travel
 while keeping it visible.
 
-This lesson follows the programming ideas in
-[Let's make a pet rock](../docs/programming-with-rules-and-reactions.md). It assumes you have met
-properties, arguments, return values, lists, and maps there. We will use them to answer two
+This lesson follows the programming ideas in [Let's make a pet rock](pet-rock.md). It assumes you
+have met properties, arguments, return values, lists, and maps there. We will use them to answer two
 questions for the room: “What travel can you offer?” and “Where does this choice lead now?” Each
 question gets a method on the portal. The room will handle the actual movement.
 

@@ -86,8 +86,8 @@ its steps. The opening rule and the reaction's condition serve different purpose
 
 Most events report a successful action. An opening reaction runs after the cupboard opens, so it
 cannot prevent that opening. Some objects offer more specific events. The
-[Henri tutorial](henri-and-the-cupboard.md) gives a cat separate events for a pet attempt and a
-successful pet. He can react to an attempt he refuses.
+[Henri tutorial](../actors/henri-and-the-cupboard.md) gives a cat separate events for a pet attempt
+and a successful pet. He can react to an attempt he refuses.
 
 Reactions respond to the events their objects support. A condition such as “the cat is nearby” is
 checked when the selected event happens. It does not continuously watch for the cat's arrival.
@@ -659,8 +659,8 @@ in MOO, the world's programming language. Builders can then combine the availabl
 ## Continue building
 
 You can adapt these examples by choosing a different event, condition, or step. The
-[builder's guide](../manual/reactions.md) covers more command options, including combined conditions
-and named settings.
+[builder's guide](reactions.md) covers more command options, including combined conditions and named
+settings.
 
 For an in-world introduction, enter `help @reaction`. The command `@reaction events` lists the
 available events, and `@reaction steps` lists the kinds of response you can add.

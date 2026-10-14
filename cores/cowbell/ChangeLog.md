@@ -11,7 +11,7 @@ Cowbell entries.
 - Objects control noun phrases, grammar, and matching names through inherited verbs. `@grammar` lets
   builders inspect and edit articles, plural names, and room-listing preferences. Rooms, inventory,
   clothing, and stock messages share those choices. Articles work in commands and completion without
-  fuzzy matching. See the [naming lesson](docs/names-and-grammar.md).
+  fuzzy matching. See the [naming lesson](book/src/building/names-and-grammar.md).
 
 - Builders can send events between objects, use named messages and message bags in reaction steps,
   and direct owned NPCs with `@act`. `@schedule` can send recurring events with optional timing
@@ -26,11 +26,11 @@ Cowbell entries.
 
 - `#` accepts expressions in property assignments, such as
   `#Henri.pronouns = $pronouns:lookup("he/him")`. The
-  [object shortcuts tutorial](docs/object-shortcuts.md) and `help #` explain lookup, properties,
-  scopes, and verb calls.
+  [object shortcuts tutorial](book/src/programming/object-shortcuts.md) and `help #` explain lookup,
+  properties, scopes, and verb calls.
 
-- Add an executable [Henri tutorial](docs/henri-and-the-cupboard.md) after Pet Rock. An ordinary
-  programmer builds a cat, food cupboard, key, and couch, then connects their reactions.
+- Add an executable [Henri tutorial](book/src/actors/henri-and-the-cupboard.md) after Pet Rock. An
+  ordinary programmer builds a cat, food cupboard, key, and couch, then connects their reactions.
 - Builders can use custom event names in `@reaction OBJECT NAME after EVENT`. The names belong to
   each receiving object and need no global registration.
 
@@ -63,8 +63,9 @@ Cowbell entries.
   participants. Custom message producers must declare bindings before authors use them.
 - Message templates can select pronouns for any named participant with `{pronoun BINDING FORM}`. The
   participant sees “you” and “your”; other readers see that participant's chosen pronouns.
-- Add a [builder's guide](manual/reactions.md) with command examples for reactions, membership
-  rules, and a timed puzzle. These workflows require builder privileges, with no MOO programming.
+- Add a [builder's guide](book/src/behaviour/reactions.md) with command examples for reactions,
+  membership rules, and a timed puzzle. These workflows require builder privileges, with no MOO
+  programming.
 - Add MOO parsing for an explicit Djot authoring profile, with source-location errors for
   unsupported syntax. Speech and help now preserve authored formatting in HTML, Djot, and plain
   text.

@@ -65,7 +65,7 @@ You can check that with `#`, the object lookup command:
 ```
 
 The `.name` property holds the main name. `.aliases` holds its additional command names. See
-`help #` or the [object lookup lesson](object-shortcuts.md) for more uses of `#`.
+`help #` or the [object lookup lesson](../programming/object-shortcuts.md) for more uses of `#`.
 
 ## Choose how a room introduces something
 
@@ -241,8 +241,8 @@ When you customize a message, choose the reference its sentence needs:
 `agree` selects “pick” or “picks” to fit the actor's name. `{a d}` introduces an object;
 `{listing d}` uses its listing preference.
 
-Start with [messages that fit the reader](../manual/pronouns-and-messages.md) for an explanation of
-message templates. Type `help @grammar` for the settings reference.
+Start with [messages that fit the reader](../behaviour/pronouns-and-messages.md) for an explanation
+of message templates. Type `help @grammar` for the settings reference.
 
 ## When a prototype needs custom wording
 
@@ -254,5 +254,5 @@ name for other people.
 These verbs answer questions. They must not change the world or suspend. Messages and room lists
 call them with the reader's perspective and retain their returned words for that output. `@grammar`
 identifies custom verbs and previews their actual results. See the
-[programming reference](../manual/message-template-reference.md#object-naming-verbs) for the return
-values and an example.
+[programming reference](../reference/message-template-reference.md#object-naming-verbs) for the
+return values and an example.

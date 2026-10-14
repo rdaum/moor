@@ -43,17 +43,32 @@ CLEAN_EXTRA = $(HEADLESS_SRC_DIRECTORY) $(TEST_SRC_DIRECTORY) gen.empty.log gen.
 CORE_HELP = 'make test-headless      Run headless methods (alias: runtime-headless).' \
             'make test-session       Run session scenarios (alias: runtime-session).' \
             'make test-tutorial      Run the executable authoring tutorials.' \
+            'make book               Build the Cowbell Book (requires mdbook).' \
+            'make book-serve         Preview the Cowbell Book locally.' \
             'make test-wire          Run TCP and restart tests.' \
             'make test-git-worker    Run Git worker integration tests.'
 include ../make/core.mk
 
 TEST_BIN_DIR = $(MOORC_BIN_DIR)
 SESSION_RUNNER = $(TEST_BIN_DIR)/core-session-runner
-SESSION_TUTORIALS = docs/names-and-grammar.md docs/object-shortcuts.md docs/programming-with-rules-and-reactions.md docs/henri-and-the-cupboard.md manual/rooms-and-passages.md manual/custom-exits.md
+SESSION_TUTORIALS = book/src/building/names-and-grammar.md \
+                    book/src/programming/object-shortcuts.md \
+                    book/src/programming/pet-rock.md \
+                    book/src/actors/henri-and-the-cupboard.md \
+                    book/src/building/rooms-and-passages.md \
+                    book/src/programming/custom-exits.md
+MDBOOK ?= mdbook
 EXPECT_FAILURE = $(PYTHON) $(CORE_MAKE_DIR)expect_failure.py
 TEST_TOOL_PACKAGES = moorc core-style-audit core-session-runner moor-server moor-daemon moor-telnet-host moor-git-worker
 
-.PHONY: build-test-tools check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-tutorial test-harness test-build-inventory test-wire test-git-worker
+.PHONY: book book-serve build-test-tools check-style runtime-test-src runtime-headless-src runtime-headless runtime-session test-headless test-session test-tutorial test-harness test-build-inventory test-wire test-git-worker
+
+book:
+	$(MDBOOK) build book
+
+book-serve:
+	$(MDBOOK) serve book
+
 # Keep one dependency feature set for every binary used by these checks.
 build-test-tools:
 	$(CARGO) build --locked --manifest-path $(MOOR_ROOT)/Cargo.toml --profile $(MOORC_PROFILE) $(foreach package,$(TEST_TOOL_PACKAGES),-p $(package)) --bins

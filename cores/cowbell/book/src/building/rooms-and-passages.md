@@ -106,8 +106,8 @@ Try opening it with your key:
 ```
 
 You can also use conditions such as `actor is me`, `always`, or a relation condition from the
-[reaction guide](reactions.md). `me` means the person who wrote the condition. Passage conditions
-can refer to `actor`, `key`, `from`, and `to`.
+[reaction guide](../behaviour/reactions.md). `me` means the person who wrote the condition. Passage
+conditions can refer to `actor`, `key`, `from`, and `to`.
 
 Both sides share the access condition. Changing it requires building authority at both ends.
 `@set-passage east access clear` removes the condition and unlocks the passage.
@@ -128,7 +128,7 @@ To change the door's wording, use `open_msg`, `close_msg`, `lock_msg`, or `unloc
 These are message templates. They can name the actor, `{direction}`, and `{passage}`. An invalid
 binding leaves the old message intact. `clear` restores the standard wording. Use a room reaction
 for an additional response, such as a bell: see
-[door reactions](reactions.md#respond-when-someone-opens-a-passage-door).
+[door reactions](../behaviour/reactions.md#respond-when-someone-opens-a-passage-door).
 
 ## Walk both ways
 
@@ -225,8 +225,8 @@ show the passage. Visitors can go north and return south. `walk`, `join`, and `h
 ordinary passages across area boundaries.
 
 The default courtyard and hillside overlook demonstrate this with different area owners. The blue
-portal crosses the same boundary through custom code. [Custom exits](custom-exits.md) explains that
-programmer interface.
+portal crosses the same boundary through custom code. [Custom exits](../programming/custom-exits.md)
+explains that programmer interface.
 
 ## Move or remove a connection
 
@@ -245,7 +245,7 @@ before you remove a shared route. Recycling a room also removes its connections.
 Rooms and areas inherit complete-name grammar, so titles such as `The First Room` remain unchanged.
 Objects choose their own listing phrases. Use `@grammar box listing definite` for “the box,” or
 `@grammar boots number plural` for “some boots.” A collective actor also takes plural agreement. See
-the [naming lesson](../docs/names-and-grammar.md) for examples.
+the [naming lesson](names-and-grammar.md) for examples.
 
 Passage labels are travel choices, not object nouns. Default operation messages identify a door as
 `the door "east"`. Custom passage messages can say “the brass door” when that fits the scene.

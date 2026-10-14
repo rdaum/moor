@@ -9,10 +9,11 @@ will write a little code, but many later changes use commands that require no pr
 
 This lesson takes inspiration from [Yib's Pet Rock](https://lisdude.com/moo/yib_rock.html), a
 beginner's introduction to programming on LambdaMOO. The commands here are for Cowbell, a ready-made
-world for the [mooR server](../../../README.md).
+world for the [mooR server](https://github.com/timbran-project/moor/blob/main/README.md).
 
 Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
-See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+See [names and grammar](../building/names-and-grammar.md) for aliases, plural names, and
+room-listing choices.
 
 ## Before you begin
 
@@ -1045,13 +1046,13 @@ Try changing one choice at a time. Give the pebble a different remark. Set a rul
 pet it. Use a separate visitor book for it. Predict what will happen, then try it and inspect the
 result. That is a useful way to learn what each part does.
 
-For a larger project, [make room for Henri](henri-and-the-cupboard.md). You will build a cat, a food
-cupboard, and a couch, then teach those objects to respond to each other.
+For a larger project, [make room for Henri](../actors/henri-and-the-cupboard.md). You will build a
+cat, a food cupboard, and a couch, then teach those objects to respond to each other.
 
-The [rules and reactions introduction](rules-reactions-relations.md) has more examples, including a
-cupboard and a timed puzzle. The [command guide](../manual/reactions.md) lists the builder commands
-in more detail. Yib's original tutorial goes on to a rock-eating creature; you can read it for
-another set of experiments.
+The [rules and reactions introduction](../behaviour/rules-reactions-relations.md) has more examples,
+including a cupboard and a timed puzzle. The [command guide](../behaviour/reactions.md) lists the
+builder commands in more detail. Yib's original tutorial goes on to a rock-eating creature; you can
+read it for another set of experiments.
 
 If something goes wrong, keep the command you typed and the complete error message. Note which
 object you used and what you expected to happen. Those details make it much easier for another
@@ -1073,7 +1074,9 @@ A copied reaction keeps its chosen relation reference and starts disabled. To gi
 visitor book, create a relation with the same fields and change its `visitors` setting. Copying a
 reaction does not copy its stored facts or grant access to another owner's relation.
 
-For the data structures used by MOO programmers, see the
-[programmer reference](../manual/behavior-model.md).
+The internal
+[rule and reaction notes](https://github.com/timbran-project/moor/blob/main/cores/cowbell/manual/behavior-model.md)
+discuss current data structures and proposed records. The proposed records are not the authoring
+interface used in this lesson.
 
 </details>

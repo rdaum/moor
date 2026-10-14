@@ -7,16 +7,17 @@ In this lesson, you will make Henri and furnish his corner of the world. Opening
 will attract his attention. Feeding him will improve his mood. His couch will have room for
 visitors, although he will have opinions about them.
 
-This continues [Let's make a pet rock](programming-with-rules-and-reactions.md). It shares that
-lesson's inspiration, [Yib's Pet Rock tutorial](https://lisdude.com/moo/yib_rock.html). You do not
-need to bring your rock along. The examples here create a separate set of objects.
+This continues [Let's make a pet rock](../programming/pet-rock.md). It shares that lesson's
+inspiration, [Yib's Pet Rock tutorial](https://lisdude.com/moo/yib_rock.html). You do not need to
+bring your rock along. The examples here create a separate set of objects.
 
 The rock lesson introduces properties, verbs, variables, and events. Here we use those ideas to make
 several objects cooperate. You will write two verbs: one for petting and one for deciding which
 gifts Henri accepts. Commands will supply his moods, rules, reactions, furniture, and schedule.
 
 Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
-See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+See [names and grammar](../building/names-and-grammar.md) for aliases, plural names, and
+room-listing choices.
 
 ## Before you begin
 
@@ -75,7 +76,7 @@ saving. Type `help @set-pronouns` for details. `@pronouns` sets your own pronoun
 
 For a quick look at an object's properties, use `#Henri.name`. `#` is a handy utility for finding
 objects and inspecting them. Type `help #` for its other uses, or follow the
-[object shortcuts tutorial](object-shortcuts.md).
+[object shortcuts tutorial](../programming/object-shortcuts.md).
 
 New objects start in your inventory. Move Henri into the room:
 
@@ -829,5 +830,8 @@ Try one change at a time:
 without performing them. `trace on` records what happens on the next event. These tools help you
 find a wrong condition or object reference without guessing.
 
-The [builder's guide](../manual/reactions.md) explains those commands and adds relations and timers.
-The [programmer reference](../manual/behavior-model.md) describes the MOO interfaces used here.
+The [builder's guide](../behaviour/reactions.md) explains those commands and adds relations and
+timers. The internal
+[rule and reaction notes](https://github.com/timbran-project/moor/blob/main/cores/cowbell/manual/behavior-model.md)
+include proposed records as well as current implementation details. Those proposals are not needed
+for this lesson.

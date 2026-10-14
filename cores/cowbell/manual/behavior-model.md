@@ -9,8 +9,8 @@ message. The opening supplies the cupboard, the person who opened it, and the lo
 condition checks where the cat is. The actions request the stand operation and send the message.
 
 This is a reference for core programmers. It describes the stored values and checks used by the
-implementation. The [builder's guide](reactions.md) explains the command interface with working
-examples. Builders do not need these internal records.
+implementation. The [builder's guide](../book/src/behaviour/reactions.md) explains the command
+interface with working examples. Builders do not need these internal records.
 
 ## Why describe these parts as data?
 
@@ -48,10 +48,10 @@ its initial values on a new host. Existing compatible state on the destination i
 The grouped definition and instance records below remain a proposal, not runtime storage. The
 current commands reuse individual reactions and require no corresponding object hierarchy.
 
-The [Henri tutorial](../docs/henri-and-the-cupboard.md) uses these commands to build a scene.
-Petting supplies separate attempt and completion events. Food arrives through the inherited give
-operation. Reactions choose responses and change the cat's state. Custom event names belong to their
-receiving objects and require no global registration.
+The [Henri tutorial](../book/src/actors/henri-and-the-cupboard.md) uses these commands to build a
+scene. Petting supplies separate attempt and completion events. Food arrives through the inherited
+give operation. Reactions choose responses and change the cat's state. Custom event names belong to
+their receiving objects and require no global registration.
 
 ## Definition, instance, and authorization
 

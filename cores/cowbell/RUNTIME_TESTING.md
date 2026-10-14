@@ -155,11 +155,11 @@ real sockets and server restart.
 
 ## Executable tutorials
 
-The [Pet Rock](docs/programming-with-rules-and-reactions.md) and
-[Henri](docs/henri-and-the-cupboard.md) tutorials are also session tests. The default session suite
-runs their Markdown sources alongside the `.moot` scenarios. The runner compiles the core once, then
-gives each scenario or document a fresh database. All runnable blocks in one document share its
-database and selected participant.
+Six chapters of the [Cowbell Book](book/src/index.md) are also session tests: names and grammar,
+object shortcuts, Pet Rock, Henri, rooms and passages, and custom exits. `SESSION_TUTORIALS` in the
+Makefile selects their Markdown sources. The default session suite runs them alongside the `.moot`
+scenarios. The runner compiles the core once, then gives each scenario or document a fresh database.
+All runnable blocks in one document share its database and selected participant.
 
 To run the executable tutorials:
 
@@ -172,7 +172,7 @@ For an already prepared fixture overlay and built runner:
 ```sh
 target/debug/core-session-runner --cowbell \
   --core-dir cores/cowbell/.runtime-headless-src \
-  --moot cores/cowbell/docs/programming-with-rules-and-reactions.md \
+  --moot cores/cowbell/book/src/programming/pet-rock.md \
   --wizard 90100 --programmer 90101 --nonprogrammer 90102
 ```
 

@@ -7,7 +7,7 @@ This guide starts with a box that announces a message. Later examples add a coun
 membership, and a timer. Enter each command on its own line in your usual command input.
 
 For an overview of the ideas, start with the
-[introduction to rules, reactions, and relations](../docs/rules-reactions-relations.md).
+[introduction to rules, reactions, and relations](rules-reactions-relations.md).
 
 ## Before you start
 
@@ -528,7 +528,7 @@ still apply to actions.
 
 ## Build a scene with Henri
 
-The [Henri tutorial](../docs/henri-and-the-cupboard.md) creates a cat, food cupboard, key, and
+The [Henri tutorial](../actors/henri-and-the-cupboard.md) creates a cat, food cupboard, key, and
 couch. It continues the Pet Rock lesson and introduces interactions between objects. The scene is
 authored by an ordinary programmer; it is not part of a new world's starting objects.
 

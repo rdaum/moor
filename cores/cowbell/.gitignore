@@ -9,3 +9,4 @@ gen.event-control.log
 !tests/baseline/sessions/
 gen.style.log
 gen.style-strict.log
+book/html/

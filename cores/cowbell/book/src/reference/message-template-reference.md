@@ -1,8 +1,8 @@
 # Message template reference
 
 This reference describes Cowbell's current message templates. For a worked example, start with
-[Write messages that fit the reader](pronouns-and-messages.md). The in-world `help messages` topic
-has a shorter tutorial. Use `help pronouns` for personal pronoun settings.
+[Write messages that fit the reader](../behaviour/pronouns-and-messages.md). The in-world
+`help messages` topic has a shorter tutorial. Use `help pronouns` for personal pronoun settings.
 
 ## Names and roles
 
@@ -112,9 +112,10 @@ after its article. Only the short forms `nc`, `dc`, `ic`, `tc`, and `lc` have th
 called `relic` remains intact.
 
 Builders use `@grammar` to configure ordinary objects. See the
-[naming tutorial](../docs/names-and-grammar.md). The spelling helper selects “an hour” and “a user.”
-`article an` or `article a` overrides the choice for a singular count noun. `article auto` restores
-automatic selection. It cannot force an article onto a complete name, mass noun, or plural noun.
+[naming tutorial](../building/names-and-grammar.md). The spelling helper selects “an hour” and “a
+user.” `article an` or `article a` overrides the choice for a singular count noun. `article auto`
+restores automatic selection. It cannot force an article onto a complete name, mass noun, or plural
+noun.
 
 The constructors are `$sub:a('d)`, `$sub:ac('d)`, `$sub:the('d)`, `$sub:thec('d)`,
 `$sub:listing('d)`, and `$sub:listingc('d)`. `$sub:reference(object, form)` refers directly to an

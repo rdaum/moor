@@ -1,0 +1,17 @@
+[book]
+title = "The Cowbell Book"
+description = "Build, program, and run a shared world with Cowbell."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "html"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/timbran-project/moor"
+edit-url-template = "https://github.com/timbran-project/moor/edit/main/cores/cowbell/book/{path}"
+additional-js = ["theme/moo-syntax-highlight.js"]
+
+[output.html.playground]
+runnable = false
