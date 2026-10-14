@@ -453,6 +453,49 @@ impl SessionRunner for MockMootRunner {
         Ok(())
     }
 
+    fn client_action(&mut self, player: &Obj, property: &str) -> Result<()> {
+        // Read a saved descriptor without eval, so non-programmers can send actions too.
+        // The handler has no MOO caller, matching a connected web-host InvokeVerb request.
+        let (_, _, action) = self
+            .scheduler
+            .request_property(
+                player,
+                player,
+                &ObjectRef::Id(*player),
+                Symbol::mk(property),
+            )
+            .map_err(|err| eyre!("reading action property failed: {err}"))?;
+        if !matches!(action.variant(), moor_var::Variant::Map(_)) {
+            return Err(eyre!(
+                "client action property must contain a map, got {action:?}"
+            ));
+        }
+        let session = self.session(player);
+        let connection = session
+            .connection_id()
+            .ok_or_else(|| eyre!("selected session has no connection"))?;
+        if self.hub.owner_for(connection) != Some(*player) {
+            return Err(eyre!(
+                "cannot submit an action on a detached or reassigned connection"
+            ));
+        }
+        let handle = self
+            .scheduler
+            .submit_verb_task(
+                player,
+                &ObjectRef::Id(SYSTEM_OBJECT),
+                Symbol::mk("do_action"),
+                List::mk_list(&[action]),
+                v_empty_str(),
+                player,
+                session,
+            )
+            .map_err(|err| eyre!("client action submit failed: {err}"))?;
+        self.last_result = Some(self.run_task(&handle, false)?);
+        self.harvest_all();
+        Ok(())
+    }
+
     fn system_hook(&mut self, player: &Obj, verb: &str, object: Option<&Obj>) -> Result<()> {
         // Mirror the connection host: submit the hook as a root task on #0 under system
         // authority, with the target object as both player and argument.

@@ -31,7 +31,5 @@ true
 ~~A room for isolated Cowbell runtime tests.
 =
 =A door bears an unfinished {inscription.
-=
-=An exit leads out east.
 @event data:state room_snapshot
 @event text/plain utility

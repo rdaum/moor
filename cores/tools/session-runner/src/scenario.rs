@@ -41,6 +41,9 @@ pub trait SessionRunner: MootRunner {
         Err(eyre!("structured event assertions are unavailable"))
     }
     fn provide_input(&mut self, player: &Obj, text: &str) -> Result<()>;
+    fn client_action(&mut self, _player: &Obj, _property: &str) -> Result<()> {
+        Err(eyre!("client action submission unavailable"))
+    }
     fn system_hook(&mut self, player: &Obj, verb: &str, object: Option<&Obj>) -> Result<()>;
 }
 
@@ -74,6 +77,7 @@ enum Action<'a> {
     Text(&'a str),
     Event(&'a str, &'a str),
     Input(&'a str),
+    ClientCommand(&'a str),
     Hook(&'a str, Option<Obj>),
     Test {
         kind: char,
@@ -117,6 +121,11 @@ fn parse_at(source: &str, offset: usize) -> Result<Vec<(usize, Action<'_>)>> {
                     .transpose()
                     .wrap_err_with(|| format!("line {number}: invalid hook object"))?,
             )
+        } else if let Some(property) = line.strip_prefix("@action ") {
+            if property.split_whitespace().count() != 1 {
+                return Err(eyre!("line {number}: expected @action PROPERTY"));
+            }
+            Action::ClientCommand(property.trim())
         } else if let Some(spec) = line.strip_prefix("@attach ") {
             let words: Vec<_> = spec.split_whitespace().collect();
             if words.len() != 2 {
@@ -159,7 +168,7 @@ fn parse_at(source: &str, offset: usize) -> Result<Vec<(usize, Action<'_>)>> {
             Action::Event("none", "none")
         } else if line == "@quiet" {
             Action::Quiet
-        } else if matches!(line, "@attach" | "@detach" | "@reassign") {
+        } else if matches!(line, "@attach" | "@detach" | "@reassign" | "@action") {
             return Err(eyre!("line {number}: incomplete connection directive"));
         } else if let Some(player) = line.strip_prefix('@') {
             Action::Player(player)
@@ -245,9 +254,12 @@ fn execute_actions<R: SessionRunner>(
 ) -> Result<()> {
     let mut player = actors.wizard;
     let mut section = "";
-    let has_test = actions
-        .iter()
-        .any(|(_, action)| matches!(action, Action::Test { .. } | Action::Program { .. }));
+    let has_test = actions.iter().any(|(_, action)| {
+        matches!(
+            action,
+            Action::Test { .. } | Action::Program { .. } | Action::ClientCommand(_)
+        )
+    });
     for (line, action) in actions {
         let step = || -> Result<()> {
             match action {
@@ -293,6 +305,7 @@ fn execute_actions<R: SessionRunner>(
                     }
                 }
                 Action::Input(text) => runner.provide_input(&player, text)?,
+                Action::ClientCommand(property) => runner.client_action(&player, property)?,
                 Action::Hook(verb, target) => runner.system_hook(&player, verb, target.as_ref())?,
                 Action::Text(expected) => {
                     let actual = runner.read_line(&player)?;
@@ -350,7 +363,9 @@ fn execute_actions<R: SessionRunner>(
         })?;
     }
     if !has_test {
-        return Err(eyre!("scenario contains no command or eval steps"));
+        return Err(eyre!(
+            "scenario contains no command, eval, or client action steps"
+        ));
     }
     Ok(())
 }
@@ -507,6 +522,10 @@ mod tests {
                 .push((*target.unwrap_or(player), format!("hook:{verb}")));
             Ok(())
         }
+        fn client_action(&mut self, player: &Obj, property: &str) -> Result<()> {
+            self.calls.push((*player, format!("action:{property}")));
+            Ok(())
+        }
     }
     pub(super) fn actors() -> Actors {
         Actors {
@@ -515,6 +534,19 @@ mod tests {
             nonprogrammer: Obj::mk_id(3),
         }
     }
+    #[test]
+    fn actions_use_the_selected_player_without_a_command_or_eval() {
+        let mut runner = Runner::default();
+        execute(&mut runner, &actors(), "@nonprogrammer\n@action saved_exit").unwrap();
+        assert_eq!(
+            runner.calls,
+            vec![(Obj::mk_id(3), "action:saved_exit".into())]
+        );
+        for invalid in ["@action", "@action ", "@action one two"] {
+            assert!(parse(invalid).is_err(), "{invalid}");
+        }
+    }
+
     #[test]
     fn input_is_not_a_program_continuation() {
         let actions =

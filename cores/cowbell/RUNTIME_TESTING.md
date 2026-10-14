@@ -123,6 +123,11 @@ player. `@detach NAME` removes it. The existing endpoint names `wizard`, `progra
 `nonprogrammer` remain available. `@text TEXT` consumes an expected output line for the selected
 endpoint without evaluating a result expression.
 
+`@action PROPERTY` reads an action map from a property on the selected player, then submits it to
+`#0:do_action` as a connected client invocation. The handler runs with no MOO caller frame, as it
+does for a clicked web action. This works for non-programmers without evaluating MOO code. Use this
+to test captured exit descriptors, including stale or forged ones.
+
 `@event text/plain utility` finds a committed notification for the selected endpoint. It matches the
 content type and audience metadata. `@event data:state room_snapshot` matches a data event's
 namespace and kind. The match can select a later queued event with the requested contract.

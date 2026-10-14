@@ -64,6 +64,15 @@ departure and arrival phrases describe movement. They do not replace the room de
 `@describe --djot` for inline formatting, or `--template` for substitutions such as `{direction}`.
 Literal text can contain braces without becoming a template.
 
+An exit with descriptive prose does not also appear in the room's extra travel sentence. Other open
+routes appear as “You can go north or to the workshop.” An authored departure phrase takes
+precedence. For other names, such as `examples`, the sentence uses the destination's name. The links
+still run the exit's command. If a custom exit withholds its destination, the sentence gives its
+command name.
+
+The room panel and `exits` command still list every route and its current state. Closed and locked
+doors show their state beside the prose. Unavailable routes show the reason there.
+
 `@passage east` shows the configuration and previews the prose and movement messages.
 `@edit-description east` opens the description editor. `exits` lists ways out, including closed
 doors.

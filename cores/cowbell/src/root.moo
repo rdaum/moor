@@ -1125,11 +1125,20 @@ object ROOT [
   method check_actor owner: ARCH_WIZARD
     "Require the caller to act as itself, as an owned NPC, or with wizard authority.";
     const {who, ?principal = caller_perms()} = args;
-    (principal == caller_perms() || caller_perms().wizard) || raise(E_PERM);
+    const invoking = caller_perms();
+    (typeof(principal) == TYPE_OBJ && valid(principal))
+      || raise(E_PERM, "The action needs a valid authority.");
+    (principal == invoking || (valid(invoking) && invoking.wizard)) || raise(E_PERM);
     (typeof(who) == TYPE_OBJ && valid(who) && isa(who, $actor))
       || raise(E_INVARG, "The action needs a person or an NPC.");
     (principal == who || principal.wizard
       || (principal == who.owner && !is_player(who))) || raise(E_PERM, "You cannot act as that person.");
+    return true;
+  endmethod
+
+  method test_actor_requires_valid_authority owner: HACKER
+    "An absent authority is denied without dereferencing the nothing object.";
+    $test_utils:assert_raises(E_PERM, $root, "check_actor", {player, #-1});
     return true;
   endmethod
 

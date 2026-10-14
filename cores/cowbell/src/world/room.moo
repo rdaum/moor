@@ -390,8 +390,19 @@ object ROOM [
     let look = pass(@args);
     look.exit_revision = revision;
     look.exit_options = $room:exit_options(this, player);
-    look.ambient_passages = {{option['description], option['prose_style],
-      option['label], option['destination]} for option in (look.exit_options) if (option['ambient])};
+    let ambient = {};
+    for option in (look.exit_options)
+      if (!option['ambient])
+        continue;
+      endif
+      let status = "";
+      if (option['state] != 'open)
+        status = option['state] == 'unavailable ? option['reason] | tostr(option['state]);
+      endif
+      ambient = {@ambient, {option['description], option['prose_style],
+        option['label], option['destination], status}};
+    endfor
+    look.ambient_passages = ambient;
     let actions = {};
     for item in ({this, @flycontents(look)})
       const available = `item:available_actions() ! E_VERBNF => {}';

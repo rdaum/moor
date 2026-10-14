@@ -58,12 +58,21 @@ false
 % look
 % south
 % west
+@wizard
+// Capture the delivered instruction, then use the exact action it contains.
+; add_verb(#90102, {#90102, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90102, "inform_current", {"const doc = args[1]:resolve(this);", "this.runtime_probe = $document:render(doc, 'text_djot);", "this.runtime_probe['plain] = $document:render(doc, 'text_plain)['body];", "return pass(@args);"});
+0
+@nonprogrammer
 % call lift
 @wizard
 ; return {#90102.location == #3101, #3101.lift_ready, #3101:exit_annotation("lift")["command"]};
 {true, true, "ride lift"}
+; const links = mapvalues(#90102.runtime_probe['annotations]); return {#90102.runtime_probe['plain] == "The lift arrives. Use ride lift to reach the hillside.", length(links), links[1]["command"], links[1]["exit"]["source"], links[1]["exit"]["destination"]};
+{true, 1, "ride lift", "oid:3101", "oid:3106"}
+; #90102.runtime_probe = mapvalues(#90102.runtime_probe['annotations])[1]; delete_verb(#90102, "inform_current"); return true;
+true
 @nonprogrammer
-% ride lift
+@action runtime_probe
 @wizard
 ; return {#90102.location == #3106, #3101.lift_ready};
 {true, false}

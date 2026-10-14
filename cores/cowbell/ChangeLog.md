@@ -194,6 +194,13 @@ Cowbell entries.
 
 ### Fixed
 
+- Clicked exit actions use the authenticated player when invoked directly by the web host.
+  Previously, they failed while checking the absent MOO caller's permissions.
+- Room narratives describe travel with “You can go …”, using directions, authored phrases, or
+  destination names. Exits already described in the room prose are not repeated. Closed doors and
+  unavailable routes retain their state and explanations. The example lift links its “ride lift”
+  instruction to the current travel action.
+
 - Mailbox retrieval cannot take an object outside the mailbox by its identifier. It accepts only
   letters currently in that mailbox.
 - Object lookup uses the command's visible scope and handles aliases and ambiguity consistently.

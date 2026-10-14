@@ -44,7 +44,8 @@ object EXAMPLE_GALLERY [
       this.lift_ready = !ready;
       $room:exit_options_changed(this, this);
       if (!ready)
-        who:inform_current($event:mk_info(who, "The lift arrives. Use ride lift to reach the hillside."));
+        who:inform_current($event:mk_info(who, "The lift arrives. Use ",
+          $format.annotation:exit(this, "lift", "ride lift"), " to reach the hillside."));
         return false;
       endif
       return $travel_examples.overlook;

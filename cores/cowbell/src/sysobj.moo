@@ -212,7 +212,9 @@ object SYSOBJ [
   method do_action owner: ARCH_WIZARD
     "Handle an untrusted client action as the authenticated player. Unsupported actions do not run.";
     const {action} = args;
-    const principal = caller_perms();
+    const incoming = caller_perms();
+    "A connected server invocation has no MOO caller frame; player is authenticated by the host.";
+    const principal = incoming == #-1 && !callers() && caller == player ? player | incoming;
     $root:check_actor(player, principal);
     set_task_perms(principal);
     if (typeof(action) == TYPE_MAP && `action["kind"] ! E_RANGE => ""' == "command"

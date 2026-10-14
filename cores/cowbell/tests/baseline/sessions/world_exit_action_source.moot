@@ -17,3 +17,8 @@ true
 // Other actors cannot use a forged player binding to request the action.
 ; return `$room:use_exit_action(#90102, "go east", player.runtime_probe["exit"]) ! E_PERM => E_PERM';
 E_PERM
+// Changing a caller's local player binding cannot move another player.
+; player = #90102; return `#0:do_action(#90101.runtime_probe) ! E_PERM => E_PERM';
+false
+; return #90102.location == #90103;
+true

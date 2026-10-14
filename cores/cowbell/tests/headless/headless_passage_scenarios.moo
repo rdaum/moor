@@ -645,7 +645,9 @@ object HEADLESS_PASSAGE_SCENARIOS
       for format in ({'text_plain, 'text_html, 'text_djot})
         const panel = $look:panel(view, format);
         const narrative = $document:render($look:narrative(view):resolve(#90102), format);
-        const state_text = format == 'text_djot ? "east \\(closed\\)" | "east (closed)";
+        const state_text = format == 'text_djot ? "\\(closed\\)" | "(closed)";
+        $test_utils:assert_false(index(narrative['body], "You can go "),
+          "A closed door retains its state without a duplicate exit list");
         for body in ({panel["content"], narrative['body]})
           $test_utils:assert_true(index(body, state_text) > 0,
             tostr("Exit state survives ", format, ": ", body));

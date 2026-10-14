@@ -107,7 +107,8 @@ object LOOK_SCENARIOS
       item.integrated_description = "A bell hangs here";
       move(item, room);
       let input = room:look_self();
-      input.exit_options = {['label -> "east", 'caption -> "east", 'descriptor -> [], 'ambient -> true]};
+      input.exit_options = {['label -> "east", 'caption -> "east", 'descriptor -> [],
+        'state -> 'open, 'destination -> #-1, 'ambient -> true]};
       input.ambient_passages = {{"an east door", 'fragment, "east"}, {"Light shines.", 'sentence}};
       input.actions = {{"ring bell", "Ring *bell*"}};
       const view = input:capture(#90102);
@@ -120,6 +121,15 @@ object LOOK_SCENARIOS
         $test_utils:assert_true(index(output, "Ring *bell*") > 0, "action labels remain literal");
       endfor
       $test_utils:assert_eq(length(view['exits]), 1, "ambient exit appears in captured exits");
+      $test_utils:assert_false(index(narrative, "You can go "), "Described exits are not listed twice");
+      input.exit_options = {@input.exit_options,
+        ['label -> "out", 'caption -> "out", 'descriptor -> [],
+          'state -> 'open, 'destination -> #-1, 'ambient -> false],
+        ['label -> "examples", 'caption -> "examples", 'descriptor -> [],
+          'state -> 'open, 'destination -> room, 'ambient -> false]};
+      const mixed = $document:render($look:narrative(input:capture(#90102)):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(mixed, "You can go out or to hall.") > 0,
+        "Only undescribed exits need a list, with labels rather than direction grammar");
       $test_utils:assert_true(view['things][1]['integrated], "integrated object remains in panel state");
     finally
       recycle(item);
@@ -127,6 +137,49 @@ object LOOK_SCENARIOS
     endtry
     return true;
   endmethod
+  method test_travel_sentence_uses_captured_names_and_commands owner: ARCH_WIZARD
+    "Describe named destinations while preserving the exit command and captured wording.";
+    const area = create($area);
+    const room = create($room);
+    const destination = create($room);
+    try
+      move(room, area);
+      move(destination, area);
+      destination.name = "Passage Examples";
+      let passage = area:create_passage(room, destination,
+        $passage:mk(room, "examples", {}, "", false, destination, "out", {}, "", false));
+      const view = room:look_self():capture(#90102);
+      destination.name = "Renamed Gallery";
+      const body = $document:render($look:narrative(view):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(body, "You can go to Passage Examples.") > 0,
+        "A named exit uses its destination's captured noun phrase");
+      $test_utils:assert_eq(view['exits][1]['travel]['descriptor]["command"], "go examples",
+        "A descriptive link still runs the original exit command");
+      passage = area:update_passage(room, destination,
+        passage:with_departure_phrase_from(room, "through the blue arch"));
+      let current = room:look_self():capture(#90102);
+      $test_utils:assert_eq(current['exits][1]['travel]['label], "through the blue arch",
+        "Authored travel wording takes precedence over the destination name");
+      area:update_passage(room, destination, passage:with_open(false));
+      current = room:look_self():capture(#90102);
+      const closed = $document:render($look:narrative(current):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(closed, "The way through the blue arch is closed.") > 0,
+        "A closed way is described without claiming that the player can travel");
+      $test_utils:assert_false(index(closed, "You can go "), "Closed exits are not offered as open ways");
+      let input = room:look_self();
+      input.exit_options = {['label -> "misty arch", 'caption -> "misty arch", 'descriptor -> [],
+        'commands -> {"enter misty arch"}, 'state -> 'open, 'destination -> #-1, 'ambient -> false]};
+      const hidden = $document:render($look:narrative(input:capture(#90102)):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(hidden, "You can go by typing \"enter misty arch\".") > 0,
+        "An unknown destination shows its actual command without inventing a destination");
+    finally
+      recycle(room);
+      recycle(destination);
+      area:destroy();
+    endtry
+    return true;
+  endmethod
+
   method test_passage_description_formats_and_references owner: ARCH_WIZARD
     "All supported source formats render for one viewer without inferring links from direction words.";
     const area = create($area);
@@ -156,8 +209,8 @@ object LOOK_SCENARIOS
         $test_utils:assert_eq(length(links), 1, "The complete description has one exit reference");
         $test_utils:assert_eq(links[1]["exit"]["passage"], passage.connection_id, "The reference identifies the installed connection");
         const narrative = $document:render($look:narrative(view):resolve(#90102), 'text_plain)['body];
-        $test_utils:assert_true(index(narrative, "An exit leads out in.") > 0,
-          "The narrative retains an exit-name cue even without the direction word in its prose");
+        $test_utils:assert_false(index(narrative, "You can go "),
+          "A linked description replaces the separate narrative exit listing");
         if (kind == 'djot_inline)
           $test_utils:assert_true(index(html['body], "<strong>brass</strong>") > 0, "Djot emphasis survives HTML rendering");
           $test_utils:assert_true(index($document:render(view['description], 'text_djot)['body], "*brass*") > 0,

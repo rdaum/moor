@@ -82,6 +82,14 @@ object LOOK [
       exit_descriptors[option['label]] = descriptor;
       let entry = $look:_entry(option['caption], descriptor);
       entry['ambient] = option['ambient];
+      entry['state] = option['state];
+      if (!option['ambient])
+        const {phrase, named} = $look:_exit_phrase(option, this.what, viewer, subjects);
+        subjects = named;
+        entry['travel] = $look:_entry(phrase, descriptor);
+        entry['reason] = option['state] == 'unavailable
+          ? `option['reason] ! E_RANGE => option['caption]' | "";
+      endif
       exits = {@exits, entry};
     endfor
     description = {@description, @$look:_ambient(ambient, exit_descriptors, event, viewer)};
@@ -112,6 +120,28 @@ object LOOK [
     return ['label -> label, 'descriptor -> descriptor, 'content -> content];
   endmethod
 
+  method _exit_phrase owner: ARCH_WIZARD
+    "Capture travel wording without treating an arbitrary command name as a direction.";
+    set_task_perms(caller_perms());
+    const {option, source, viewer, subjects} = args;
+    if (maphaskey(option, 'passage))
+      const authored = option['passage]:departure_phrase_for(source);
+      length(authored) && return {authored, subjects};
+    endif
+    const label = option['label];
+    if (maphaskey($passage.direction_opposites, label))
+      return {label, subjects};
+    endif
+    const destination = option['destination];
+    if (valid(destination))
+      const {name, captured} = $document_resolver:capture_subject(destination, viewer, 'definite, subjects);
+      return {"to " + name, captured};
+    endif
+    "A provider may deliberately withhold its destination. Name the command instead.";
+    const command = maphaskey(option, 'commands) ? option['commands][1] | label;
+    return {"by typing " + toliteral(command), subjects};
+  endmethod
+
   method _ambient owner: ARCH_WIZARD
     "Resolve each passage's inline content with its own bindings, then assemble captured prose.";
     set_task_perms(caller_perms());
@@ -119,7 +149,7 @@ object LOOK [
     let sentences = {};
     let fragments = {};
     for passage in (passages)
-      const {source, style, ?direction = "", ?destination = #-1} = passage;
+      const {source, style, ?direction = "", ?destination = #-1, ?status = ""} = passage;
       let context = event:with_this(event.dobj):with_location(event.dobj)
         :with_object_binding('from_room, event.dobj):with_object_binding('to_room, destination)
         :with_text_binding('direction, direction):with_text_binding('passage, direction);
@@ -133,6 +163,9 @@ object LOOK [
           && !$look:_has_inline_link(content))
         content = {$document_node:mk('reference, content,
           ['descriptor -> $document_schema:_descriptor_from_wire(descriptors[direction])])};
+      endif
+      if (length(status))
+        content = {@content, @$format:literal_inline(" (" + status + ")")};
       endif
       if (style == 'fragment)
         fragments = {@fragments, ['content -> content]};
@@ -160,11 +193,11 @@ object LOOK [
 
   method _join owner: HACKER
     "Join captured entry labels with commas and a final conjunction.";
-    const {entries} = args;
+    const {entries, ?conjunction = "and"} = args;
     let content = {};
     for i in [1..length(entries)]
       if (i > 1)
-        const separator = i == length(entries) ? " and " | ", ";
+        const separator = i == length(entries) ? " " + conjunction + " " | ", ";
         content = {@content, @$format:literal_inline(separator)};
       endif
       content = {@content, @entries[i]['content]};
@@ -177,12 +210,25 @@ object LOOK [
     const {view} = args;
     let blocks = {$document_node:mk('heading, view['title], ['level -> 3]),
       @flycontents(view['description])};
-    const exits = view['exits];
-    if (length(exits))
-      const prefix = length(exits) == 1 ? "An exit leads out " | "Exits lead out ";
+    const exits = {exit for exit in (view['exits]) if (!exit['ambient])};
+    const available = {option['travel] for option in (exits) if (option['state] == 'open)};
+    if (length(available))
       blocks = {@blocks, $document_node:mk('paragraph, {
-        @$format:literal_inline(prefix), @$look:_join(exits), @$format:literal_inline(".")})};
+        @$format:literal_inline("You can go "), @$look:_join(available, "or"),
+        @$format:literal_inline(".")})};
     endif
+    for blocked in (exits)
+      if (blocked['state] == 'open)
+        continue;
+      endif
+      if (blocked['state] == 'unavailable)
+        blocks = {@blocks, $document_node:mk('paragraph, $format:literal_inline(blocked['reason]))};
+      else
+        blocks = {@blocks, $document_node:mk('paragraph, {
+          @$format:literal_inline("The way "), @blocked['travel]['content],
+          @$format:literal_inline(" is " + tostr(blocked['state]) + ".")})};
+      endif
+    endfor
     if (length(view['actions]))
       blocks = {@blocks, $look:_list(view['actions])};
     endif
