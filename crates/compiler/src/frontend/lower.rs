@@ -30,6 +30,7 @@ use crate::{
         BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr,
         ScatterItem as AstScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
     },
+    capture::analyze_lambda_captures,
     compile_options::CompileOptions,
     frontend::{
         cst::{
@@ -494,8 +495,13 @@ impl<'a> Lowerer<'a> {
             "missing function name",
         )?;
 
+        let id = self
+            .names
+            .declare_or_use_name(name_token.text(), DeclType::Let);
+
         self.enter_scope();
         let entry_scope_count = self.names.scopes.len() as u16;
+        let parameter_scope = self.names.scope_id_seq;
         let params = self.lower_lambda_params(self.require_node(
             stmt.params(),
             stmt.syntax().text_range(),
@@ -525,11 +531,10 @@ impl<'a> Lowerer<'a> {
             scope_line_col,
         ));
 
-        let id = self
-            .names
-            .declare_or_use_name(name_token.text(), DeclType::Let);
+        let captures = analyze_lambda_captures(&params, &body, parameter_scope)?;
         let lambda_expr = Expr::Lambda {
             entry_scope_count,
+            captures,
             params,
             body,
             self_name: Some(id),
@@ -762,8 +767,29 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_lambda_expr(&mut self, expr: LambdaExpr) -> Result<Expr, CompileError> {
+        let has_metadata = expr.syntax().children_with_tokens().any(|element| {
+            let NodeOrToken::Token(token) = element else {
+                return false;
+            };
+            token.kind() == SyntaxKind::Ident && token.text().eq_ignore_ascii_case("with")
+        });
+        if has_metadata {
+            return crate::objdef_literal::parse_persistent_literal(
+                &expr.syntax().text().to_string(),
+                &self.options,
+            )
+            .map(Expr::Value)
+            .map_err(|error| {
+                self.make_parse_error(
+                    expr.syntax().text_range(),
+                    "closure literal",
+                    &error.to_string(),
+                )
+            });
+        }
         self.enter_scope();
         let entry_scope_count = self.names.scopes.len() as u16;
+        let parameter_scope = self.names.scope_id_seq;
         let params = self.lower_lambda_params(expr.params().ok_or_else(|| {
             self.make_parse_error(
                 expr.syntax().text_range(),
@@ -780,16 +806,19 @@ impl<'a> Lowerer<'a> {
             self.lambda_body_depth = self.lambda_body_depth.saturating_sub(1);
             let num_body_bindings = self.exit_scope();
             let _ = self.exit_scope();
+            let body = Box::new(Stmt::new(
+                StmtNode::Scope {
+                    num_bindings: num_body_bindings,
+                    body: statements,
+                },
+                scope_line_col,
+            ));
+            let captures = analyze_lambda_captures(&params, &body, parameter_scope)?;
             return Ok(Expr::Lambda {
                 entry_scope_count,
+                captures,
                 params,
-                body: Box::new(Stmt::new(
-                    StmtNode::Scope {
-                        num_bindings: num_body_bindings,
-                        body: statements,
-                    },
-                    scope_line_col,
-                )),
+                body,
                 self_name: None,
             });
         }
@@ -815,8 +844,10 @@ impl<'a> Lowerer<'a> {
             StmtNode::Expr(Expr::Return(Some(Box::new(body_expr)))),
             self.line_col(expr.syntax().text_range()),
         );
+        let captures = analyze_lambda_captures(&params, &return_stmt, parameter_scope)?;
         Ok(Expr::Lambda {
             entry_scope_count,
+            captures,
             params,
             body: Box::new(return_stmt),
             self_name: None,
@@ -938,6 +969,17 @@ impl<'a> Lowerer<'a> {
                 let Expr::Error(error, None) = self.lower_error_literal_token(&token)? else {
                     unreachable!("error literal token did not lower to Expr::Error");
                 };
+                if args.len() == 2 {
+                    let value =
+                        crate::parse_literal_value(&node.text().to_string()).map_err(|error| {
+                            self.make_parse_error(
+                                node.text_range(),
+                                "rich error literal",
+                                &error.to_string(),
+                            )
+                        })?;
+                    return Ok(Expr::Value(value));
+                }
                 let message = match args.as_slice() {
                     [] => None,
                     [Normal(expr)] => Some(Box::new(expr.clone())),
@@ -1118,8 +1160,20 @@ impl<'a> Lowerer<'a> {
             if matches!(elements.get(idx), Some(NodeOrToken::Token(token)) if token.kind() == SyntaxKind::Dot)
             {
                 let slot_name = expect_token(&elements, idx + 1)?;
-                let symbol = Symbol::mk(slot_name.text());
-                if symbol == Symbol::mk("delegate") || symbol == Symbol::mk("slots") {
+                let quoted = slot_name.kind() == SyntaxKind::StringLit;
+                let symbol = if quoted {
+                    Symbol::mk(
+                        &moor_common::util::unquote_str(slot_name.text()).map_err(|e| {
+                            CompileError::StringLexError(
+                                self.compile_context(slot_name.text_range()),
+                                e.to_string(),
+                            )
+                        })?,
+                    )
+                } else {
+                    Symbol::mk(slot_name.text())
+                };
+                if !quoted && (symbol == Symbol::mk("delegate") || symbol == Symbol::mk("slots")) {
                     return Err(CompileError::BadSlotName(
                         self.compile_context(slot_name.text_range()),
                         symbol.to_string(),
@@ -1404,20 +1458,11 @@ impl<'a> Lowerer<'a> {
                     )
                 },
             )?))),
+            SyntaxKind::NoneLit => Ok(Expr::Value(moor_var::v_none())),
             SyntaxKind::FloatLit => {
-                let f = token.text().parse::<f64>().map_err(|e| {
-                    CompileError::StringLexError(
-                        self.compile_context(token.text_range()),
-                        format!("invalid float literal '{}': {e}", token.text()),
-                    )
+                let f = crate::persistent::parse_float(token.text()).map_err(|error| {
+                    CompileError::StringLexError(self.compile_context(token.text_range()), error)
                 })?;
-                // MOO floats are always real numbers; `1e999` is a compile error.
-                if !f.is_finite() {
-                    return Err(CompileError::StringLexError(
-                        self.compile_context(token.text_range()),
-                        format!("float literal '{}' is out of range", token.text()),
-                    ));
-                }
                 Ok(Expr::Value(v_float(f)))
             }
             SyntaxKind::StringLit => {
@@ -1487,9 +1532,18 @@ impl<'a> Lowerer<'a> {
                         "Symbols".to_string(),
                     ));
                 }
-                Ok(Expr::Value(Var::mk_symbol(Symbol::mk(
-                    token.text().trim_start_matches('\''),
-                ))))
+                let spelling = token.text().trim_start_matches('\'');
+                let spelling = if spelling.starts_with('"') {
+                    moor_common::util::unquote_str(spelling).map_err(|error| {
+                        CompileError::StringLexError(
+                            self.compile_context(token.text_range()),
+                            error,
+                        )
+                    })?
+                } else {
+                    spelling.to_owned()
+                };
+                Ok(Expr::Value(Var::mk_symbol(Symbol::mk(&spelling))))
             }
             SyntaxKind::Dollar => {
                 if self.dollars_ok == 0 {
@@ -1506,7 +1560,20 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_error_literal_token(&self, token: &SyntaxToken) -> Result<Expr, CompileError> {
-        let Some(error) = moor_var::ErrorCode::parse_str(token.text()) else {
+        let custom = token
+            .text()
+            .strip_prefix('e')
+            .filter(|text| text.starts_with('"'));
+        let error = if let Some(text) = custom {
+            Some(moor_var::ErrorCode::ErrCustom(Symbol::mk(
+                &moor_common::util::unquote_str(text).map_err(|error| {
+                    CompileError::StringLexError(self.compile_context(token.text_range()), error)
+                })?,
+            )))
+        } else {
+            moor_var::ErrorCode::parse_str(token.text())
+        };
+        let Some(error) = error else {
             return Err(self.make_parse_error(
                 token.text_range(),
                 "frontend lowering error literal",

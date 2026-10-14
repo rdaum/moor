@@ -29,7 +29,7 @@ assets = [
 # Internal Dependencies
 moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
-moor-db = { path = "../../crates/db" }
+moor-db = { path = "../../crates/db", features = ["cli"] }
 moor-kernel = { path = "../../crates/kernel" }
 moor-objdef = { path = "../../crates/objdef" }
 moor-var = { path = "../../crates/var" }
@@ -55,3 +55,12 @@ tabled.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[features]
+postgres = ["moor-db/postgres"]
+
+# Keep the package identity and service paths when selecting client support.
+[package.metadata.deb.variants.postgres]
+name = "moor-emh"
+features = ["postgres"]
+depends = "$auto, libpq5 (>= 17)"

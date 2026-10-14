@@ -13,10 +13,7 @@
 
 //! Physical record codec and bounded reconstruction for incremental property values.
 
-use crate::{
-    ObjAndUUIDHolder, db_counters,
-    tx::{OpType, Timestamp, WorkingSet},
-};
+use crate::{ObjAndUUIDHolder, db_counters, tx::Timestamp};
 use moor_common::{
     model::{WorldStateCountOp, WorldStateTimerOp},
     util::Instant,
@@ -27,6 +24,13 @@ use planus::ReadAsRoot;
 use smallvec::{SmallVec, smallvec};
 use zerocopy::{FromBytes, IntoBytes};
 
+#[cfg(test)]
+use super::logical::PreparedPropertyValueMutation;
+#[cfg(test)]
+use super::logical::prepare_property_value_mutation;
+#[cfg(test)]
+use crate::tx::OpType;
+
 const RECORD_MAGIC: [u8; 4] = *b"MPRV";
 const RECORD_FORMAT_VERSION: u8 = 1;
 const RECORD_HEADER_BYTES: usize = 16;
@@ -35,117 +39,9 @@ pub(crate) const PROPERTY_RECORD_KEY_BYTES: usize = PROPERTY_KEY_BYTES + size_of
 
 const FULL_RECORD_KIND: u8 = 0;
 const LIST_APPEND_RECORD_KIND: u8 = 1;
-const LIST_APPEND_COMPARISON_BUDGET: usize = 128;
 
 pub(crate) const PROPERTY_VALUE_CHAIN_LIMITS: PropertyValueChainLimits =
     PropertyValueChainLimits::new(64, 4 * 1024 * 1024);
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct PreparedPropertyValueOp {
-    pub property: ObjAndUUIDHolder,
-    pub mutation: PreparedPropertyValueMutation,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum PreparedPropertyValueMutation {
-    Replace { value: Var },
-    AppendList { suffix: List, final_value: Var },
-    Delete,
-}
-
-pub(crate) fn prepare_property_value_working_set(
-    working_set: WorkingSet<ObjAndUUIDHolder, Var>,
-) -> Vec<PreparedPropertyValueOp> {
-    let operation_count = working_set.len();
-    let (operations, base_index) = working_set.into_parts();
-    let mut prepared = Vec::with_capacity(operation_count);
-
-    for (property, operation) in operations {
-        let base = base_index.index_lookup(&property).map(|entry| &entry.value);
-        prepared.push(PreparedPropertyValueOp {
-            property,
-            mutation: prepare_property_value_mutation(base, operation.operation),
-        });
-    }
-    prepared
-}
-
-fn prepare_property_value_mutation(
-    base: Option<&Var>,
-    operation: OpType<Var>,
-) -> PreparedPropertyValueMutation {
-    let value = match operation {
-        OpType::Delete => return PreparedPropertyValueMutation::Delete,
-        OpType::Insert(value) => {
-            db_counters()
-                .counters
-                .inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-            return PreparedPropertyValueMutation::Replace { value };
-        }
-        OpType::Update(value) => value,
-    };
-
-    if value.op_hint() != moor_var::OP_HINT_LIST_APPEND {
-        db_counters()
-            .counters
-            .inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    }
-
-    let counters = &db_counters().counters;
-    counters.inc(WorldStateCountOp::PropertyListAppendCandidate);
-    let _classification_timer = db_counters()
-        .timers_rare
-        .start(WorldStateTimerOp::PropertyListAppendClassify);
-    let Some(base) = base else {
-        counters.inc(WorldStateCountOp::PropertyListAppendMissingBase);
-        counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    };
-    let (Some(base), Some(final_value)) = (base.as_list(), value.as_list()) else {
-        counters.inc(WorldStateCountOp::PropertyListAppendNonList);
-        counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-        return PreparedPropertyValueMutation::Replace { value };
-    };
-
-    let suffix = match base.append_suffix(final_value, LIST_APPEND_COMPARISON_BUDGET) {
-        Ok(suffix) => suffix,
-        Err(reason) => {
-            let counter = match reason {
-                moor_var::ListAppendError::NotLonger => {
-                    WorldStateCountOp::PropertyListAppendNotLonger
-                }
-                moor_var::ListAppendError::PrefixMismatch => {
-                    WorldStateCountOp::PropertyListAppendPrefixMismatch
-                }
-                moor_var::ListAppendError::ComparisonBudgetExceeded => {
-                    WorldStateCountOp::PropertyListAppendComparisonBudget
-                }
-            };
-            counters.inc(counter);
-            counters.inc(WorldStateCountOp::PropertyValueCompleteReplacement);
-            return PreparedPropertyValueMutation::Replace { value };
-        }
-    };
-
-    let suffix_bytes = suffix
-        .iter_ref()
-        .map(moor_var::ByteSized::size_bytes)
-        .sum::<usize>();
-    counters.inc(WorldStateCountOp::PropertyListAppendAccepted);
-    counters.add(
-        WorldStateCountOp::PropertyListAppendSuffixElements,
-        isize::try_from(suffix.len()).unwrap_or(isize::MAX),
-    );
-    counters.add(
-        WorldStateCountOp::PropertyListAppendSuffixBytes,
-        isize::try_from(suffix_bytes).unwrap_or(isize::MAX),
-    );
-    PreparedPropertyValueMutation::AppendList {
-        suffix,
-        final_value: value,
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PropertyValueRecordKind {
@@ -451,6 +347,25 @@ impl PropertyValueReconstructor {
         record_version: u64,
         record: &[u8],
     ) -> Result<(), PropertyValueRecordError> {
+        let record = decode_property_value_record(record)?;
+        self.push_decoded(
+            record_version,
+            record.kind,
+            record.logical_timestamp,
+            record.payload.len(),
+            decode_var(record.payload)?,
+        )
+    }
+
+    /// Apply a decoded record with backend-specific payload size accounting.
+    pub(crate) fn push_decoded(
+        &mut self,
+        record_version: u64,
+        kind: PropertyValueRecordKind,
+        logical_timestamp: Timestamp,
+        payload_bytes: usize,
+        decoded: Var,
+    ) -> Result<(), PropertyValueRecordError> {
         if self
             .last_version
             .is_some_and(|last_version| record_version <= last_version)
@@ -458,10 +373,9 @@ impl PropertyValueReconstructor {
             return Err(PropertyValueRecordError::RecordOrder);
         }
 
-        let record = decode_property_value_record(record)?;
-        match (&self.value, record.kind) {
+        match (&self.value, kind) {
             (None, PropertyValueRecordKind::Full) => {
-                self.value = Some(decode_var(record.payload)?);
+                self.value = Some(decoded);
                 self.record_versions.push(record_version);
             }
             (None, PropertyValueRecordKind::ListAppend) => {
@@ -476,13 +390,13 @@ impl PropertyValueReconstructor {
                 }
                 let append_bytes = self
                     .append_bytes
-                    .checked_add(record.payload.len())
+                    .checked_add(payload_bytes)
                     .ok_or(PropertyValueRecordError::AppendByteLimit)?;
                 if append_bytes > self.limits.max_append_bytes {
                     return Err(PropertyValueRecordError::AppendByteLimit);
                 }
 
-                let suffix = decode_var(record.payload)?;
+                let suffix = decoded;
                 let Some(suffix) = suffix.as_list() else {
                     return Err(PropertyValueRecordError::InvalidListAppend);
                 };
@@ -503,7 +417,7 @@ impl PropertyValueReconstructor {
             }
         }
 
-        self.logical_timestamp = record.logical_timestamp;
+        self.logical_timestamp = logical_timestamp;
         self.last_version = Some(record_version);
         self.record_count += 1;
         Ok(())

@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn compaction_runs_on_its_dedicated_thread() {
-        let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let coordinator = MaintenanceCoordinator::new();
         let job =
             prepare_storage_compaction(&coordinator, vec![DatabaseRelation::ObjectPropvalues])

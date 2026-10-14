@@ -23,14 +23,14 @@ $match:input_context("put {dobj} in {iobj}", "dobj", ["iobj" -> "#48"])
 // ["template" -> "put {dobj} in {iobj}", "active" -> "dobj", "bindings" -> ["iobj" -> "#48"], ...]
 ```
 
-Templates have at most two named slots (`dobj`, `iobj`, or the inspector's single `input` slot).
-The active slot must occupy a complete parser argument. Binding values are single-line command
-text, usually exact `#` references. Missing bindings are provisional arguments, not empty strings.
-A request returns at most 50 rows; query and template lengths are limited to 256 and 1024 characters.
+Templates have at most two named slots (`dobj`, `iobj`, or the inspector's single `input` slot). The
+active slot must occupy a complete parser argument. Binding values are single-line command text,
+usually exact `#` references. Missing bindings are provisional arguments, not empty strings. A
+request returns at most 50 rows; query and template lengths are limited to 256 and 1024 characters.
 Omit the context for an unconstrained source query.
 
-The authenticated task player supplies the viewing identity. Callers cannot request another
-player's private inventory by changing the provider.
+The authenticated task player supplies the viewing identity. Callers cannot request another player's
+private inventory by changing the provider.
 
 ```text
 {
@@ -39,18 +39,18 @@ player's private inventory by changing the provider.
 }
 ```
 
-`id` distinguishes choices; `label` is shown in the field; `value` is inserted into the command.
-For object choices, `value` and `detail` contain the object reference. Duplicate names therefore
-remain distinguishable and selecting one cannot resolve to a different object because of its name.
-`more` asks the client to narrow the query; the endpoint does not return an unbounded catalog.
+`id` distinguishes choices; `label` is shown in the field; `value` is inserted into the command. For
+object choices, `value` and `detail` contain the object reference. Duplicate names therefore remain
+distinguishable and selecting one cannot resolve to a different object because of its name. `more`
+asks the client to narrow the query; the endpoint does not return an unbounded catalog.
 
 ## Shared environmental search
 
 `player:match_environment(command, context)` accepts these context keys:
 
-| Key | Meaning |
-| --- | --- |
-| `'scope` | `"nearby"` (default), `"inventory"`, or `"contents"` |
+| Key       | Meaning                                                             |
+| --------- | ------------------------------------------------------------------- |
+| `'scope`  | `"nearby"` (default), `"inventory"`, or `"contents"`                |
 | `'target` | The container for `contents`; the object to exclude for `inventory` |
 
 The default retains the command scope: player, inventory, worn items, mailbox, and room-contributed
@@ -73,8 +73,8 @@ When a context is supplied, `$match:matching_suggestions`:
 
 1. Parses the template once using `parse_command`, with a placeholder in its unfilled object slot.
 2. Substitutes each scoped object into that slot in the parsed command map.
-3. Calls `find_command_verb` against the player's existing command environment, including direct
-   and indirect targets and inherited verb signatures.
+3. Calls `find_command_verb` against the player's existing command environment, including direct and
+   indirect targets and inherited verb signatures.
 4. Keeps candidates with a matching command verb. An ambiguous fixed argument is checked against
    each of its parser-provided candidates, as in normal command dispatch.
 
@@ -93,16 +93,16 @@ This checks verb names, prepositions, and direct/indirect argspecs without calli
 room handlers outside normal verb matching need an authored candidate source if they want to offer
 completion.
 
-The shared ranker orders exact, prefix, word-prefix, and substring matches, case-insensitively.
-It retains provider order within each rank and strips internal search keys from the response.
+The shared ranker orders exact, prefix, word-prefix, and substring matches, case-insensitively. It
+retains provider order within each rank and strips internal search keys from the response.
 
 ## Authoring sources
 
 Objects can override `suggestion_candidates(source, query, context)` for domain-specific choices,
-returning candidate maps with `id`, `label`, `value`, optional `detail`, and optional `keys` (aliases).
-Use `pass(@args)` for the environmental sources. Keep providers side-effect-free and enforce viewing
-rules before returning any candidate. The shared endpoint handles query validation, ranking,
-deduplication, and response limits.
+returning candidate maps with `id`, `label`, `value`, optional `detail`, and optional `keys`
+(aliases). Use `pass(@args)` for the environmental sources. Keep providers side-effect-free and
+enforce viewing rules before returning any candidate. The shared endpoint handles query validation,
+ranking, deduplication, and response limits.
 
 For object sources, extend environmental scope hooks instead of reconstructing visibility and
 matching inside the provider. A source for non-object text, such as colors, can return labelled
@@ -116,21 +116,21 @@ An inspector action opts into suggestions through its input descriptor:
     "suggestions" -> ["provider" -> $url_utils:to_curie_str(this), "source" -> "contents"]]]
 ```
 
-Meadow supplies the action's command template with each request. Its reusable `SuggestionInput`
-and `useSuggestions` components support debounced queries, immediate choices on focus, pointer
+Meadow supplies the action's command template with each request. Its reusable `SuggestionInput` and
+`useSuggestions` components support debounced queries, immediate choices on focus, pointer
 selection, arrow keys, Enter/Tab selection, and stale-response rejection. Selection fills the field;
 submission remains a separate action through the existing command connection. Editing a selected
 label clears its bound reference. Escape dismisses choices before dismissing the inspector.
 
-The inspector refreshes suggestions on the same connection state revisions as inspection data.
-There is no polling. Typed input remains usable if suggestions fail, and command execution always
-rechecks current state and authority.
+The inspector refreshes suggestions on the same connection state revisions as inspection data. There
+is no polling. Typed input remains usable if suggestions fail, and command execution always rechecks
+current state and authority.
 
 ## Main command input
 
-`player:command_input_context(before_cursor, after_cursor)` parses a single-line draft with a
-cursor marker and returns its exact argument range as `before` and `after` strings, the argument's
-`query`, and its suggestion `source`/`context`. It does not dispatch the parsed command. If the
-parser's normalization prevents an exact raw-text round trip, it returns an empty map and ordinary
-text entry remains available. Meadow applies this to a serialized draft, mapping retained reference
-ranges back to their display labels.
+`player:command_input_context(before_cursor, after_cursor)` parses a single-line draft with a cursor
+marker and returns its exact argument range as `before` and `after` strings, the argument's `query`,
+and its suggestion `source`/`context`. It does not dispatch the parsed command. If the parser's
+normalization prevents an exact raw-text round trip, it returns an empty map and ordinary text entry
+remains available. Meadow applies this to a serialized draft, mapping retained reference ranges back
+to their display labels.

@@ -11,13 +11,10 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{
-    provider::Provider,
-    tx::{ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp},
-};
+use crate::tx::{ConflictInfo, ConflictType, Error, RelationCodomain, RelationDomain, Timestamp};
 use moor_common::util::Instant;
 use moor_var::Symbol;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use tracing::warn;
 
 use super::{
@@ -78,23 +75,20 @@ impl<Codomain: RelationCodomain> ProposedOp<Codomain> {
     }
 }
 
-pub struct CheckRelation<Domain, Codomain, P>
+pub struct CheckRelation<Domain, Codomain>
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
-    P: Provider<Domain, Codomain>,
 {
     pub(crate) index: Box<dyn RelationIndex<Domain, Codomain>>,
     pub(crate) relation_name: Symbol,
-    pub(crate) source: Arc<P>,
     pub(crate) dirty: bool,
 }
 
-impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
+impl<Domain, Codomain> CheckRelation<Domain, Codomain>
 where
     Domain: RelationDomain,
     Codomain: RelationCodomain,
-    P: Provider<Domain, Codomain>,
 {
     pub fn num_entries(&self) -> usize {
         self.index.len()
@@ -146,6 +140,9 @@ where
     where
         R: ConflictResolver<Domain, Codomain>,
     {
+        if !self.index.is_fully_resident() {
+            return Err(Error::IncompleteIndex(self.relation_name));
+        }
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
@@ -246,81 +243,26 @@ where
                 continue;
             }
 
-            // Otherwise, pull from upstream and fetch to cache and check for conflict.
-            if let Some((ts, codomain)) = if self.index.is_provider_fully_loaded() {
-                None
-            } else {
-                self.source.get(domain)?
-            } {
-                self.index
-                    .insert_entry(ts, domain.clone(), codomain.clone());
-
-                // If what we have is an insert, and there's something already there, that's also
-                // a conflict.
-                if op.operation.is_insert() {
-                    let base = base_index
-                        .index_lookup(domain)
-                        .map(|e| (e.ts, e.value.clone()));
-                    let theirs = Some((ts, codomain.clone()));
-                    let conflict = self.make_potential_conflict(
-                        domain,
-                        ConflictType::InsertDuplicate,
-                        base,
-                        theirs,
-                        op,
-                    );
-                    match resolver.resolve(&conflict)? {
-                        Resolution::Accept => continue,
-                        Resolution::Rewrite(new_val) => {
-                            op.operation = OpType::Insert(new_val);
-                            continue;
-                        }
-                    }
-                }
-                if ts != op.read_ts {
-                    let base = base_index
-                        .index_lookup(domain)
-                        .map(|e| (e.ts, e.value.clone()));
-                    let theirs = Some((ts, codomain));
-                    let conflict = self.make_potential_conflict(
-                        domain,
-                        ConflictType::ConcurrentWrite,
-                        base,
-                        theirs,
-                        op,
-                    );
-                    match resolver.resolve(&conflict)? {
-                        Resolution::Accept => continue,
-                        Resolution::Rewrite(new_val) => {
-                            op.operation = OpType::Update(new_val);
-                            continue;
-                        }
-                    }
-                }
-            } else {
-                // A missing entry conflicts if this transaction observed it.
-                // A local insert followed by delete has no external dependency.
-                if op.operation.is_update()
-                    || (op.operation.is_delete() && op.read_ts != op.write_ts)
-                {
-                    let base = base_index
-                        .index_lookup(domain)
-                        .map(|e| (e.ts, e.value.clone()));
-                    let conflict = self.make_potential_conflict(
-                        domain,
-                        ConflictType::UpdateNonExistent,
-                        base,
-                        None, // theirs doesn't exist
-                        op,
-                    );
-                    match resolver.resolve(&conflict)? {
-                        Resolution::Accept => continue,
-                        Resolution::Rewrite(new_val) => {
-                            // The tuple does not exist in canonical state, so rewriting an
-                            // update here must materialize as an insert.
-                            op.operation = OpType::Insert(new_val);
-                            continue;
-                        }
+            // A missing entry conflicts if this transaction observed it.
+            // A local insert followed by delete has no external dependency.
+            if op.operation.is_update() || (op.operation.is_delete() && op.read_ts != op.write_ts) {
+                let base = base_index
+                    .index_lookup(domain)
+                    .map(|e| (e.ts, e.value.clone()));
+                let conflict = self.make_potential_conflict(
+                    domain,
+                    ConflictType::UpdateNonExistent,
+                    base,
+                    None, // theirs doesn't exist
+                    op,
+                );
+                match resolver.resolve(&conflict)? {
+                    Resolution::Accept => continue,
+                    Resolution::Rewrite(new_val) => {
+                        // The tuple does not exist in canonical state, so rewriting an
+                        // update here must materialize as an insert.
+                        op.operation = OpType::Insert(new_val);
+                        continue;
                     }
                 }
             }
@@ -357,6 +299,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::Provider;
     use crate::tx::{
         Tx,
         indexes::HashRelationIndex,
@@ -447,7 +390,7 @@ mod tests {
 
         let data = Arc::new(Mutex::new(HashMap::new()));
         let provider = Arc::new(TestProvider { data });
-        let relation = crate::tx::Relation::new(Symbol::mk("test"), provider);
+        let relation = crate::tx::Relation::new(Symbol::mk("test")).with_fixture(&*provider);
         let domain = TestDomain(42);
         let mut tuples = HashMap::default();
         tuples.insert(
@@ -460,7 +403,7 @@ mod tests {
             },
         );
         let mut ws = WorkingSet::new(tuples, Box::new(HashRelationIndex::new()));
-        let mut cr = relation.begin_check_from_index(&HashRelationIndex::new());
+        let mut cr = relation.begin_check();
 
         cr.check_with_resolver(&mut ws, RewriteToInsert).unwrap();
 
@@ -474,7 +417,7 @@ mod tests {
         let provider = Arc::new(TestProvider {
             data: Arc::new(Mutex::new(HashMap::new())),
         });
-        let relation = crate::tx::Relation::new(Symbol::mk("test"), provider);
+        let relation = crate::tx::Relation::new(Symbol::mk("test")).with_fixture(&*provider);
         for existed in [false, true] {
             let mut base = HashRelationIndex::new();
             if existed {
@@ -491,7 +434,7 @@ mod tests {
                 },
             );
             let mut ws = WorkingSet::new(tuples, Box::new(base));
-            let mut checker = relation.begin_check_from_index(&HashRelationIndex::new());
+            let mut checker = relation.begin_check();
             assert_eq!(checker.check(&mut ws).is_err(), existed);
         }
     }
@@ -552,15 +495,15 @@ mod tests {
         let provider = Arc::new(MergeProvider {
             data: Arc::new(Mutex::new(data)),
         });
-        let relation = crate::tx::Relation::new(Symbol::mk("merge"), provider);
-        let base_index = relation.seeded_index().unwrap();
+        let relation = crate::tx::Relation::new(Symbol::mk("merge")).with_fixture(&*provider);
+        let base_index = relation.index().load().fork();
 
         let tx = Tx {
             ts: Timestamp(1),
             visible_ts: Timestamp(1),
             snapshot_version: 0,
         };
-        let mut rt: RelationTransaction<TestDomain, MergeCodomain, _> =
+        let mut rt: RelationTransaction<TestDomain, MergeCodomain> =
             relation.start_from_index(&tx, base_index.as_ref());
         rt.update(&domain, MergeCodomain(11)).unwrap();
         let mut ws = rt.working_set().unwrap();

@@ -1544,6 +1544,10 @@ impl WorldState for DbWorldState {
         self.get_tx_mut().renumber_object(obj, target)
     }
 
+    fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+        self.get_tx().persistence_metrics()
+    }
+
     fn db_usage(&self) -> Result<usize, WorldStateError> {
         let _t = db_counters().timers_hot.start(WorldStateTimerOp::DbUsage);
         self.get_tx().db_usage()

@@ -34,21 +34,25 @@ use std::{
 };
 
 use ahash::AHashMap;
+use fjall::PersistMode;
 use flume::{Receiver, Sender};
 use moor_common::model::HasUuid;
 use moor_common::threading::spawn_efficient;
 use moor_var::{Obj, Symbol, Var};
-use parking_lot::Mutex;
 use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
-    DEFAULT_COMMIT_QUEUE_TIMEOUT, DEFAULT_COMMIT_QUEUE_WARN, ObjAndUUIDHolder, db_counters,
+    ObjAndUUIDHolder, db_counters,
     engine::property_definitions::PropertyDefinitionChange,
+    provider::coordinator::{COMMIT_ADMISSION_CAPACITY, CommitAdmission},
+    provider::fjall_relations::FjallRelations,
+    provider::logical::{
+        LogicalCommit, PreparedPropertyValueMutation, PreparedPropertyValueOp, SequenceUpdate,
+    },
     provider::property_value_store::{
-        PROPERTY_RECORD_KEY_BYTES, PreparedPropertyValueMutation, PreparedPropertyValueOp,
-        PropertyValueChain, PropertyValueChainLimits, encode_full_record,
-        encode_list_append_record, encode_property_value_record_key,
+        PROPERTY_RECORD_KEY_BYTES, PropertyValueChain, PropertyValueChainLimits,
+        encode_full_record, encode_list_append_record, encode_property_value_record_key,
         property_value_record_payload_bytes,
     },
     tx::{Error, Timestamp},
@@ -77,13 +81,16 @@ pub enum BatchOpSource {
         object: Obj,
         uuid: Uuid,
     },
+    #[cfg(test)]
     Internal(&'static str),
 }
 
 impl std::fmt::Display for BatchOpSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Relation(relation) | Self::Internal(relation) => f.write_str(relation),
+            Self::Relation(relation) => f.write_str(relation),
+            #[cfg(test)]
+            Self::Internal(relation) => f.write_str(relation),
             Self::Property {
                 relation,
                 object,
@@ -183,8 +190,10 @@ pub trait BatchValue: Send {
     ) -> Result<fjall::Slice, Error>;
 }
 
+#[cfg(test)]
 struct EncodedBatchValue(fjall::Slice);
 
+#[cfg(test)]
 impl BatchValue for EncodedBatchValue {
     fn encode(
         self: Box<Self>,
@@ -261,6 +270,8 @@ struct EncodedCommitBatch {
     timestamp: Timestamp,
     operations: Vec<EncodedBatchOp>,
     property_definition_changes: Box<[PropertyDefinitionChange]>,
+    sequences: Vec<SequenceUpdate>,
+    admission: Option<CommitAdmission>,
     encoding: EncodingStats,
 }
 
@@ -280,6 +291,7 @@ impl CommitBatch {
         }
     }
 
+    #[cfg(test)]
     pub fn insert(
         &mut self,
         partition: fjall::Keyspace,
@@ -296,6 +308,7 @@ impl CommitBatch {
         });
     }
 
+    #[cfg(test)]
     pub fn insert_encoded(
         &mut self,
         partition: fjall::Keyspace,
@@ -331,6 +344,11 @@ enum WriterMsg {
         through_version: u64,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    /// Confirm that an applied prefix has crossed the durable-storage fence.
+    Durable {
+        through_version: u64,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
     /// Return a cross-keyspace snapshot after committing through this version.
     Snapshot {
         through_version: u64,
@@ -338,10 +356,19 @@ enum WriterMsg {
     },
 }
 
+/// Work item for an encoding worker.
+pub(crate) enum EncodeRequest {
+    /// Production path: backend-neutral logical commit, encoded on the worker.
+    Logical(Box<LogicalCommit>),
+    /// Test path: a pre-built Fjall batch with optional sequence observations.
+    #[cfg(test)]
+    PreBuilt(CommitBatch, Vec<SequenceUpdate>),
+}
+
 enum EncoderMsg {
     Commit {
-        batch: CommitBatch,
-        admission: CommitAdmission,
+        request: EncodeRequest,
+        admission: Option<CommitAdmission>,
     },
     Stop,
 }
@@ -382,266 +409,30 @@ impl RollupEncoder {
 }
 
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(10);
-const ENCODE_QUEUE_CAPACITY: usize = 1000;
 const WRITER_QUEUE_CAPACITY: usize = 64;
 const MAX_ENCODER_THREADS: usize = 8;
-
-#[derive(Clone, Copy, Debug)]
-struct CommitAdmissionPolicy {
-    warn_after: Duration,
-    timeout: Duration,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CommitAdmissionError {
-    #[error("database commit queue remained full for {waited:?}")]
-    Timeout { waited: Duration },
-    #[error("database commit queue admission is unavailable")]
-    Unavailable,
-}
-
-pub(crate) struct CommitAdmission {
-    return_to: Sender<()>,
-}
-
-impl Drop for CommitAdmission {
-    fn drop(&mut self) {
-        let _ = self.return_to.try_send(());
-    }
-}
-
-#[derive(Default)]
-struct BackpressureEpisode {
-    started_at: Option<Instant>,
-    waiters: usize,
-    rejected: usize,
-    warned: bool,
-}
-
-struct CommitAdmissionGate {
-    available: Receiver<()>,
-    return_to: Sender<()>,
-    capacity: usize,
-    warn_after_nanos: AtomicU64,
-    timeout_nanos: AtomicU64,
-    episode: Mutex<BackpressureEpisode>,
-}
-
-/// An unfinished wait is abandoned, not counted as a timeout rejection.
-/// Only admission and timeout contribute to the existing block-time counter.
-struct AdmissionWait<'a> {
-    gate: &'a CommitAdmissionGate,
-    started_at: Instant,
-    outcome: AdmissionWaitOutcome,
-}
-
-enum AdmissionWaitOutcome {
-    Abandoned,
-    Admitted(Duration),
-    TimedOut(Duration),
-    Disconnected,
-}
-
-impl AdmissionWait<'_> {
-    fn elapsed(&self) -> Duration {
-        self.started_at.elapsed()
-    }
-
-    fn admitted(mut self) -> CommitAdmission {
-        self.outcome = AdmissionWaitOutcome::Admitted(self.elapsed());
-        self.gate.permit()
-    }
-
-    fn timed_out(mut self, waited: Duration) -> CommitAdmissionError {
-        self.outcome = AdmissionWaitOutcome::TimedOut(waited);
-        CommitAdmissionError::Timeout { waited }
-    }
-
-    fn disconnected(mut self) -> CommitAdmissionError {
-        self.outcome = AdmissionWaitOutcome::Disconnected;
-        CommitAdmissionError::Unavailable
-    }
-}
-
-impl Drop for AdmissionWait<'_> {
-    fn drop(&mut self) {
-        self.gate
-            .finish_wait(matches!(self.outcome, AdmissionWaitOutcome::TimedOut(_)));
-        if let AdmissionWaitOutcome::Admitted(waited) | AdmissionWaitOutcome::TimedOut(waited) =
-            self.outcome
-        {
-            db_counters()
-                .timers_rare
-                .record_elapsed(WorldStateTimerOp::BatchWriterBackpressureBlock, waited);
-        }
-    }
-}
-
-impl CommitAdmissionGate {
-    fn new(capacity: usize, policy: CommitAdmissionPolicy) -> Self {
-        let (return_to, available) = flume::bounded(capacity);
-        for _ in 0..capacity {
-            return_to
-                .send(())
-                .expect("commit admission token channel must accept its initial capacity");
-        }
-        Self {
-            available,
-            return_to,
-            capacity,
-            warn_after_nanos: AtomicU64::new(Self::duration_nanos(policy.warn_after)),
-            timeout_nanos: AtomicU64::new(Self::duration_nanos(policy.timeout)),
-            episode: Mutex::new(BackpressureEpisode::default()),
-        }
-    }
-
-    fn duration_nanos(duration: Duration) -> u64 {
-        u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
-    }
-
-    fn duration_from_nanos(nanos: u64) -> Duration {
-        Duration::from_nanos(nanos)
-    }
-
-    fn set_policy(&self, warn_after: Duration, timeout: Duration) {
-        self.warn_after_nanos
-            .store(Self::duration_nanos(warn_after), Ordering::Release);
-        self.timeout_nanos
-            .store(Self::duration_nanos(timeout), Ordering::Release);
-    }
-
-    fn policy(&self) -> CommitAdmissionPolicy {
-        CommitAdmissionPolicy {
-            warn_after: Self::duration_from_nanos(self.warn_after_nanos.load(Ordering::Acquire)),
-            timeout: Self::duration_from_nanos(self.timeout_nanos.load(Ordering::Acquire)),
-        }
-    }
-
-    fn permit(&self) -> CommitAdmission {
-        CommitAdmission {
-            return_to: self.return_to.clone(),
-        }
-    }
-
-    fn begin_wait(&self) -> AdmissionWait<'_> {
-        let started_at = Instant::now();
-        let mut episode = self.episode.lock();
-        episode.waiters += 1;
-        episode.started_at.get_or_insert_with(Instant::now);
-        AdmissionWait {
-            gate: self,
-            started_at,
-            outcome: AdmissionWaitOutcome::Abandoned,
-        }
-    }
-
-    fn warn_if_needed(&self, transaction: Timestamp, waited: Duration) {
-        let waiters = {
-            let mut episode = self.episode.lock();
-            if episode.warned {
-                return;
-            }
-            episode.warned = true;
-            episode.waiters
-        };
-        warn!(
-            transaction = transaction.0,
-            ?waited,
-            waiters,
-            queue_used = self.capacity.saturating_sub(self.available.len()),
-            queue_capacity = self.capacity,
-            "Database commit queue remains full"
-        );
-    }
-
-    fn finish_wait(&self, rejected: bool) {
-        let finished = {
-            let mut episode = self.episode.lock();
-            episode.waiters = episode.waiters.saturating_sub(1);
-            if rejected {
-                episode.rejected += 1;
-            }
-            if episode.waiters != 0 {
-                return;
-            }
-            let result = episode
-                .started_at
-                .map(|started_at| (started_at.elapsed(), episode.rejected, episode.warned));
-            *episode = BackpressureEpisode::default();
-            result
-        };
-        if let Some((elapsed, rejected, true)) = finished {
-            warn!(
-                ?elapsed,
-                rejected, "Database commit queue wait episode ended"
-            );
-        }
-    }
-
-    fn acquire(&self, transaction: Timestamp) -> Result<CommitAdmission, CommitAdmissionError> {
-        match self.available.try_recv() {
-            Ok(()) => return Ok(self.permit()),
-            Err(flume::TryRecvError::Disconnected) => {
-                return Err(CommitAdmissionError::Unavailable);
-            }
-            Err(flume::TryRecvError::Empty) => {}
-        }
-
-        db_counters()
-            .counters
-            .inc(WorldStateCountOp::BatchWriterBackpressure);
-        let wait = self.begin_wait();
-
-        loop {
-            let policy = self.policy();
-            let waited = wait.elapsed();
-            if waited >= policy.timeout {
-                self.warn_if_needed(transaction, waited);
-                return Err(wait.timed_out(waited));
-            }
-
-            let until_warning = policy.warn_after.saturating_sub(waited);
-            let until_timeout = policy.timeout.saturating_sub(waited);
-            let wait_for = if until_warning.is_zero() {
-                self.warn_if_needed(transaction, waited);
-                until_timeout
-            } else {
-                until_warning.min(until_timeout)
-            };
-
-            match self.available.recv_timeout(wait_for) {
-                Ok(()) => {
-                    return Ok(wait.admitted());
-                }
-                Err(flume::RecvTimeoutError::Timeout) => {
-                    let waited = wait.elapsed();
-                    if waited >= policy.warn_after {
-                        self.warn_if_needed(transaction, waited);
-                    }
-                }
-                Err(flume::RecvTimeoutError::Disconnected) => {
-                    return Err(wait.disconnected());
-                }
-            }
-        }
-    }
-}
 
 struct WriterState {
     waiting_batches: BTreeMap<u64, Result<EncodedCommitBatch, String>>,
     barrier_waiters: Vec<(u64, oneshot::Sender<Result<(), String>>)>,
+    durable_waiters: Vec<(u64, oneshot::Sender<Result<(), String>>)>,
     snapshot_waiters: Vec<(u64, oneshot::Sender<Result<fjall::Snapshot, String>>)>,
     next_version: u64,
     property_names: PropertyNames,
     property_value_chains: AHashMap<ObjAndUUIDHolder, PropertyValueChain>,
     property_value_limits: PropertyValueChainLimits,
     next_property_value_record_version: u64,
+    sequences_partition: fjall::Keyspace,
+    confirmed_sequences: Vec<i64>,
+    durable_version: u64,
 }
 
 struct WriterInit {
     property_names: AHashMap<Uuid, Symbol>,
     property_value_chains: AHashMap<ObjAndUUIDHolder, PropertyValueChain>,
     property_value_limits: PropertyValueChainLimits,
+    sequences_partition: fjall::Keyspace,
+    initial_sequences: Vec<i64>,
     rollup_encoder: RollupEncoder,
 }
 
@@ -650,6 +441,8 @@ impl WriterState {
         property_names: AHashMap<Uuid, Symbol>,
         property_value_chains: AHashMap<ObjAndUUIDHolder, PropertyValueChain>,
         property_value_limits: PropertyValueChainLimits,
+        sequences_partition: fjall::Keyspace,
+        initial_sequences: Vec<i64>,
     ) -> Self {
         let next_property_value_record_version = property_value_chains
             .values()
@@ -659,12 +452,16 @@ impl WriterState {
         Self {
             waiting_batches: BTreeMap::new(),
             barrier_waiters: Vec::new(),
+            durable_waiters: Vec::new(),
             snapshot_waiters: Vec::new(),
             next_version: 1,
             property_names: PropertyNames::new(property_names),
             property_value_chains,
             property_value_limits,
             next_property_value_record_version,
+            sequences_partition,
+            confirmed_sequences: initial_sequences,
+            durable_version: 0,
         }
     }
 
@@ -679,12 +476,41 @@ impl WriterState {
     }
 }
 
+/// Close admission before unwinding or returning from a failed worker.
+struct WorkerHealthGuard {
+    healthy: Arc<AtomicBool>,
+    finished: bool,
+}
+
+impl Drop for WorkerHealthGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.healthy.store(false, Ordering::Release);
+        }
+    }
+}
+
+/// Wait failures surfaced to the coordinator.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WriterWaitError {
+    #[error("snapshot reader resources are busy")]
+    ResourceBusy,
+    #[error("timed out waiting for persistence through version {version}")]
+    Timeout { version: u64 },
+    #[error("persistence writer failed: {detail}")]
+    Failed { detail: String },
+    #[error("persistence writer is unavailable")]
+    Unavailable,
+}
+
 /// Background writer that commits published transactions to Fjall in version order.
 pub struct BatchWriter {
     sender: Sender<WriterMsg>,
     encoder_sender: Sender<EncoderMsg>,
     completed_version: Arc<AtomicU64>,
-    admission: Arc<CommitAdmissionGate>,
+    durable_version: Arc<AtomicU64>,
+    healthy: Arc<AtomicBool>,
+    waiters_cancelled: AtomicBool,
     workers: Workers,
 }
 
@@ -704,8 +530,14 @@ impl BatchWriter {
         db: fjall::Database,
         property_names: AHashMap<Uuid, Symbol>,
     ) -> Self {
+        let sequences_partition = db
+            .keyspace("sequences", fjall::KeyspaceCreateOptions::default)
+            .expect("test sequences keyspace");
         Self::with_property_value_state(
             db,
+            sequences_partition,
+            Vec::new(),
+            None,
             property_names,
             AHashMap::new(),
             PROPERTY_VALUE_CHAIN_LIMITS,
@@ -714,22 +546,20 @@ impl BatchWriter {
 
     pub(crate) fn with_property_value_state(
         db: fjall::Database,
+        sequences_partition: fjall::Keyspace,
+        initial_sequences: Vec<i64>,
+        relations: Option<Arc<FjallRelations>>,
         property_names: AHashMap<Uuid, Symbol>,
         property_value_chains: AHashMap<ObjAndUUIDHolder, PropertyValueChain>,
         property_value_limits: PropertyValueChainLimits,
     ) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let completed_version = Arc::new(AtomicU64::new(0));
+        let durable_version = Arc::new(AtomicU64::new(0));
+        let healthy = Arc::new(AtomicBool::new(true));
         let (sender, receiver) = flume::bounded::<WriterMsg>(WRITER_QUEUE_CAPACITY);
         let (encoder_sender, encoder_receiver) =
-            flume::bounded::<EncoderMsg>(ENCODE_QUEUE_CAPACITY);
-        let admission = Arc::new(CommitAdmissionGate::new(
-            ENCODE_QUEUE_CAPACITY,
-            CommitAdmissionPolicy {
-                warn_after: DEFAULT_COMMIT_QUEUE_WARN,
-                timeout: DEFAULT_COMMIT_QUEUE_TIMEOUT,
-            },
-        ));
+            flume::bounded::<EncoderMsg>(COMMIT_ADMISSION_CAPACITY);
         let (rollup_sender, rollup_receiver) = flume::bounded::<RollupMsg>(1);
         let mut workers = WorkerGroup::new(
             sender.clone(),
@@ -748,6 +578,8 @@ impl BatchWriter {
 
         let ks = kill_switch.clone();
         let completed = completed_version.clone();
+        let durable = durable_version.clone();
+        let writer_healthy = healthy.clone();
 
         let join_handle = spawn_efficient("moor-batch-writer", move || {
             Self::writer_loop(
@@ -755,10 +587,14 @@ impl BatchWriter {
                 receiver,
                 ks,
                 completed,
+                durable,
+                writer_healthy,
                 WriterInit {
                     property_names,
                     property_value_chains,
                     property_value_limits,
+                    sequences_partition,
+                    initial_sequences,
                     rollup_encoder,
                 },
             )
@@ -770,9 +606,17 @@ impl BatchWriter {
         for index in 0..encoder_count {
             let receiver = encoder_receiver.clone();
             let sender = sender.clone();
+            let relations = relations.clone();
+            let healthy = healthy.clone();
             let handle =
                 moor_common::threading::spawn_perf(format!("moor-db-enc-{index}"), move || {
-                    Self::encoder_loop(receiver, sender)
+                    let mut guard = WorkerHealthGuard {
+                        healthy,
+                        finished: false,
+                    };
+                    let result = Self::encoder_loop(receiver, sender, relations);
+                    guard.finished = result.is_ok();
+                    result
                 })
                 .expect("failed to spawn batch encoder thread");
             workers.add_encoder(handle);
@@ -782,7 +626,9 @@ impl BatchWriter {
             sender,
             encoder_sender,
             completed_version,
-            admission,
+            durable_version,
+            healthy,
+            waiters_cancelled: AtomicBool::new(false),
             workers: Workers::new(workers),
         }
     }
@@ -796,21 +642,52 @@ impl BatchWriter {
     fn encoder_loop(
         receiver: Receiver<EncoderMsg>,
         sender: Sender<WriterMsg>,
+        relations: Option<Arc<FjallRelations>>,
     ) -> Result<(), String> {
         let mut encoder = BatchEncoder::new();
         loop {
             let msg = receiver
                 .recv()
                 .map_err(|_| "batch encoder channel disconnected".to_string())?;
-            let EncoderMsg::Commit { batch, admission } = msg else {
+            let EncoderMsg::Commit { request, admission } = msg else {
                 return Ok(());
             };
-            drop(admission);
 
-            let encoded = Self::encode_batch(batch, &mut encoder);
-            sender
-                .send(WriterMsg::Commit(encoded))
-                .map_err(|_| "batch writer channel disconnected".to_string())?;
+            let mut encoded = match request {
+                EncodeRequest::Logical(commit) => {
+                    let version = commit.publication.version();
+                    let result = match relations.as_ref() {
+                        Some(relations) => Self::encode_logical(*commit, &mut encoder, relations),
+                        None => {
+                            Err("logical commit submitted without relation resources".to_string())
+                        }
+                    };
+                    EncodedBatchResult { version, result }
+                }
+                #[cfg(test)]
+                EncodeRequest::PreBuilt(batch, sequences) => {
+                    let version = batch.version;
+                    let result = Self::encode_batch(batch, sequences, &mut encoder);
+                    EncodedBatchResult { version, result }
+                }
+            };
+            if let Ok(batch) = &mut encoded.result {
+                // Hold the admission permit until the batch has been applied.
+                batch.admission = admission;
+            } else if let Some(admission) = &admission {
+                admission.fail();
+            }
+
+            sender.send(WriterMsg::Commit(encoded)).map_err(|error| {
+                if let WriterMsg::Commit(EncodedBatchResult {
+                    result: Ok(batch), ..
+                }) = &error.0
+                    && let Some(admission) = &batch.admission
+                {
+                    admission.fail();
+                }
+                "batch writer channel disconnected".to_string()
+            })?;
         }
     }
 
@@ -845,10 +722,21 @@ impl BatchWriter {
         receiver: Receiver<WriterMsg>,
         kill_switch: Arc<AtomicBool>,
         completed_version: Arc<AtomicU64>,
+        durable_version: Arc<AtomicU64>,
+        healthy: Arc<AtomicBool>,
         init: WriterInit,
     ) -> Result<(), String> {
-        let result = Self::run_writer(db, receiver, kill_switch, completed_version, init);
+        let result = Self::run_writer(
+            db,
+            receiver,
+            kill_switch,
+            completed_version,
+            durable_version,
+            healthy.clone(),
+            init,
+        );
         if let Err(error) = &result {
+            healthy.store(false, Ordering::Release);
             error!("Batch writer failed: {error}");
             #[cfg(not(test))]
             moor_common::util::signal_fatal_db_error("batch writer", error);
@@ -861,18 +749,45 @@ impl BatchWriter {
         receiver: Receiver<WriterMsg>,
         kill_switch: Arc<AtomicBool>,
         completed_version: Arc<AtomicU64>,
+        durable_version: Arc<AtomicU64>,
+        healthy: Arc<AtomicBool>,
         init: WriterInit,
     ) -> Result<(), String> {
         let WriterInit {
             property_names,
             property_value_chains,
             property_value_limits,
+            sequences_partition,
+            initial_sequences,
             rollup_encoder,
         } = init;
-        let mut state =
-            WriterState::new(property_names, property_value_chains, property_value_limits);
+        let mut state = WriterState::new(
+            property_names,
+            property_value_chains,
+            property_value_limits,
+            sequences_partition,
+            initial_sequences,
+        );
 
+        let mut guard = WorkerHealthGuard {
+            healthy,
+            finished: false,
+        };
         loop {
+            if !guard.healthy.load(Ordering::Acquire) {
+                let detail = "persistence worker failed";
+                Self::fail_waiters(&mut state, detail);
+                return Err(detail.to_string());
+            }
+            state
+                .barrier_waiters
+                .retain(|(_, reply)| !reply.is_closed());
+            state
+                .durable_waiters
+                .retain(|(_, reply)| !reply.is_closed());
+            state
+                .snapshot_waiters
+                .retain(|(_, reply)| !reply.is_closed());
             if kill_switch.load(Ordering::Relaxed) {
                 while let Ok(msg) = receiver.try_recv() {
                     Self::handle_message(
@@ -881,7 +796,13 @@ impl BatchWriter {
                         &mut state,
                         completed_version.load(Ordering::Acquire),
                     )?;
-                    Self::persist_ready(&db, &mut state, &completed_version, &rollup_encoder)?;
+                    Self::persist_ready(
+                        &db,
+                        &mut state,
+                        &completed_version,
+                        &durable_version,
+                        &rollup_encoder,
+                    )?;
                 }
 
                 if !state.waiting_batches.is_empty() {
@@ -893,12 +814,19 @@ impl BatchWriter {
                     return Err(error);
                 }
 
+                Self::establish_durable(
+                    &db,
+                    &mut state,
+                    completed_version.load(Ordering::Acquire),
+                    &durable_version,
+                )?;
                 Self::reply_ready_barriers(&mut state, completed_version.load(Ordering::Acquire));
                 Self::reply_ready_snapshots(
                     &db,
                     &mut state,
                     completed_version.load(Ordering::Acquire),
                 );
+                guard.finished = true;
                 return Ok(());
             }
 
@@ -910,7 +838,24 @@ impl BatchWriter {
                         &mut state,
                         completed_version.load(Ordering::Acquire),
                     )?;
-                    Self::persist_ready(&db, &mut state, &completed_version, &rollup_encoder)?;
+                    // Release queued encoders together before applying the ready prefix.
+                    // Each logical commit still becomes its own atomic Fjall batch.
+                    for _ in 1..WRITER_QUEUE_CAPACITY {
+                        let Ok(msg) = receiver.try_recv() else { break };
+                        Self::handle_message(
+                            &db,
+                            msg,
+                            &mut state,
+                            completed_version.load(Ordering::Acquire),
+                        )?;
+                    }
+                    Self::persist_ready(
+                        &db,
+                        &mut state,
+                        &completed_version,
+                        &durable_version,
+                        &rollup_encoder,
+                    )?;
                 }
                 Err(flume::RecvTimeoutError::Timeout) => {}
                 Err(flume::RecvTimeoutError::Disconnected) => {
@@ -941,6 +886,17 @@ impl BatchWriter {
                 }
                 Ok(())
             }
+            WriterMsg::Durable {
+                through_version,
+                reply,
+            } => {
+                if through_version != 0 && through_version <= state.durable_version {
+                    reply.send(Ok(())).ok();
+                } else {
+                    state.durable_waiters.push((through_version, reply));
+                }
+                Ok(())
+            }
             WriterMsg::Snapshot {
                 through_version,
                 reply,
@@ -959,36 +915,93 @@ impl BatchWriter {
         db: &fjall::Database,
         state: &mut WriterState,
         completed_version: &AtomicU64,
+        durable_version: &AtomicU64,
         rollup_encoder: &RollupEncoder,
     ) -> Result<(), String> {
         while let Some(batch) = state.waiting_batches.remove(&state.next_version) {
-            let batch = match batch {
+            let mut batch = match batch {
                 Ok(batch) => batch,
                 Err(error) => {
                     Self::fail_waiters(state, &error);
                     return Err(error);
                 }
             };
+            let admission = batch.admission.take();
             let result = PreparedPersistence::prepare(db, batch, state, rollup_encoder)
-                .and_then(PreparedPersistence::commit)
-                .map(|persisted| persisted.complete(completed_version));
-            if let Err(error) = result {
-                Self::fail_waiters(state, &error);
-                return Err(error);
+                .and_then(PreparedPersistence::commit);
+            match result {
+                Ok(persisted) => persisted.complete(completed_version, admission),
+                Err(error) => {
+                    if let Some(admission) = &admission {
+                        admission.fail();
+                    }
+                    Self::fail_waiters(state, &error);
+                    return Err(error);
+                }
             }
         }
+        // A durable request can arrive after its prefix has already applied.
+        let completed = completed_version.load(Ordering::Acquire);
+        Self::establish_durable(db, state, completed, durable_version)?;
         Ok(())
     }
 
-    fn encode_batch(batch: CommitBatch, encoder: &mut BatchEncoder) -> EncodedBatchResult {
-        let version = batch.version;
-        let result = (|| {
-            let CommitBatch {
-                version,
-                timestamp,
-                operations,
-                property_definition_changes,
-            } = batch;
+    /// Establish the durable fence for every queued request the applied prefix now covers.
+    fn establish_durable(
+        db: &fjall::Database,
+        state: &mut WriterState,
+        completed_version: u64,
+        durable_version: &AtomicU64,
+    ) -> Result<(), String> {
+        let Some(requested) = state
+            .durable_waiters
+            .iter()
+            .map(|(version, _)| *version)
+            .filter(|version| *version <= completed_version)
+            .max()
+        else {
+            return Ok(());
+        };
+        if requested > completed_version {
+            return Ok(());
+        }
+        if state.durable_version < completed_version || requested == 0 {
+            let start = Instant::now();
+            db.persist(PersistMode::SyncAll)
+                .map_err(|error| format!("failed to flush Fjall to durable storage: {error}"))?;
+            db_counters()
+                .timers_rare
+                .record_elapsed(WorldStateTimerOp::BatchWriterDurableFlush, start.elapsed());
+            state.durable_version = completed_version;
+            durable_version.store(completed_version, Ordering::Release);
+        }
+
+        let durable = state.durable_version;
+        let mut pending = Vec::with_capacity(state.durable_waiters.len());
+        for (version, reply) in state.durable_waiters.drain(..) {
+            if version <= durable {
+                reply.send(Ok(())).ok();
+            } else {
+                pending.push((version, reply));
+            }
+        }
+        state.durable_waiters = pending;
+        Ok(())
+    }
+
+    /// Encode one assembled Fjall batch, including its sequence observations.
+    fn encode_batch(
+        batch: CommitBatch,
+        sequences: Vec<SequenceUpdate>,
+        encoder: &mut BatchEncoder,
+    ) -> Result<EncodedCommitBatch, String> {
+        let CommitBatch {
+            version,
+            timestamp,
+            operations,
+            property_definition_changes,
+        } = batch;
+        (move || {
             let start = Instant::now();
             let mut encoded_bytes = 0usize;
             let mut slowest = None;
@@ -1023,7 +1036,9 @@ impl BatchWriter {
                     }
                     BatchOpType::PropertyValue(prepared) => {
                         let op_start = Instant::now();
-                        let PreparedPropertyValueOp { property, mutation } = prepared;
+                        let PreparedPropertyValueOp {
+                            property, mutation, ..
+                        } = prepared;
                         let mutation = match mutation {
                             PreparedPropertyValueMutation::Replace { value } => {
                                 let record =
@@ -1107,15 +1122,35 @@ impl BatchWriter {
                 timestamp,
                 operations: encoded_operations,
                 property_definition_changes,
+                sequences,
+                admission: None,
                 encoding: EncodingStats {
                     elapsed,
                     encoded_bytes,
                     slowest,
                 },
             })
-        })();
+        })()
+    }
 
-        EncodedBatchResult { version, result }
+    /// Encode a backend-neutral logical commit using the Fjall relation resources.
+    fn encode_logical(
+        commit: LogicalCommit,
+        encoder: &mut BatchEncoder,
+        relations: &FjallRelations,
+    ) -> Result<EncodedCommitBatch, String> {
+        let LogicalCommit {
+            publication,
+            timestamp,
+            changes,
+            sequences,
+            property_definition_changes,
+        } = commit;
+        let mut batch = relations
+            .working_sets_to_batch(changes, publication.version(), timestamp)
+            .map_err(|error| format!("failed to encode relation changes: {error}"))?;
+        batch.set_property_definition_changes(property_definition_changes);
+        Self::encode_batch(batch, sequences, encoder)
     }
 
     fn reply_ready_barriers(state: &mut WriterState, completed_version: u64) {
@@ -1150,41 +1185,47 @@ impl BatchWriter {
         for (_, reply) in state.barrier_waiters.drain(..) {
             reply.send(Err(detail.to_string())).ok();
         }
+        for (_, reply) in state.durable_waiters.drain(..) {
+            reply.send(Err(detail.to_string())).ok();
+        }
         for (_, reply) in state.snapshot_waiters.drain(..) {
             reply.send(Err(detail.to_string())).ok();
         }
     }
 
-    pub(crate) fn admit_commit(
+    /// Submit a published logical commit to the encoder pool.
+    ///
+    /// The admission permit travels with the commit and is released only after the batch has
+    /// been applied.
+    pub(crate) fn submit(
         &self,
-        transaction: Timestamp,
-    ) -> Result<CommitAdmission, CommitAdmissionError> {
-        self.admission.acquire(transaction)
-    }
-
-    pub(crate) fn set_commit_queue_policy(&self, warn_after: Duration, timeout: Duration) {
-        self.admission.set_policy(warn_after, timeout);
+        commit: LogicalCommit,
+        admission: CommitAdmission,
+    ) -> Result<(), String> {
+        self.try_send_request(EncodeRequest::Logical(Box::new(commit)), Some(admission))
     }
 
     #[cfg(test)]
-    pub(crate) fn hold_all_admission(&self) -> Vec<CommitAdmission> {
-        (0..self.admission.capacity)
-            .map(|index| {
-                self.admit_commit(Timestamp(index as u64))
-                    .expect("test should be able to reserve the configured admission capacity")
-            })
-            .collect()
+    pub(crate) fn write_batch_for_test(&self, batch: CommitBatch) -> Result<(), String> {
+        self.try_send_request(EncodeRequest::PreBuilt(batch, Vec::new()), None)
     }
 
-    pub fn write(&self, batch: CommitBatch, admission: CommitAdmission) -> Result<(), String> {
+    pub(crate) fn try_send_request(
+        &self,
+        request: EncodeRequest,
+        admission: Option<CommitAdmission>,
+    ) -> Result<(), String> {
         self.encoder_sender
-            .try_send(EncoderMsg::Commit { batch, admission })
-            .map_err(|error| match error {
-                flume::TrySendError::Full(_) => {
-                    "batch encoder queue full after admission was reserved".to_string()
-                }
-                flume::TrySendError::Disconnected(_) => {
-                    "batch encoder channel disconnected".to_string()
+            .try_send(EncoderMsg::Commit { request, admission })
+            .map_err(|error| {
+                self.healthy.store(false, Ordering::Release);
+                match error {
+                    flume::TrySendError::Full(_) => {
+                        "batch encoder queue full after admission was reserved".to_string()
+                    }
+                    flume::TrySendError::Disconnected(_) => {
+                        "batch encoder channel disconnected".to_string()
+                    }
                 }
             })
     }
@@ -1193,44 +1234,170 @@ impl BatchWriter {
         self.completed_version.load(Ordering::Acquire)
     }
 
-    /// Wait until Fjall has accepted every transaction through `through_version`.
-    ///
-    /// This does not request an fsync or wait for memtable flushing or compaction.
-    pub fn wait_for_version(&self, through_version: u64) -> Result<(), String> {
-        let (reply, receiver) = oneshot::channel();
-        self.sender
-            .send(WriterMsg::Barrier {
-                through_version,
-                reply,
-            })
-            .map_err(|_| "batch writer channel disconnected".to_string())?;
-        receiver.recv().map_err(|error| {
-            format!("failed waiting for Fjall through version {through_version}: {error}")
-        })?
+    pub fn durable_version(&self) -> u64 {
+        self.durable_version.load(Ordering::Acquire)
     }
 
+    /// Whether the writer is still able to apply commits.
+    pub fn healthy(&self) -> bool {
+        self.healthy.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn health_flag(&self) -> Arc<AtomicBool> {
+        self.healthy.clone()
+    }
+
+    pub(crate) fn cancel_waiters(&self) {
+        self.waiters_cancelled.store(true, Ordering::Release);
+    }
+
+    fn check_wait_health(&self) -> Result<(), WriterWaitError> {
+        if !self.healthy() || self.waiters_cancelled.load(Ordering::Acquire) {
+            return Err(WriterWaitError::Unavailable);
+        }
+        Ok(())
+    }
+
+    fn send_request(
+        &self,
+        mut message: WriterMsg,
+        version: u64,
+        deadline: Option<Instant>,
+    ) -> Result<(), WriterWaitError> {
+        loop {
+            self.check_wait_health()?;
+            let wait = remaining(deadline).min(RECEIVE_POLL_INTERVAL);
+            match self.sender.send_timeout(message, wait) {
+                Ok(()) => return Ok(()),
+                Err(flume::SendTimeoutError::Disconnected(_)) => {
+                    return Err(WriterWaitError::Unavailable);
+                }
+                Err(flume::SendTimeoutError::Timeout(returned)) => message = returned,
+            }
+            if remaining(deadline).is_zero() {
+                return Err(WriterWaitError::Timeout { version });
+            }
+        }
+    }
+
+    fn receive_reply<T>(
+        &self,
+        receiver: oneshot::Receiver<Result<T, String>>,
+        version: u64,
+        deadline: Option<Instant>,
+    ) -> Result<T, WriterWaitError> {
+        loop {
+            match receiver.recv_timeout(remaining(deadline).min(RECEIVE_POLL_INTERVAL)) {
+                Ok(result) => return result.map_err(|detail| WriterWaitError::Failed { detail }),
+                Err(oneshot::RecvTimeoutError::Disconnected) => {
+                    return Err(WriterWaitError::Unavailable);
+                }
+                Err(oneshot::RecvTimeoutError::Timeout) => {}
+            }
+            self.check_wait_health()?;
+            if remaining(deadline).is_zero() {
+                return Err(WriterWaitError::Timeout { version });
+            }
+        }
+    }
+
+    /// Wait for application, without requesting a durable flush.
+    pub fn wait_applied(&self, version: u64, timeout: Duration) -> Result<(), WriterWaitError> {
+        self.wait_applied_until(version, Instant::now().checked_add(timeout))
+    }
+
+    /// Unbounded application barrier; failure and shutdown still wake the caller.
+    pub fn wait_applied_unbounded(&self, version: u64) -> Result<(), WriterWaitError> {
+        self.wait_applied_until(version, None)
+    }
+
+    fn wait_applied_until(
+        &self,
+        version: u64,
+        deadline: Option<Instant>,
+    ) -> Result<(), WriterWaitError> {
+        if version <= self.completed_version() {
+            return Ok(());
+        }
+        let (reply, receiver) = oneshot::channel();
+        self.send_request(
+            WriterMsg::Barrier {
+                through_version: version,
+                reply,
+            },
+            version,
+            deadline,
+        )?;
+        self.receive_reply(receiver, version, deadline)
+    }
+
+    /// Establish a local durable fence, including recovered state at runtime version zero.
+    pub fn wait_durable(&self, version: u64, timeout: Duration) -> Result<(), WriterWaitError> {
+        if version != 0 && version <= self.durable_version() {
+            return Ok(());
+        }
+        let deadline = Instant::now().checked_add(timeout);
+        let (reply, receiver) = oneshot::channel();
+        self.send_request(
+            WriterMsg::Durable {
+                through_version: version,
+                reply,
+            },
+            version,
+            deadline,
+        )?;
+        self.receive_reply(receiver, version, deadline)
+    }
+
+    /// Acquire a consistent snapshot with one deadline for submission and receipt.
     pub fn snapshot(
         &self,
-        through_version: u64,
+        version: u64,
         timeout: Duration,
-    ) -> Result<fjall::Snapshot, String> {
+    ) -> Result<fjall::Snapshot, WriterWaitError> {
+        let deadline = Instant::now().checked_add(timeout);
         let (reply, receiver) = oneshot::channel();
-        let msg = WriterMsg::Snapshot {
-            through_version,
-            reply,
-        };
-        self.sender
-            .send(msg)
-            .map_err(|_| "batch writer channel disconnected".to_string())?;
-        receiver.recv_timeout(timeout).map_err(|error| {
-            format!(
-                "timed out waiting for Fjall snapshot through version {through_version}: {error}"
-            )
-        })?
+        self.send_request(
+            WriterMsg::Snapshot {
+                through_version: version,
+                reply,
+            },
+            version,
+            deadline,
+        )?;
+        self.receive_reply(receiver, version, deadline)
     }
 
+    #[cfg(test)]
     pub fn stop(&self) -> Result<(), String> {
-        self.workers.stop()
+        self.stop_with_deadline(Duration::from_secs(30))
+    }
+
+    /// Stop workers, draining published work within the given deadline.
+    pub fn stop_with_deadline(&self, timeout: Duration) -> Result<(), String> {
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(|| "shutdown deadline exceeds the monotonic clock range".to_string())?;
+        let result = self.workers.stop_until(deadline);
+        self.cancel_waiters();
+        if result.is_err() {
+            self.healthy.store(false, Ordering::Release);
+        }
+        result
+    }
+}
+
+fn remaining(deadline: Option<Instant>) -> Duration {
+    deadline.map_or(Duration::MAX, |deadline| {
+        deadline.saturating_duration_since(Instant::now())
+    })
+}
+
+impl Drop for BatchWriter {
+    fn drop(&mut self) {
+        if let Err(error) = self.stop_with_deadline(Duration::from_secs(30)) {
+            error!("Failed to stop batch writer: {error}");
+        }
     }
 }
 
@@ -1262,104 +1429,7 @@ mod tests {
     }
 
     fn write(writer: &BatchWriter, batch: CommitBatch) -> Result<(), String> {
-        let admission = writer
-            .admit_commit(batch.timestamp)
-            .map_err(|error| error.to_string())?;
-        writer.write(batch, admission)
-    }
-
-    #[test]
-    fn admission_wait_guards_close_overlapping_and_abandoned_episodes() {
-        let gate = CommitAdmissionGate::new(
-            1,
-            CommitAdmissionPolicy {
-                warn_after: Duration::from_secs(1),
-                timeout: Duration::from_secs(2),
-            },
-        );
-        let last = gate.begin_wait();
-        let timed_out = gate.begin_wait();
-        let disconnected = gate.begin_wait();
-        gate.warn_if_needed(Timestamp(1), Duration::from_secs(1));
-        assert!(matches!(
-            timed_out.timed_out(Duration::from_secs(2)),
-            CommitAdmissionError::Timeout { .. }
-        ));
-        assert!(matches!(
-            disconnected.disconnected(),
-            CommitAdmissionError::Unavailable
-        ));
-        {
-            let episode = gate.episode.lock();
-            assert_eq!(episode.waiters, 1);
-            assert_eq!(episode.rejected, 1);
-            assert!(episode.warned);
-        }
-        // Unwinding also drops a registered wait, without adding a rejection.
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _wait = gate.begin_wait();
-            panic!("abandon admission");
-        }));
-        assert!(result.is_err());
-        assert_eq!(gate.episode.lock().waiters, 1);
-        assert_eq!(gate.episode.lock().rejected, 1);
-        drop(last);
-        let episode = gate.episode.lock();
-        assert_eq!(episode.waiters, 0);
-        assert_eq!(episode.rejected, 0);
-        assert!(!episode.warned);
-        assert!(episode.started_at.is_none());
-    }
-
-    #[test]
-    fn successful_slow_admission_closes_its_episode_and_returns_permit() {
-        let gate = Arc::new(CommitAdmissionGate::new(
-            1,
-            CommitAdmissionPolicy {
-                warn_after: Duration::from_secs(1),
-                timeout: Duration::from_secs(5),
-            },
-        ));
-        let held = gate.acquire(Timestamp(1)).unwrap();
-        let waiter = {
-            let gate = gate.clone();
-            std::thread::spawn(move || gate.acquire(Timestamp(2)).unwrap())
-        };
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while gate.episode.lock().waiters == 0 {
-            assert!(Instant::now() < deadline, "waiter did not enter admission");
-            std::thread::yield_now();
-        }
-        drop(held);
-        let admitted = waiter.join().unwrap();
-        assert_eq!(gate.episode.lock().waiters, 0);
-        assert!(gate.episode.lock().started_at.is_none());
-        assert!(gate.available.is_empty());
-        drop(admitted);
-        assert_eq!(gate.available.len(), 1);
-    }
-
-    #[test]
-    fn admission_times_out_and_recovers_without_waiting_forever() {
-        let gate = CommitAdmissionGate::new(
-            1,
-            CommitAdmissionPolicy {
-                warn_after: Duration::from_millis(1),
-                timeout: Duration::from_millis(10),
-            },
-        );
-        let held = gate.acquire(Timestamp(1)).unwrap();
-
-        let error = match gate.acquire(Timestamp(2)) {
-            Ok(_) => panic!("admission unexpectedly succeeded while its only permit was held"),
-            Err(error) => error,
-        };
-        assert!(matches!(error, CommitAdmissionError::Timeout { .. }));
-        assert_eq!(gate.episode.lock().waiters, 0);
-        assert!(gate.episode.lock().started_at.is_none());
-
-        drop(held);
-        assert!(gate.acquire(Timestamp(3)).is_ok());
+        writer.write_batch_for_test(batch)
     }
 
     fn property_batch(
@@ -1375,6 +1445,7 @@ mod tests {
                 partition: partition.clone(),
                 op_type: BatchOpType::PropertyValue(PreparedPropertyValueOp {
                     property: property.clone(),
+                    base_timestamp: None,
                     mutation,
                 }),
                 source: BatchOpSource::Property {
@@ -1444,13 +1515,127 @@ mod tests {
         let writer = BatchWriter::new(database);
 
         write(&writer, encoded_batch(1, &partition, b"key", b"value")).unwrap();
-        writer.wait_for_version(1).unwrap();
+        writer.wait_applied(1, Duration::from_secs(1)).unwrap();
 
         assert_eq!(writer.completed_version(), 1);
         assert_eq!(
             partition.get(b"key").unwrap().as_deref(),
             Some(&b"value"[..])
         );
+    }
+
+    #[test]
+    fn later_durable_wait_does_not_block_an_applied_prefix() {
+        let (_tempdir, database) = test_database();
+        let partition = database
+            .keyspace("values", KeyspaceCreateOptions::default)
+            .unwrap();
+        let writer = BatchWriter::new(database);
+        write(&writer, encoded_batch(1, &partition, b"key", b"value")).unwrap();
+        writer.wait_applied(1, Duration::from_secs(1)).unwrap();
+        let (reply, _later) = oneshot::channel();
+        writer
+            .sender
+            .send(WriterMsg::Durable {
+                through_version: 2,
+                reply,
+            })
+            .unwrap();
+        writer.wait_durable(1, Duration::from_secs(1)).unwrap();
+        assert_eq!(writer.durable_version(), 1);
+    }
+
+    #[test]
+    fn snapshot_keeps_its_view_after_writer_shutdown() {
+        let (_tempdir, database) = test_database();
+        let partition = database
+            .keyspace("values", KeyspaceCreateOptions::default)
+            .unwrap();
+        let writer = BatchWriter::new(database);
+        write(&writer, encoded_batch(1, &partition, b"key", b"first")).unwrap();
+        let snapshot = writer.snapshot(1, Duration::from_secs(1)).unwrap();
+        write(&writer, encoded_batch(2, &partition, b"key", b"second")).unwrap();
+        writer.stop_with_deadline(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            snapshot.get(&partition, b"key").unwrap().unwrap().as_ref(),
+            b"first"
+        );
+    }
+
+    #[test]
+    fn shutdown_deadline_includes_a_full_encoder_queue() {
+        let (sender, _receiver) = flume::bounded(1);
+        let (encoder_sender, _encoder_receiver) = flume::bounded(1);
+        encoder_sender.send(EncoderMsg::Stop).unwrap();
+        let (rollup_sender, _rollup_receiver) = flume::bounded(1);
+        let (release, wait) = flume::bounded(1);
+        let worker = std::thread::spawn(move || {
+            wait.recv().unwrap();
+            Ok(())
+        });
+        let mut group = WorkerGroup::new(
+            sender.clone(),
+            encoder_sender.clone(),
+            Arc::new(AtomicBool::new(false)),
+            rollup_sender,
+        );
+        group.add_encoder(worker);
+        let writer = BatchWriter {
+            sender,
+            encoder_sender,
+            completed_version: Arc::new(AtomicU64::new(0)),
+            durable_version: Arc::new(AtomicU64::new(0)),
+            healthy: Arc::new(AtomicBool::new(true)),
+            waiters_cancelled: AtomicBool::new(false),
+            workers: Workers::new(group),
+        };
+        let started = Instant::now();
+        let result = writer.stop_with_deadline(Duration::from_millis(20));
+        release.send(()).unwrap();
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(!writer.healthy());
+    }
+
+    #[test]
+    fn sequence_updates_never_lower_the_stored_high_water() {
+        let (_tempdir, database) = test_database();
+        let sequences_partition = database
+            .keyspace("sequences", KeyspaceCreateOptions::default)
+            .unwrap();
+        let writer = BatchWriter::with_property_value_state(
+            database.clone(),
+            sequences_partition.clone(),
+            vec![-1],
+            None,
+            AHashMap::new(),
+            AHashMap::new(),
+            PROPERTY_VALUE_CHAIN_LIMITS,
+        );
+
+        // Submit the later publication first, then an earlier submission that observed a higher
+        // allocation. The writer must apply the maximum rather than the last-applied value.
+        let newer = CommitBatch::with_capacity(2, Timestamp(2), 0);
+        writer
+            .try_send_request(
+                EncodeRequest::PreBuilt(newer, vec![SequenceUpdate { slot: 0, value: 10 }]),
+                None,
+            )
+            .unwrap();
+        let older = CommitBatch::with_capacity(1, Timestamp(1), 0);
+        writer
+            .try_send_request(
+                EncodeRequest::PreBuilt(older, vec![SequenceUpdate { slot: 0, value: 20 }]),
+                None,
+            )
+            .unwrap();
+
+        writer.wait_applied(2, Duration::from_secs(2)).unwrap();
+        let stored = sequences_partition
+            .get(0_usize.to_le_bytes())
+            .unwrap()
+            .expect("sequence slot written");
+        assert_eq!(i64::from_le_bytes(stored.as_ref().try_into().unwrap()), 20);
     }
 
     #[test]
@@ -1511,15 +1696,21 @@ mod tests {
             AHashMap::new(),
             AHashMap::new(),
             PROPERTY_VALUE_CHAIN_LIMITS,
+            database
+                .keyspace("sequences", KeyspaceCreateOptions::default)
+                .unwrap(),
+            Vec::new(),
         );
         let mut encoder = BatchEncoder::new();
+        let mut encode = |batch: CommitBatch| EncodedBatchResult {
+            version: batch.version,
+            result: BatchWriter::encode_batch(batch, Vec::new(), &mut encoder),
+        };
         let batch = || encoded_batch(2, &partition, b"key", b"value");
-        state
-            .add_batch(BatchWriter::encode_batch(batch(), &mut encoder))
-            .unwrap();
+        state.add_batch(encode(batch())).unwrap();
         assert!(
             state
-                .add_batch(BatchWriter::encode_batch(batch(), &mut encoder))
+                .add_batch(encode(batch()))
                 .unwrap_err()
                 .contains("duplicate persistence batch")
         );
@@ -1527,15 +1718,17 @@ mod tests {
         let (sender, _receiver) = flume::bounded(1);
         let completed = AtomicU64::new(0);
         state
-            .add_batch(BatchWriter::encode_batch(
-                encoded_batch(1, &partition, b"key", b"first"),
-                &mut encoder,
-            ))
+            .add_batch(encode(encoded_batch(1, &partition, b"key", b"first")))
             .unwrap();
-        BatchWriter::persist_ready(&database, &mut state, &completed, &RollupEncoder { sender })
-            .unwrap();
-        let duplicate =
-            BatchWriter::encode_batch(encoded_batch(1, &partition, b"key", b"wrong"), &mut encoder);
+        BatchWriter::persist_ready(
+            &database,
+            &mut state,
+            &completed,
+            &AtomicU64::new(0),
+            &RollupEncoder { sender },
+        )
+        .unwrap();
+        let duplicate = encode(encoded_batch(1, &partition, b"key", b"wrong"));
         assert!(
             state
                 .add_batch(duplicate)
@@ -1628,8 +1821,14 @@ mod tests {
             .keyspace("object_propvalues", KeyspaceCreateOptions::default)
             .unwrap();
         let limits = PropertyValueChainLimits::new(2, usize::MAX);
+        let sequences_partition = database
+            .keyspace("sequences", KeyspaceCreateOptions::default)
+            .unwrap();
         let writer = BatchWriter::with_property_value_state(
             database,
+            sequences_partition,
+            Vec::new(),
+            None,
             AHashMap::new(),
             AHashMap::new(),
             limits,

@@ -44,7 +44,7 @@ mod tests {
 
     /// Create an in-memory db with a single object (#0) containing verbs.
     fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
-        let (state, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (state, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(
@@ -203,6 +203,159 @@ mod tests {
     }
 
     #[test]
+    fn persistent_lambda_behavior_corpus() {
+        use moor_compiler::{SourceProfile, read_persistent_literal, write_persistent_literal};
+        let cases = [
+            (
+                "return {x, y, @rest} => {x, y, rest};",
+                "return args[1](2, 3, 4, 5);",
+            ),
+            (
+                "return fn (x, ?y = x + 5, @rest) return {y, rest}; endfn;",
+                "f = args[1]; return {f(3), f(3, 9, 10), f(3, 0)};",
+            ),
+            (
+                "let base = 40; return {x} => base + x;",
+                "return args[1](2);",
+            ),
+            (
+                "let x = 10; let make = fn (x) let y = 3; return {z} => x + y + z; endfn; return make(20);",
+                "return args[1](4);",
+            ),
+            (
+                "let x = 10; let make = fn () let y = 20; return {} => x + y; endfn; return make();",
+                "return args[1]();",
+            ),
+            ("let x = None; return {} => x;", "return args[1]();"),
+            (
+                "let payload = <#anon_048D05-1234567890, .value = <#048D05-1234567890>>; return {} => payload;",
+                "return args[1]();",
+            ),
+            (
+                "let padding = 5; fn fact(n) if (n <= 1) return 1; endif return n * fact(n - 1); endfn return fact;",
+                "return args[1](6);",
+            ),
+            (
+                "let pad = 1; let make = fn () let pad2 = 2; fn fact(n) if (n <= 1) return 1; endif return n * fact(n - 1); endfn return fact; endfn; return make();",
+                "return args[1](5);",
+            ),
+            (
+                "let base = 3; return {x} => {y} => base + x + y;",
+                "f = args[1](4); return f(5);",
+            ),
+            (
+                "let inner = {x} => x + 1; return {y} => inner(y);",
+                "return args[1](4);",
+            ),
+            (
+                "return {} => {None, e\"Mixed\"(None, {1, 2}), #anon_048D05-1234567890};",
+                "return args[1]();",
+            ),
+        ];
+        for (creation, invocation) in cases {
+            let value = run_moo(creation).unwrap();
+            let expected =
+                run_moo_with_args(invocation, List::mk_list(std::slice::from_ref(&value)));
+            if !creation.contains("let x = None") {
+                assert!(
+                    expected.is_ok(),
+                    "original failed: {creation}: {expected:?}"
+                );
+            }
+            let mut text = String::new();
+            write_persistent_literal(&value, &SourceProfile::default(), &mut text)
+                .unwrap_or_else(|error| panic!("{creation}: {error}"));
+            let loaded = read_persistent_literal(&text, &SourceProfile::default()).unwrap();
+            assert_eq!(
+                run_moo_with_args(invocation, List::mk_list(&[loaded]))
+                    .map_err(|e| e.error.err_type()),
+                expected.clone().map_err(|e| e.error.err_type()),
+                "literal {text}"
+            );
+            // A persisted closure is also a scalar constant in ordinary program source.
+            let embedded = run_moo(&format!("return {text};")).unwrap();
+            assert_eq!(
+                run_moo_with_args(invocation, List::mk_list(&[embedded]))
+                    .map_err(|e| e.error.err_type()),
+                expected.map_err(|e| e.error.err_type()),
+                "embedded {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn persistent_parameterless_closures_preserve_nested_captures() {
+        use moor_compiler::{SourceProfile, read_persistent_literal, write_persistent_literal};
+
+        let sources = [
+            "let make = fn () let make_inner = fn () let x = 42; return {} => {} => x; endfn; return make_inner(); endfn; return make();",
+            "let anchor = 0; let make = fn () let outer = anchor; let make_inner = fn () let x = 42 + outer; return {} => {} => x; endfn; return make_inner(); endfn; return make();",
+            "begin let unused = 1; end begin let x = 42; return {} => fn () return x; endfn; end",
+        ];
+        for source in sources {
+            let mut value = run_moo(source).unwrap();
+            for round in 0..3 {
+                assert_eq!(
+                    run_moo_with_args(
+                        "let inner = args[1](); return inner();",
+                        List::mk_list(std::slice::from_ref(&value))
+                    )
+                    .unwrap(),
+                    v_int(42),
+                    "round {round}: {source}"
+                );
+                let mut text = String::new();
+                write_persistent_literal(&value, &SourceProfile::default(), &mut text).unwrap();
+                value = read_persistent_literal(&text, &SourceProfile::default()).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn persistent_source_behavior_corpus() {
+        use moor_compiler::{PersistentProgram, SourceProfile};
+        let cases = [
+            "return {None, true, false, -0.0, 9223372036854775807, -9223372036854775808};",
+            "return {e\"Mixed Case\"(\"detail\", [1 -> None]), '\"🐄 name\", <#1, .\"slots\" = 2>};",
+            "let base = 5; let f = {x, ?y = base} => {x, y}; return {f(2), f(2, 8)};",
+            "fn fact(n) if (n <= 1) return 1; endif return n * fact(n - 1); endfn return fact(5);",
+            "let total = 0; for x in ({1, 2, 3}) total = total + x; endfor return total;",
+            "try return 1 / 0; except e (E_DIV) return e[1]; endtry",
+            "fork (0) #0.test = 7; endfork return #0.test;",
+        ];
+        for source in cases {
+            let program = ProgramType::MooR(compile(source, CompileOptions::default()).unwrap());
+            let stored = PersistentProgram::encode(&program, &SourceProfile::default())
+                .unwrap_or_else(|e| panic!("{source}: {e}"));
+            let ProgramType::MooR(loaded) = stored.decode().unwrap();
+            let db = test_db_with_verb("test", &loaded);
+            let actual = call_verb(
+                db.new_world_state().unwrap(),
+                Arc::new(NoopClientSession::new()),
+                BuiltinRegistry::new(),
+                "test",
+                List::mk_list(&[]),
+            );
+            assert_eq!(actual, run_moo(source), "stored source {}", stored.source);
+        }
+        for bits in [
+            0x7ff0_0000_0000_0000_u64,
+            0xfff0_0000_0000_0000,
+            0x7ff8_0000_0000_1234,
+            0xfff0_0000_0000_0001,
+        ] {
+            let source = format!("return f\"{bits:016X}\";");
+            let program = ProgramType::MooR(compile(&source, CompileOptions::default()).unwrap());
+            let stored = PersistentProgram::encode(&program, &SourceProfile::default()).unwrap();
+            let value = run_moo(&stored.source).unwrap();
+            let moor_var::Variant::Float(value) = value.variant() else {
+                panic!("not a float");
+            };
+            assert_eq!(value.to_bits(), bits);
+        }
+    }
+
+    #[test]
     fn test_fromliteral_parses_value() {
         let program = "return fromliteral(args[1]);";
         let literal = r#"{1, "two", #-1, E_INVARG}"#;
@@ -314,7 +467,10 @@ mod tests {
 
         let literal = to_literal(&value);
         let capture_suffix = literal.split_once("with captured [").unwrap().1;
-        assert_eq!(capture_suffix.matches('{').count(), nonempty_frames);
+        assert_eq!(
+            capture_suffix.matches('{').count(),
+            lambda.0.captured_env.len()
+        );
 
         let reparsed = parse_literal_value(&literal).unwrap();
         let mut captured_values = reparsed
@@ -335,6 +491,47 @@ mod tests {
             ),
             Ok(v_int(30))
         );
+    }
+
+    #[test]
+    fn test_lambda_literal_is_canonical_text_fixed_point() {
+        let value = run_moo(
+            r#"
+                const base = 42;
+                return {x, y} => x + y + base;
+            "#,
+        )
+        .unwrap();
+        let literal = to_literal(&value);
+        let reparsed = parse_literal_value(&literal).unwrap();
+        assert_eq!(to_literal(&reparsed), literal);
+    }
+
+    /// Optional defaults retain their condition when a closure is rendered and recompiled.
+    #[test]
+    fn test_lambda_parameter_default_preserves_explicit_arguments() {
+        let value = run_moo(r#"return fn (x, ?y = 5) return y; endfn;"#).unwrap();
+        let literal = to_literal(&value);
+        let result = run_moo_with_args(
+            "f = fromliteral(args[1]); return {f(0), f(0, 7)};",
+            List::mk_list(&[v_str(&literal)]),
+        );
+        assert_eq!(
+            result,
+            Ok(v_list(&[v_int(5), v_int(7)])),
+            "literal was {literal:?}"
+        );
+    }
+
+    #[test]
+    fn test_lambda_parameter_default_survives_for_omitted_arguments() {
+        let value = run_moo(r#"return fn (x, ?y = 5) return y; endfn;"#).unwrap();
+        let literal = to_literal(&value);
+        let result = run_moo_with_args(
+            "f = fromliteral(args[1]); return f(0);",
+            List::mk_list(&[v_str(&literal)]),
+        );
+        assert_eq!(result, Ok(v_int(5)), "literal was {literal:?}");
     }
 
     #[test]
@@ -411,7 +608,7 @@ mod tests {
         assert!(exported.contains("value == SYSTEM"));
         assert!(!exported.contains("} => 1"));
 
-        let (db2, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db2, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut loader = db2.loader_client().unwrap();
             let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
@@ -2818,7 +3015,7 @@ mod tests {
     fn test_eval_initial_env() {
         // Compile a program that references variable 'x'
         let program = compile("return x;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2859,7 +3056,7 @@ mod tests {
     #[test]
     fn test_eval_initial_env_multiple_vars() {
         let program = compile("return x + y;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2901,7 +3098,7 @@ mod tests {
     fn test_eval_initial_env_object_var() {
         // Note: can't use "obj" as it's a type constant (OBJ)
         let program = compile("return target;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(
@@ -2942,7 +3139,7 @@ mod tests {
     #[test]
     fn test_eval_initial_env_unused_var() {
         let program = compile("return 42;", CompileOptions::default()).unwrap();
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         {
             let mut tx = db.new_world_state().unwrap();
             tx.create_object(

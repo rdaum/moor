@@ -30,9 +30,13 @@ fn success(result: CommitResult) {
 fn ownership_transfer_preserves_permissions_values_and_clear_state() {
     for warm in [false, true] {
         let dir = tempfile::tempdir().unwrap();
-        let db = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::fjall(dir.path()),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING, NOTHING);
         let old_owner = create(&mut tx, NOTHING, NOTHING);
@@ -115,9 +119,13 @@ fn ownership_transfer_preserves_permissions_values_and_clear_state() {
         db.stop().unwrap();
         drop(db);
 
-        let db = MoorDB::try_open(Some(dir.path()), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::fjall(dir.path()),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         assert_eq!(tx.get_object_owner(&child).unwrap(), new_owner);
         for (_, uuid, before, _) in &properties {
@@ -140,7 +148,13 @@ fn ownership_transfer_preserves_permissions_values_and_clear_state() {
 
 #[test]
 fn ownership_no_op_stays_lazy_and_new_properties_use_the_new_owner() {
-    let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = MoorDB::try_open(
+        crate::StorageConfig::temporary_fjall(),
+        DatabaseConfig::default(),
+        crate::PersistenceConfig::default(),
+    )
+    .unwrap()
+    .0;
     let mut tx = db.start_transaction();
     let parent = create(&mut tx, NOTHING, NOTHING);
     let child = create(&mut tx, NOTHING, parent);
@@ -197,7 +211,13 @@ fn ownership_transfer_retries_if_its_property_scan_changes() {
     for change in [
         "add", "enable_c", "flags", "reparent", "delete", "override", "write", "recycle",
     ] {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING, NOTHING);
         let child = create(&mut tx, NOTHING, parent);
@@ -275,7 +295,13 @@ fn ownership_transfer_retries_if_its_property_scan_changes() {
 #[test]
 fn ownership_transfer_conflicts_with_a_first_local_write_in_either_order() {
     for transfer_first in [false, true] {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            crate::StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            crate::PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let parent = create(&mut tx, NOTHING, NOTHING);
         let child = create(&mut tx, NOTHING, parent);

@@ -1315,12 +1315,17 @@ permission.
 
 **Notes:**
 
-- `count` is the exact invocation count for the operation
-- `nanos` is cumulative duration in nanoseconds
+- For operation counters, `count` is the exact invocation count
+- For timers, `nanos` is cumulative duration in nanoseconds
 - This includes counter families related to world-state operations, commit phases, provider lock
   waits, and writer backpressure
 - See [Performance and Concurrency](../../the-system/performance-and-concurrency.md) for guidance on
   interpreting the counters
+
+Live persistence status and PostgreSQL totals use `{value, 0}` entries in the same map. These values
+can change during a transaction. See
+[Persistence diagnostics](../../the-system/server-configuration.md#persistence-diagnostics) for
+names, units, and sampling rules.
 
 ### `sched_counters`
 

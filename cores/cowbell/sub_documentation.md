@@ -2,11 +2,12 @@
 
 ## Overview
 
-The `$sub` system provides template-based text substitution for events in the MOO. It allows you to write narrative
-descriptions that automatically adapt based on perspective (first-person vs third-person) and grammatical context.
+The `$sub` system provides template-based text substitution for events in the MOO. It allows you to
+write narrative descriptions that automatically adapt based on perspective (first-person vs
+third-person) and grammatical context.
 
-Substitutions are created as lightweight flyweight objects that get evaluated when events are rendered to players. This
-means the same event can produce different text for different viewers.
+Substitutions are created as lightweight flyweight objects that get evaluated when events are
+rendered to players. This means the same event can produce different text for different viewers.
 
 ## Basic Concept
 
@@ -28,14 +29,14 @@ These substitute names of objects and participants in the event.
 ### Actor Names
 
 | Verb        | Output                 | Example (actor is Alice) |
-|-------------|------------------------|--------------------------|
+| ----------- | ---------------------- | ------------------------ |
 | `$sub:n()`  | Actor name             | "Alice" / "you"          |
 | `$sub:nc()` | Capitalized actor name | "Alice" / "You"          |
 
 ### Object Names
 
 | Verb        | Description          | Example               |
-|-------------|----------------------|-----------------------|
+| ----------- | -------------------- | --------------------- |
 | `$sub:d()`  | Direct object        | "the sword" / "you"   |
 | `$sub:dc()` | Capitalized dobj     | "The sword" / "You"   |
 | `$sub:i()`  | Indirect object      | "the chest" / "you"   |
@@ -52,7 +53,7 @@ These substitute pronouns based on the actor's or object's gender settings.
 ### Actor Pronouns
 
 | Verb       | Type                 | Example (he/him)       | Example (they/them)       |
-|------------|----------------------|------------------------|---------------------------|
+| ---------- | -------------------- | ---------------------- | ------------------------- |
 | `$sub:s()` | Subject              | "he" / "you"           | "they" / "you"            |
 | `$sub:o()` | Object               | "him" / "you"          | "them" / "you"            |
 | `$sub:p()` | Possessive adjective | "his" / "your"         | "their" / "your"          |
@@ -64,7 +65,7 @@ Add `c` for capitalized versions: `$sub:sc()`, `$sub:oc()`, etc.
 ### Direct Object Pronouns
 
 | Verb            | Type            | Example              |
-|-----------------|-----------------|----------------------|
+| --------------- | --------------- | -------------------- |
 | `$sub:s_dobj()` | Subject         | "he" / "it"          |
 | `$sub:o_dobj()` | Object          | "him" / "it"         |
 | `$sub:p_dobj()` | Possessive adj  | "his" / "its"        |
@@ -87,7 +88,7 @@ These conjugate verbs based on person and number.
 ### Actor Verb Conjugation
 
 | Verb               | 2nd person (you) | 3rd person (he/she/it) |
-|--------------------|------------------|------------------------|
+| ------------------ | ---------------- | ---------------------- |
 | `$sub:verb_be()`   | "are"            | "is"                   |
 | `$sub:verb_have()` | "have"           | "has"                  |
 | `$sub:verb_look()` | "look"           | "looks"                |
@@ -183,8 +184,10 @@ When Alice pets the friendly cat:
 
 When Alice tries to pet the grumpy cat:
 
-- **Alice sees**: "You try to pet the grumpy cat, but the grumpy cat hisses and swats your hand away."
-- **Bob sees**: "Alice tries to pet the grumpy cat, but the grumpy cat hisses and swats her hand away."
+- **Alice sees**: "You try to pet the grumpy cat, but the grumpy cat hisses and swats your hand
+  away."
+- **Bob sees**: "Alice tries to pet the grumpy cat, but the grumpy cat hisses and swats her hand
+  away."
 
 ## Implementation Notes
 

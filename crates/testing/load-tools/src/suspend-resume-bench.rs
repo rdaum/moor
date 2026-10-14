@@ -139,7 +139,7 @@ async fn main() -> Result<(), eyre::Error> {
     let temp_dir = tempfile::tempdir()?;
     let db_path = temp_dir.path().join("bench_db");
 
-    let (database, _) = TxDB::try_open(Some(&db_path), Default::default()).unwrap();
+    let (database, _) = TxDB::try_open_fjall(&db_path, Default::default()).unwrap();
     let player = setup_bench_database(&database)?;
     let database = Box::new(database);
 

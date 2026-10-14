@@ -57,7 +57,7 @@ pub fn load_textdump(db: &dyn Database) {
 }
 
 pub fn create_db() -> Box<dyn Database> {
-    let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let db = Box::new(db);
     load_textdump(db.as_ref());
     db

@@ -1210,7 +1210,7 @@ fn main() -> Result<(), eyre::Error> {
     let (db_path, _temp_dir) = setup_db_path(&args.db_path, "prop_test_db")?;
 
     // Create database
-    let (database, _) = TxDB::try_open(Some(&db_path), Default::default()).unwrap();
+    let (database, _) = TxDB::try_open_fjall(&db_path, Default::default()).unwrap();
 
     // Setup test database
     info!(

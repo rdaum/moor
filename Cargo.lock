@@ -4446,23 +4446,29 @@ dependencies = [
  "ahash",
  "arc-swap",
  "byteview",
+ "clap",
+ "clap_derive",
  "edn-format",
  "eyre",
  "fast-telemetry",
  "fjall",
  "flume",
  "imbl",
+ "libc",
  "micromeasure",
  "moor-common",
+ "moor-compiler",
  "moor-schema",
  "moor-var",
  "oneshot",
  "parking_lot",
  "pastey",
  "planus",
+ "pq-sys",
  "rand 0.10.3",
  "semver",
  "serde",
+ "serde_json",
  "shuttle",
  "smallvec",
  "tempfile",
@@ -5677,6 +5683,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "pq-sys"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9152654059e4fb5b66a4052acf3ee43a7a7132332e44cdb72a81ee93bd038950"
+dependencies = [
+ "libc",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]

@@ -168,7 +168,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         let mut tx = db.clone().loader_client().unwrap();
         textdump_load(
@@ -221,7 +221,7 @@ mod test {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let jhcore = manifest_dir.join("../../cores/JHCore-DEV-2.db");
 
-        let (db1, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db1, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),
@@ -236,7 +236,7 @@ mod test {
         let minimal_db = manifest_dir.join("tests/Minimal.db");
 
         // Load minimal database
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
         load_textdump_file(
             db.clone().loader_client().unwrap(),
@@ -322,7 +322,7 @@ mod test {
 "#;
 
         // Try to parse just this simple case
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let db = Arc::new(db);
 
         {

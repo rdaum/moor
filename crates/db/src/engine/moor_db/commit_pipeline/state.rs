@@ -23,7 +23,8 @@ use crate::engine::property_definitions::{
     PropertyDefinitionChange, collect_property_definition_changes,
 };
 use crate::engine::relation_defs::{RebaseCheck, define_relations};
-use crate::provider::batch_writer::{CommitAdmission, CommitAdmissionError};
+use crate::provider::coordinator::{CommitAdmission, CommitAdmissionError};
+use crate::provider::logical::{LogicalCommit, PublicationId, SequenceUpdate};
 use crate::tx::{CommitBloom, Timestamp};
 use moor_common::model::{
     CommitResult, ConflictInfo, ConflictTarget, WorldStateError, WorldStateTimerOp,
@@ -142,7 +143,12 @@ impl<'db> PreparedCommit<'db> {
             let _t = counters
                 .timers_hot
                 .start(WorldStateTimerOp::CommitCheckPhase);
-            if let Err(conflict_info) = checkers.check_all(&mut relation_ws) {
+            if let Err(error) = checkers.check_all(&mut relation_ws) {
+                let crate::tx::Error::Conflict(conflict_info) = error else {
+                    return Err(PrepareError::Database(WorldStateError::DatabaseError(
+                        error.to_string(),
+                    )));
+                };
                 let conflict_info = enrich_conflict_info(&current_root, conflict_info);
                 trace!("Transaction conflict during commit: {conflict_info}");
                 return Err(PrepareError::Conflict(conflict_info));
@@ -173,19 +179,23 @@ impl<'db> PreparedCommit<'db> {
             checkers.build_snapshot(&current_root, tx_timestamp, combined_caches, bloom.clone());
         drop(_t);
 
-        let admission =
-            db.batch_writer
-                .admit_commit(tx_timestamp)
-                .map_err(|error| match error {
-                    CommitAdmissionError::Timeout { waited } => {
-                        PrepareError::Database(WorldStateError::DatabaseOverloaded(waited))
-                    }
-                    CommitAdmissionError::Unavailable => {
-                        PrepareError::Database(WorldStateError::DatabaseError(
-                            "Database commit queue admission is unavailable".to_string(),
-                        ))
-                    }
-                })?;
+        let mut admission = db
+            .coordinator
+            .admit(tx_timestamp)
+            .map_err(|error| match error {
+                CommitAdmissionError::Timeout { waited } => {
+                    PrepareError::Database(WorldStateError::DatabaseOverloaded(waited))
+                }
+                CommitAdmissionError::Unavailable => {
+                    PrepareError::Database(WorldStateError::DatabaseError(
+                        "Database commit queue admission is unavailable".to_string(),
+                    ))
+                }
+            })?;
+
+        db.coordinator
+            .prepare(&relation_ws, tx_timestamp, &mut admission)
+            .map_err(PrepareError::Database)?;
 
         Ok(Self {
             data: CommitData {
@@ -283,34 +293,26 @@ impl PublishedCommit<'_> {
             mutations_made: true,
             timestamp: tx_timestamp.0,
         };
-        let mut batch = match db.relations.working_sets_to_batch(
-            working_sets,
-            publication_version,
-            tx_timestamp,
-        ) {
-            Ok(batch) => batch,
-            Err(error) => {
-                report_persistence_failure(&format!(
-                    "failed to encode transaction {publication_version}: {error}"
-                ));
-                return result;
-            }
-        };
-        batch.set_property_definition_changes(definition_changes);
         let dirty_sequences = db.sequences.claim_dirty();
-        for i in 0_usize..super::super::SEQUENCE_COUNT {
-            if dirty_sequences & (1_u16 << i) == 0 {
-                continue;
+        let mut sequences = Vec::new();
+        for slot in 0_usize..super::super::SEQUENCE_COUNT {
+            if dirty_sequences & (1_u16 << slot) != 0 {
+                sequences.push(SequenceUpdate {
+                    slot,
+                    value: db.sequences.load(slot),
+                });
             }
-            batch.insert_encoded(
-                db.sequences_partition.clone(),
-                i.to_le_bytes(),
-                db.sequences.load(i).to_le_bytes(),
-            );
         }
-        if let Err(error) = db.batch_writer.write(batch, admission) {
+        let commit = LogicalCommit {
+            publication: PublicationId::new(db.coordinator.epoch(), publication_version),
+            timestamp: tx_timestamp,
+            changes: working_sets.into_changes(),
+            sequences,
+            property_definition_changes: definition_changes,
+        };
+        if let Err(error) = db.coordinator.submit(commit, admission) {
             report_persistence_failure(&format!(
-                "failed to enqueue transaction {publication_version}: {error}"
+                "failed to submit transaction {publication_version}: {error}"
             ));
         }
         result

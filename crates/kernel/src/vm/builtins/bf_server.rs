@@ -1201,8 +1201,16 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args.require_wizard_or_builtin_call()?;
 
+    let mut entries = db_counter_entries();
+    entries.extend(with_current_transaction(|world_state| {
+        world_state
+            .persistence_metrics()
+            .into_iter()
+            .map(|(name, value)| (Symbol::mk(name), value.min(isize::MAX as u64) as isize, 0))
+            .collect::<Vec<_>>()
+    }));
     Ok(Ret(counter_map_from_entries(
-        &db_counter_entries(),
+        &entries,
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }

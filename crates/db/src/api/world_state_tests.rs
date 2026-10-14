@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{Database, DatabaseConfig, TxDB};
+use crate::{Database, TxDB};
 use moor_common::{
     model::{ObjAttrs, ObjFlag, ObjectKind, TaskPermissions, WorldStateError, WorldStateSource},
     util::BitEnum,
@@ -26,8 +26,8 @@ fn permissions(principal: Obj) -> TaskPermissions {
     TaskPermissions::new(principal, BitEnum::new())
 }
 
-fn test_db() -> TxDB {
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+fn test_db() -> crate::test_support::Checked<TxDB> {
+    let db = crate::test_support::api();
     let mut loader = db.loader_client().unwrap();
     loader
         .create_object(
@@ -113,7 +113,7 @@ fn renumber_object_requires_wizard_not_control_of_system_object() {
     assert_eq!(new_obj, Obj::mk_id(100));
 }
 
-fn property_snapshot_fixture() -> (TxDB, Obj, uuid::Uuid) {
+fn property_snapshot_fixture() -> (crate::test_support::Checked<TxDB>, Obj, uuid::Uuid) {
     use moor_common::model::{HasUuid, PropFlag};
     use moor_var::{Symbol, v_str};
 

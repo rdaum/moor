@@ -44,7 +44,7 @@ struct DispatchTest {
 }
 
 fn dispatch_test(unreadable_handler: bool) -> DispatchTest {
-    let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let permissions = TaskPermissions::new(SYSTEM_OBJECT, ObjFlag::all_flags());
     let mut world = db.new_world_state().unwrap();
     world

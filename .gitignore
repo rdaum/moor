@@ -30,6 +30,7 @@ sessions/
 
 # Runtime data and IPC (managed by start scripts)
 run-cowbell/
+run-cowbell-postgres/
 run-lambda-moor/
 
 # OAuth2 config files with secrets

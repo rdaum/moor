@@ -101,7 +101,7 @@ fn failed_retry_session_settles_task() {
 }
 
 fn check_failed_wakeup(failure: Failure) {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let scheduler = Scheduler::new(
         semver::Version::new(0, 0, 0),
         Box::new(database),

@@ -28,7 +28,9 @@ endverb
 endobject"#;
 
 fn database() -> TxDB {
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     ObjectDefinitionLoader::new(loader.as_mut())
         .load_single_object(SOURCE, Default::default(), Default::default())
@@ -107,7 +109,9 @@ fn stamp(world: &mut dyn WorldState) {
 
 #[test]
 fn unmatched_live_verbs_are_reported_and_preserved_by_apply() {
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     let local = SOURCE.replace(
         "endobject",
@@ -672,7 +676,9 @@ fn late_writer_failure_requires_rollback_of_program_and_baseline() {
 fn ordinary_directory_import_leaves_unknown_baselines_unmanaged() {
     let directory = tempfile::tempdir().unwrap();
     std::fs::write(directory.path().join("root.moo"), SOURCE).unwrap();
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     let mut import = ObjectDefinitionLoader::new(loader.as_mut());
     import
@@ -716,7 +722,9 @@ fn bulk_import_compares_working_source_against_explicit_ancestor() {
     let prepared = parse(&local)
         .with_baseline(&base, Some(provenance.clone()))
         .unwrap();
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     ObjectDefinitionLoader::new(loader.as_mut())
         .load_objdef_set(prepared, Default::default())
@@ -764,7 +772,9 @@ fn bulk_import_compares_working_source_against_explicit_ancestor() {
         exported.path(),
     )
     .unwrap();
-    let restored = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let restored = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = restored.loader_client().unwrap();
     ObjectDefinitionLoader::new(loader.as_mut())
         .load_objdef_directory(
@@ -824,7 +834,7 @@ fn baseline_binding_rejects_reused_or_relocated_objects_and_ambiguous_verbs() {
 #[test]
 fn baseline_survives_process_restart() {
     if let Ok(path) = std::env::var("MOOR_REVIEW_RESTART_DB") {
-        let db = TxDB::try_open(Some(std::path::Path::new(&path)), DatabaseConfig::default())
+        let db = TxDB::try_open_fjall(std::path::Path::new(&path), DatabaseConfig::default())
             .unwrap()
             .0;
         if std::env::var("MOOR_REVIEW_RESTART_PHASE").unwrap() == "enroll" {
@@ -882,7 +892,9 @@ fn directory_import_preserves_supplied_baseline_for_local_program() {
         &format!("flags: \"rxd\" [objdef_base -> [\"schema\" -> \"{PROGRAM_SCHEMA}\", \"program\" -> \"{base}\"]]"),
     );
     std::fs::write(directory.path().join("root.moo"), source).unwrap();
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     ObjectDefinitionLoader::new(loader.as_mut())
         .load_objdef_directory(
@@ -916,7 +928,9 @@ fn directory_import_preserves_supplied_baseline_for_local_program() {
         }
         let text = std::fs::read_to_string(export.path().join("review_root.moo")).unwrap();
         assert_eq!(text.contains("objdef_base ->"), include_baselines);
-        let restored = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let restored = TxDB::try_open_temporary(DatabaseConfig::default())
+            .unwrap()
+            .0;
         let mut loader = restored.loader_client().unwrap();
         ObjectDefinitionLoader::new(loader.as_mut())
             .load_objdef_directory(CompileOptions::default(), export.path(), Default::default())
@@ -954,7 +968,9 @@ fn invalid_imported_baselines_fail_without_committing_objects() {
             &format!("flags: \"rxd\" [objdef_base -> {baseline}]"),
         );
         std::fs::write(directory.path().join("root.moo"), source).unwrap();
-        let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = TxDB::try_open_temporary(DatabaseConfig::default())
+            .unwrap()
+            .0;
         let mut loader = db.loader_client().unwrap();
         assert!(
             ObjectDefinitionLoader::new(loader.as_mut())
@@ -979,7 +995,9 @@ fn invalid_imported_baselines_fail_without_committing_objects() {
 #[test]
 fn bundled_cores_declare_complete_default_package_bindings() {
     for core in ["cowbell", "snore"] {
-        let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = TxDB::try_open_temporary(DatabaseConfig::default())
+            .unwrap()
+            .0;
         let mut loader = db.loader_client().unwrap();
         let options = CompileOptions {
             custom_errors: true,
@@ -1131,7 +1149,9 @@ fn inspection_browses_unmatched_contents_and_property_changes_without_applying()
         "endobject",
         "property title (owner: #1, flags: \"r\") = \"Local\";\nendobject",
     );
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     let mut importer = ObjectDefinitionLoader::new(loader.as_mut());
     importer
@@ -1276,7 +1296,9 @@ fn property_and_attribute_edits_use_the_imported_ancestor() {
         ("Local", "Upstream", Some("conflict")),
         ("Same", "Same", Some("converged")),
     ] {
-        let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = TxDB::try_open_temporary(DatabaseConfig::default())
+            .unwrap()
+            .0;
         let mut loader = db.loader_client().unwrap();
         let local_source = if expected == Some("local") {
             source(local).replace("wizard: true", "wizard: true\nreadable: true")
@@ -1369,7 +1391,9 @@ endobject
             (edited.as_str(), edited.as_str(), Some("converged")),
             (edited.as_str(), other.as_str(), Some("conflict")),
         ] {
-            let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+            let db = TxDB::try_open_temporary(DatabaseConfig::default())
+                .unwrap()
+                .0;
             let mut loader = db.loader_client().unwrap();
             ObjectDefinitionLoader::new(loader.as_mut())
                 .load_objdef_set(

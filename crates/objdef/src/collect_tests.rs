@@ -65,7 +65,9 @@ fn permissions(principal: Obj) -> TaskPermissions {
 }
 
 fn database() -> TxDB {
-    let db = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let db = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = db.loader_client().unwrap();
     for source in [ROOT_SOURCE, CHILD_SOURCE, LEAF_SOURCE] {
         ObjectDefinitionLoader::new(loader.as_mut())
@@ -335,7 +337,9 @@ fn single_object_dump_preserves_local_state_through_reimport() {
         );
     }
 
-    let imported = TxDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+    let imported = TxDB::try_open_temporary(DatabaseConfig::default())
+        .unwrap()
+        .0;
     let mut loader = imported.loader_client().unwrap();
     for object in [ROOT, CHILD] {
         let (_, _, _, definition) = collect_object(snapshot.as_ref(), &object).unwrap();

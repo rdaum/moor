@@ -50,7 +50,7 @@ impl ConcurrentBenchContext for TxDbConcurrentContext {
 }
 
 fn create_db() -> TxDB {
-    let (ws_source, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (ws_source, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let mut tx = ws_source.new_world_state().unwrap();
     let perms = TaskPermissions::new(SYSTEM_OBJECT, BitEnum::new());
     let _sysobj = tx

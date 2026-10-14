@@ -29,7 +29,7 @@ mod tests {
 
     fn test_db(path: &Path) -> Arc<TxDB> {
         Arc::new(
-            TxDB::try_open(Some(path), DatabaseConfig::default())
+            TxDB::try_open_fjall(path, DatabaseConfig::default())
                 .unwrap()
                 .0,
         )

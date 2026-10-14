@@ -149,7 +149,7 @@ pub fn test_scheduler_for_db(db: moor_db::TxDB) -> Scheduler {
 pub fn setup_task_context(world_state: Box<dyn WorldState>) -> TaskGuard {
     // Create a minimal TxDB just for the scheduler — the world_state is the
     // actual transaction the test will use.
-    let (db, _) = moor_db::TxDB::try_open(None, moor_db::DatabaseConfig::default()).unwrap();
+    let (db, _) = moor_db::TxDB::try_open_temporary(moor_db::DatabaseConfig::default()).unwrap();
     let scheduler = test_scheduler_for_db(db);
     let task_scheduler_client = TaskSchedulerClient::new(0, scheduler);
     let session = std::sync::Arc::new(moor_common::tasks::NoopClientSession::new());

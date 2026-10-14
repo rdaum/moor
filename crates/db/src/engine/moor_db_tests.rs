@@ -13,7 +13,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{DatabaseConfig, ObjAndUUIDHolder};
+    use crate::ObjAndUUIDHolder;
     use std::collections::HashSet;
 
     use crate::engine::moor_db::MoorDB;
@@ -36,8 +36,8 @@ mod tests {
         TaskPermissions::new(principal, BitEnum::new())
     }
 
-    fn test_db() -> Arc<MoorDB> {
-        MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0
+    fn test_db() -> crate::test_support::Checked<Arc<MoorDB>> {
+        crate::test_support::engine()
     }
 
     #[test]
@@ -4177,6 +4177,79 @@ mod tests {
         );
 
         assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+    }
+
+    #[test]
+    fn recycling_removes_inherited_and_inactive_payloads_before_id_reuse() {
+        for batch in [false, true] {
+            let db = test_db();
+            let mut tx = db.start_transaction();
+            let parent = tx
+                .create_object(ObjectKind::NextObjid, ObjAttrs::default())
+                .unwrap();
+            let child = tx
+                .create_object(
+                    ObjectKind::NextObjid,
+                    ObjAttrs::new(parent, parent, NOTHING, BitEnum::new(), "child"),
+                )
+                .unwrap();
+            let property = tx
+                .define_property(
+                    &parent,
+                    &parent,
+                    Symbol::mk("value"),
+                    &parent,
+                    BitEnum::new(),
+                    Some(v_int(1)),
+                )
+                .unwrap();
+            tx.set_property(&child, property, v_int(42)).unwrap();
+            tx.add_object_verb(
+                &child,
+                &child,
+                &[Symbol::mk("test")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new(),
+                VerbArgsSpec::this_none_this(),
+            )
+            .unwrap();
+            let verb = tx.get_verbs(&child).unwrap().iter().next().unwrap().uuid();
+            tx.set_last_move(&child, parent).unwrap();
+            // Overrides outside the current ancestry remain stored but inactive.
+            tx.set_object_parent(&child, &NOTHING).unwrap();
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+            let mut tx = db.start_transaction();
+            if batch {
+                tx.recycle_objects(&HashSet::from([child])).unwrap();
+            } else {
+                tx.recycle_object(&child).unwrap();
+            }
+            assert!(matches!(tx.commit(), Ok(CommitResult::Success { .. })));
+            let mut tx = db.start_transaction();
+            let key = ObjAndUUIDHolder::new(&child, property);
+            assert!(tx.object_propvalues.get(&key).unwrap().is_none());
+            assert!(tx.object_propflags.get(&key).unwrap().is_none());
+            assert!(
+                tx.object_verbs
+                    .get(&ObjAndUUIDHolder::new(&child, verb))
+                    .unwrap()
+                    .is_none()
+            );
+            assert!(tx.object_last_move.get(&child).unwrap().is_none());
+            tx.create_object(
+                ObjectKind::Objid(child),
+                ObjAttrs::new(parent, parent, NOTHING, BitEnum::new(), "replacement"),
+            )
+            .unwrap();
+            assert_eq!(
+                tx.resolve_property(&child, Symbol::mk("value")).unwrap().1,
+                v_int(1)
+            );
+            assert_eq!(
+                tx.resolve_property(&parent, Symbol::mk("value")).unwrap().1,
+                v_int(1)
+            );
+        }
     }
 
     #[test]

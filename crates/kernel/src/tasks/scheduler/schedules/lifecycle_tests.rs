@@ -123,7 +123,7 @@ impl TasksDb for ScheduleIdTasksDb {
 
 #[test]
 fn restored_schedule_id_mark_advances_allocator() {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let scheduler = Scheduler::new(
         semver::Version::new(0, 0, 0),
         Box::new(database),
@@ -248,7 +248,7 @@ fn restored_firing_scheduler(schedule_id: ScheduleId, task_id: TaskId) -> Schedu
         },
         Arc::new(TaskControl::new()),
     );
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     Scheduler::new(
         semver::Version::new(0, 0, 0),
         Box::new(database),

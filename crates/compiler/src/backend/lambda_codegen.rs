@@ -11,15 +11,12 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::collections::HashSet;
-
-use moor_common::model::{CompileContext, CompileError};
-use moor_var::Symbol;
+use moor_common::model::CompileError;
 use moor_var::program::names::{Name, Variable};
 use moor_var::program::opcode::{Op, ScatterLabel};
 
 use crate::{
-    ast::{AstVisitor, Expr, ScatterItem, ScatterKind, Stmt, StmtNode},
+    ast::{Expr, ScatterItem, ScatterKind, Stmt, StmtNode},
     codegen::CodegenState,
 };
 
@@ -29,10 +26,9 @@ impl CodegenState {
         params: &[ScatterItem],
         body: &Stmt,
         entry_scope_count: u16,
+        captures: &[Variable],
     ) -> Result<(), CompileError> {
         let base_line_offset = body.line_col.0;
-        let outer_scope_depth = self.control.lambda_scope_depth();
-        self.control.push_lambda_scope_depth(2);
 
         let labels: Vec<ScatterLabel> = params
             .iter()
@@ -126,14 +122,13 @@ impl CodegenState {
         self.scopes.restore(stashed_scopes);
 
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
-        self.control.set_lambda_scope_depth(outer_scope_depth);
 
-        let captured_symbols = analyze_lambda_captures(params, &body, outer_scope_depth)?;
-        let captured_names: Vec<Name> = captured_symbols
+        let mut captured_names: Vec<Name> = captures
             .iter()
-            .filter_map(|sym| self.var_names.name_for_ident(*sym))
+            .filter_map(|variable| self.var_names.name_for_var(variable))
             .collect();
 
+        captured_names.sort_unstable();
         for &name in &captured_names {
             self.emit(Op::Capture(name));
         }
@@ -375,125 +370,4 @@ fn assign_expr_lambda_source_lines(expr: &mut Expr) {
             assign_stmt_source_line_numbers(body);
         }
     }
-}
-
-struct CaptureAnalyzer {
-    captures: HashSet<Symbol>,
-    assigned_captures: Vec<(Symbol, (usize, usize))>,
-    param_names: HashSet<Symbol>,
-    outer_scope_level: u8,
-    current_line_col: (usize, usize),
-}
-
-impl CaptureAnalyzer {
-    fn new(lambda_params: &[ScatterItem], outer_scope_depth: u8) -> Self {
-        let param_names: HashSet<Symbol> = lambda_params
-            .iter()
-            .map(|param| param.id.to_symbol())
-            .collect();
-        let outer_scope_level = lambda_params
-            .first()
-            .map(|p| p.id.scope_id as u8)
-            .unwrap_or(outer_scope_depth);
-
-        Self {
-            captures: HashSet::new(),
-            assigned_captures: Vec::new(),
-            param_names,
-            outer_scope_level,
-            current_line_col: (0, 0),
-        }
-    }
-
-    fn should_capture(&self, var: &Variable) -> bool {
-        if self.param_names.contains(&var.to_symbol()) {
-            return false;
-        }
-
-        var.scope_id as u8 <= self.outer_scope_level
-    }
-
-    fn is_outer_scope_variable(&self, var: &Variable) -> bool {
-        if self.param_names.contains(&var.to_symbol()) {
-            return false;
-        }
-
-        var.scope_id as u8 <= self.outer_scope_level
-    }
-}
-
-impl AstVisitor for CaptureAnalyzer {
-    fn visit_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Id(var) => {
-                if self.should_capture(var) {
-                    self.captures.insert(var.to_symbol());
-                }
-            }
-            Expr::Assign { left, right: _ } => {
-                if let Expr::Id(var) = left.as_ref()
-                    && self.is_outer_scope_variable(var)
-                {
-                    self.assigned_captures
-                        .push((var.to_symbol(), self.current_line_col));
-                }
-                self.walk_expr(expr);
-            }
-            Expr::Scatter(items, _, _) => {
-                for item in items {
-                    if self.is_outer_scope_variable(&item.id) {
-                        self.assigned_captures
-                            .push((item.id.to_symbol(), self.current_line_col));
-                    }
-                }
-                self.walk_expr(expr);
-            }
-            Expr::Lambda { params, body, .. } => {
-                for param in params {
-                    if let Some(default_expr) = &param.expr {
-                        self.visit_expr(default_expr);
-                    }
-                }
-
-                let nested_params: Vec<Symbol> = params.iter().map(|p| p.id.to_symbol()).collect();
-                for sym in &nested_params {
-                    self.param_names.insert(*sym);
-                }
-
-                self.visit_stmt(body);
-
-                for sym in &nested_params {
-                    self.param_names.remove(sym);
-                }
-            }
-            _ => self.walk_expr(expr),
-        }
-    }
-
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        self.current_line_col = stmt.line_col;
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_stmt_node(&mut self, stmt_node: &StmtNode) {
-        self.walk_stmt_node(stmt_node);
-    }
-}
-
-fn analyze_lambda_captures(
-    lambda_params: &[ScatterItem],
-    lambda_body: &Stmt,
-    outer_scope_depth: u8,
-) -> Result<Vec<Symbol>, CompileError> {
-    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_scope_depth);
-    analyzer.visit_stmt(lambda_body);
-
-    if let Some((assigned_var, line_col)) = analyzer.assigned_captures.first() {
-        return Err(CompileError::AssignmentToCapturedVariable(
-            CompileContext::new(*line_col),
-            *assigned_var,
-        ));
-    }
-
-    Ok(analyzer.captures.into_iter().collect())
 }

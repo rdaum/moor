@@ -139,6 +139,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schedules; wizards can manage all owners. Running firings remain separate tasks controlled by
   `@kill`.
 
+`db`:
+
+- Bound PostgreSQL prepared payloads with a configurable byte target, in addition to the commit
+  count limit. Byte admission timeouts reject writes before publication with `E_QUOTA`.
+
+- Configure the persistence shutdown budget through `storage.shutdown_timeout_seconds` or
+  `--persistence-shutdown-timeout-seconds`. The default remains 30 seconds for both backends.
+
+- Add PostgreSQL inspection views for objects, verbs, properties, and persistence progress. A
+  checked lookup reconstructs stored list chains. Existing schemas can install the views explicitly.
+
+- Add `--validate-storage` for read-only PostgreSQL checks without writer ownership. Reports include
+  relation counts and row locations. Document and test schema and whole-database recovery.
+
+- Support consistent PostgreSQL snapshots for objdef export. Exports preserve sparse inherited
+  properties and can finish after writer shutdown. Reader capacity is configurable.
+
+- Expose persistence health, progress, retained payload sizes, and PostgreSQL stage timings through
+  `db_counters()`. Phased benchmarks also report group boundaries and recovery measurements.
+
+- Reject PostgreSQL writes before publication when their encoded rows exceed the configured read
+  limit. The same check covers future property rollups, so accepted values remain reloadable.
+
+- Support PostgreSQL 16 with thread-safe libpq 16 or newer, alongside PostgreSQL 17 and 18.
+  PostgreSQL builds retain compatible installed client libraries.
+
 `moor-emh`:
 
 - Add an `export DIRECTORY` command that writes a complete database snapshot as objdef files and
@@ -378,6 +404,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   links containing decoded control characters or renderer delimiters.
 - Use the daemon's JSON boolean mode from the first GMCP message, including connections accepted
   during host startup. MSSP now reports the actual connected-player count.
+
+`db`:
+
+- Use measured payload sizes for PostgreSQL write groups. This avoids premature group boundaries and
+  reduces synchronous commit overhead during sustained property updates.
+
+- Reuse validated property-version sizes for PostgreSQL list appends. Repeated appends can validate
+  only the new suffix while preserving complete-value reload limits.
+
+- Avoid growing PostgreSQL write delays during repeated property replacement. Deletes use current
+  property records and refresh query plans as tables grow.
+
+- Remove stored property overrides, permissions, verb programs, and move data when recycling
+  objects. Reusing an object ID no longer exposes values from the recycled object.
+
+- Snapshot point reads derive missing local property permissions from the definer, including chown
+  behavior. Invalid ancestry cycles return an error.
 
 `kernel`:
 

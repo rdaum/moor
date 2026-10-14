@@ -15,7 +15,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{Database, DatabaseConfig, TxDB};
+    use crate::{Database, TxDB};
     use moor_common::model::{ObjAttrs, ObjectKind, VerbArgsSpec, VerbFlag};
     use moor_common::util::BitEnum;
     use moor_var::{
@@ -23,20 +23,14 @@ mod tests {
         program::{ProgramType, program::Program},
         v_str,
     };
-    use std::{path::Path, sync::Arc};
 
-    fn test_db(path: &Path) -> Arc<TxDB> {
-        Arc::new(
-            TxDB::try_open(Some(path), DatabaseConfig::default())
-                .unwrap()
-                .0,
-        )
+    fn test_db() -> crate::test_support::Checked<TxDB> {
+        crate::test_support::api()
     }
 
     #[test]
     fn test_loader_delete_property() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = test_db(tmpdir.path());
+        let db = test_db();
         let mut loader = db.loader_client().unwrap();
 
         // Create an object and define a property
@@ -80,8 +74,7 @@ mod tests {
 
     #[test]
     fn test_loader_remove_verb() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = test_db(tmpdir.path());
+        let db = test_db();
         let mut loader = db.loader_client().unwrap();
 
         // Create an object and add a verb
@@ -124,8 +117,7 @@ mod tests {
 
     #[test]
     fn test_loader_get_verb_program() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let db = test_db(tmpdir.path());
+        let db = test_db();
         let mut loader = db.loader_client().unwrap();
 
         // Create an object and add a verb

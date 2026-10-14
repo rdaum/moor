@@ -14,6 +14,15 @@
 
 set -e
 
+# PostgreSQL variants retain the default package names and add the libpq dependency.
+postgres_build=()
+postgres_deb=()
+case "${POSTGRES:-false}" in
+    true) postgres_build=(--features postgres); postgres_deb=(--variant postgres) ;;
+    false) ;;
+    *) echo 'POSTGRES must be true or false' >&2; exit 2 ;;
+esac
+
 # Build all mooR debian packages
 # This script builds the rust binary packages and the web client package
 
@@ -55,21 +64,21 @@ echo "======================================"
 echo "Building required packages (release-fast profile)"
 echo "======================================"
 echo "Using CARGO_BUILD_JOBS=2 to limit memory usage..."
-CARGO_BUILD_JOBS=2 cargo build --profile release-fast -p moor-server -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh
+CARGO_BUILD_JOBS=2 cargo build --profile release-fast -p moor-server -p moor-daemon -p moor-telnet-host -p moor-web-host -p moor-curl-worker -p moorc -p moor-emh "${postgres_build[@]}"
 echo ""
 
 # Build daemon package
 echo "======================================"
 echo "Building moor-daemon package"
 echo "======================================"
-cargo deb -p moor-daemon --profile release-fast --no-build
+cargo deb -p moor-daemon --profile release-fast --no-build "${postgres_deb[@]}"
 echo ""
 
 # Build single-process package
 echo "======================================"
 echo "Building moor package"
 echo "======================================"
-cargo deb -p moor-server --profile release-fast --no-build
+cargo deb -p moor-server --profile release-fast --no-build "${postgres_deb[@]}"
 echo ""
 
 # Build telnet-host package
@@ -97,14 +106,14 @@ echo ""
 echo "======================================"
 echo "Building moorc package"
 echo "======================================"
-cargo deb -p moorc --profile release-fast --no-build
+cargo deb -p moorc --profile release-fast --no-build "${postgres_deb[@]}"
 echo ""
 
 # Build moor-emh package
 echo "======================================"
 echo "Building moor-emh package"
 echo "======================================"
-cargo deb -p moor-emh --profile release-fast --no-build
+cargo deb -p moor-emh --profile release-fast --no-build "${postgres_deb[@]}"
 echo ""
 
 # Build Meadow web client package

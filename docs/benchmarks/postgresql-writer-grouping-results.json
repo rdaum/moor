@@ -1,0 +1,1030 @@
+{
+  "date_utc": "2026-09-30",
+  "architecture": "aarch64",
+  "postgres": {
+    "version": "PostgreSQL 17.11 (Ubuntu 17.11-1.pgdg24.04+2) on aarch64-unknown-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+    "fsync": "on",
+    "full_page_writes": "on",
+    "shared_buffers": "128MB",
+    "max_wal_size": "1GB",
+    "checkpoint_timeout": "5min"
+  },
+  "method": "Separate native PostgreSQL 17 cluster on the same ext4 filesystem. Fresh schema per run. Both policies use the same server. Baseline runs precede changed runs; builds and tests run between the two sets, never during timed benchmarks.",
+  "baseline": "Preserved target/release/moorc before this tuning pass; release profile with PostgreSQL enabled.",
+  "binary_sha256": {
+    "before": "fa01d83bf8db719f6f2943df01160413c01f5bf2d218f5e8f2cdabe5291bf26c",
+    "after": "5a77c5e033686a78a19593b6c98edbe540e238a63189322b5a74d3f2d3969311"
+  },
+  "history": {
+    "writers": 4,
+    "initial_entries": 1024,
+    "entry_bytes": 2048,
+    "appends_per_writer": 20,
+    "append_delay": 0,
+    "settle_seconds": 0,
+    "append_width": 1,
+    "mutation_mode": 0,
+    "phases": 3,
+    "repetitions": 3
+  },
+  "write": {
+    "seconds": 60,
+    "subscribers": 256,
+    "work_per_tick": 20,
+    "append_mode": 0,
+    "phases": 1,
+    "repetitions": 1
+  },
+  "limitations": [
+    "These runs do not establish sustained maximum throughput or the Fjall regression gate.",
+    "History producer completion uses polling; sub-millisecond producer differences are not meaningful.",
+    "Producer plus phase-2 boundary is an approximate completion measure that omits intervening harness work.",
+    "The payload limit permits one indivisible commit to exceed the threshold; rollups are checked again before SQL application."
+  ],
+  "runs": [
+    {
+      "label": "before",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.081563641,
+          "durable_seconds": 1.088e-06
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.048504538,
+          "durable_seconds": 1.728e-06
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002320585,
+          "durable_seconds": 1.216e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 114,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 58,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 5,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010866874,
+      "producer_plus_phase_2_boundary_seconds": 0.05937314
+    },
+    {
+      "label": "before",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 1,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.085367336,
+          "durable_seconds": 1.792e-06
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.031927851,
+          "durable_seconds": 1.536e-06
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.001463749,
+          "durable_seconds": 1.792e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 116,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 42,
+          "max_outstanding": 84,
+          "max_unapplied": 84
+        },
+        {
+          "phase": 3,
+          "samples": 4,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010515577,
+      "producer_plus_phase_2_boundary_seconds": 0.042444964
+    },
+    {
+      "label": "before",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 2,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.073519386,
+          "durable_seconds": 1.52e-06
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.035328103,
+          "durable_seconds": 3.84e-07
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.000551298,
+          "durable_seconds": 9.44e-07
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 105,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 45,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 3,
+          "max_outstanding": 0,
+          "max_unapplied": 0
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010432872,
+      "producer_plus_phase_2_boundary_seconds": 0.045761358999999995
+    },
+    {
+      "label": "before",
+      "policy": "synchronous",
+      "kind": "write",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.00459256,
+          "durable_seconds": 1.6e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 56937,
+          "max_outstanding": 1000,
+          "max_unapplied": 1000
+        }
+      ],
+      "tick_stats": [
+        {
+          "ticks": 217.0,
+          "elapsed": 5.0023486614227295,
+          "actual_hz": 43.37962319049599,
+          "mean_latency_ms": 2.6924104734499883
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.008551120758057,
+          "actual_hz": 42.9265859160202,
+          "mean_latency_ms": 2.6913588797604597
+        },
+        {
+          "ticks": 186.0,
+          "elapsed": 5.020025014877319,
+          "actual_hz": 37.05160819891761,
+          "mean_latency_ms": 7.996791362762452
+        },
+        {
+          "ticks": 148.0,
+          "elapsed": 5.00806188583374,
+          "actual_hz": 29.55235046488668,
+          "mean_latency_ms": 16.50284433364868
+        },
+        {
+          "ticks": 207.0,
+          "elapsed": 5.022006034851074,
+          "actual_hz": 41.21858846116231,
+          "mean_latency_ms": 17.847344875335693
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.007622480392456,
+          "actual_hz": 43.134242017196094,
+          "mean_latency_ms": 8.709514141082764
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.010214328765869,
+          "actual_hz": 43.11192811849344,
+          "mean_latency_ms": 2.6982545852661133
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.00810694694519,
+          "actual_hz": 43.13006936318605,
+          "mean_latency_ms": 2.701643466949463
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.016411542892456,
+          "actual_hz": 42.85932247816161,
+          "mean_latency_ms": 2.699218273162842
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.014285087585449,
+          "actual_hz": 43.07692846080506,
+          "mean_latency_ms": 2.6979570388793945
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.007482290267944,
+          "actual_hz": 43.13544960903738,
+          "mean_latency_ms": 2.6964640617370605
+        }
+      ],
+      "backpressure": {
+        "calls": 3629,
+        "aggregate_seconds": 7.92191608
+      },
+      "mutations": 12451840,
+      "seconds": 60.0,
+      "mutations_per_second": 207530.66666666666
+    },
+    {
+      "label": "before",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.073592645,
+          "durable_seconds": 0.012080539
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 5.44e-07,
+          "durable_seconds": 0.010869463
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002351961,
+          "durable_seconds": 0.011904122
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 117,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 22,
+          "max_outstanding": 80,
+          "max_unapplied": 80
+        },
+        {
+          "phase": 3,
+          "samples": 16,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010409461,
+      "producer_plus_phase_2_boundary_seconds": 0.021279468
+    },
+    {
+      "label": "before",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 1,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.059459347,
+          "durable_seconds": 0.01193929
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.035191437,
+          "durable_seconds": 0.011997514
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002030824,
+          "durable_seconds": 0.011584105
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 104,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 56,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 15,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010438292,
+      "producer_plus_phase_2_boundary_seconds": 0.057627243
+    },
+    {
+      "label": "before",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 2,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.096615782,
+          "durable_seconds": 0.012245612
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.019204532,
+          "durable_seconds": 0.012355628
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002592857,
+          "durable_seconds": 0.011837034
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 139,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 41,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 16,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010306292,
+      "producer_plus_phase_2_boundary_seconds": 0.041866452
+    },
+    {
+      "label": "before",
+      "policy": "asynchronous",
+      "kind": "write",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.004948352,
+          "durable_seconds": 0.013961086
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 56929,
+          "max_outstanding": 1000,
+          "max_unapplied": 1000
+        }
+      ],
+      "tick_stats": [
+        {
+          "ticks": 218.0,
+          "elapsed": 5.0071165561676025,
+          "actual_hz": 43.538031830210684,
+          "mean_latency_ms": 2.6834175127361894
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.01106071472168,
+          "actual_hz": 42.90508781271898,
+          "mean_latency_ms": 2.691120253424171
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.014851808547974,
+          "actual_hz": 42.872652713989616,
+          "mean_latency_ms": 2.6965293884277344
+        },
+        {
+          "ticks": 187.0,
+          "elapsed": 5.01034951210022,
+          "actual_hz": 37.32274555864547,
+          "mean_latency_ms": 5.653286933898926
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.0168280601501465,
+          "actual_hz": 42.85576412470579,
+          "mean_latency_ms": 5.64678430557251
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.018574476242065,
+          "actual_hz": 42.840850727195566,
+          "mean_latency_ms": 5.64812707901001
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.0121750831604,
+          "actual_hz": 42.895548625654335,
+          "mean_latency_ms": 2.6967124938964844
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.014615058898926,
+          "actual_hz": 42.87467681461639,
+          "mean_latency_ms": 2.696744918823242
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.015421390533447,
+          "actual_hz": 43.067168873925056,
+          "mean_latency_ms": 2.6974644660949707
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.014966726303101,
+          "actual_hz": 43.071073406548685,
+          "mean_latency_ms": 2.6979260444641113
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.005733966827393,
+          "actual_hz": 43.15051527536523,
+          "mean_latency_ms": 2.696780204772949
+        }
+      ],
+      "backpressure": {
+        "calls": 601,
+        "aggregate_seconds": 1.556985168
+      },
+      "mutations": 12835840,
+      "seconds": 60.0,
+      "mutations_per_second": 213930.66666666666
+    },
+    {
+      "label": "after",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.05768654,
+          "durable_seconds": 8.96e-07
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 1.552e-06,
+          "durable_seconds": 4.48e-07
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.000630545,
+          "durable_seconds": 1.456e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 92,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 11,
+          "max_outstanding": 82,
+          "max_unapplied": 82
+        },
+        {
+          "phase": 3,
+          "samples": 3,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010250051,
+      "producer_plus_phase_2_boundary_seconds": 0.010252051
+    },
+    {
+      "label": "after",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 1,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.077758433,
+          "durable_seconds": 2.736e-06
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 8.32e-07,
+          "durable_seconds": 1.6e-07
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.000959058,
+          "durable_seconds": 9.92e-07
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 110,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 11,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 3,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010538755,
+      "producer_plus_phase_2_boundary_seconds": 0.010539747
+    },
+    {
+      "label": "after",
+      "policy": "synchronous",
+      "kind": "history",
+      "iteration": 2,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.09320067,
+          "durable_seconds": 2.192e-06
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 1.552e-06,
+          "durable_seconds": 7.52e-07
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.001779011,
+          "durable_seconds": 1.76e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 125,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 12,
+          "max_outstanding": 82,
+          "max_unapplied": 82
+        },
+        {
+          "phase": 3,
+          "samples": 4,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.011653094,
+      "producer_plus_phase_2_boundary_seconds": 0.011655397999999999
+    },
+    {
+      "label": "after",
+      "policy": "synchronous",
+      "kind": "write",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 2.355027519,
+          "durable_seconds": 1.184e-06
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 59163,
+          "max_outstanding": 1000,
+          "max_unapplied": 1004
+        }
+      ],
+      "tick_stats": [
+        {
+          "ticks": 218.0,
+          "elapsed": 5.015544891357422,
+          "actual_hz": 43.464868667739076,
+          "mean_latency_ms": 2.66817950327462
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.0054030418396,
+          "actual_hz": 43.15336810931714,
+          "mean_latency_ms": 2.673601225224508
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.012688875198364,
+          "actual_hz": 43.09064563506395,
+          "mean_latency_ms": 2.682880401611328
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.002742767333984,
+          "actual_hz": 42.976425133002756,
+          "mean_latency_ms": 2.6862597465515137
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.009808778762817,
+          "actual_hz": 42.915809663516676,
+          "mean_latency_ms": 2.692258358001709
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.020786285400391,
+          "actual_hz": 42.82197802865741,
+          "mean_latency_ms": 2.702057361602783
+        },
+        {
+          "ticks": 214.0,
+          "elapsed": 5.00781512260437,
+          "actual_hz": 42.733206949682064,
+          "mean_latency_ms": 2.699087142944336
+        },
+        {
+          "ticks": 214.0,
+          "elapsed": 5.017676830291748,
+          "actual_hz": 42.649219397327585,
+          "mean_latency_ms": 2.698124408721924
+        },
+        {
+          "ticks": 213.0,
+          "elapsed": 5.007882595062256,
+          "actual_hz": 42.532946001972334,
+          "mean_latency_ms": 2.698237895965576
+        },
+        {
+          "ticks": 181.0,
+          "elapsed": 5.000528573989868,
+          "actual_hz": 36.196173528827984,
+          "mean_latency_ms": 5.112757682800293
+        },
+        {
+          "ticks": 150.0,
+          "elapsed": 5.01528263092041,
+          "actual_hz": 29.908583631003033,
+          "mean_latency_ms": 8.655669212341309
+        }
+      ],
+      "backpressure": {
+        "calls": 157,
+        "aggregate_seconds": 6.191728352
+      },
+      "mutations": 12257280,
+      "seconds": 60.0,
+      "mutations_per_second": 204288.0
+    },
+    {
+      "label": "after",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.077679419,
+          "durable_seconds": 0.002353684
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 1.056e-06,
+          "durable_seconds": 0.001974819
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.001956292,
+          "durable_seconds": 0.000413921
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 112,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 14,
+          "max_outstanding": 73,
+          "max_unapplied": 73
+        },
+        {
+          "phase": 3,
+          "samples": 5,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.011175236,
+      "producer_plus_phase_2_boundary_seconds": 0.013151111
+    },
+    {
+      "label": "after",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 1,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.085729513,
+          "durable_seconds": 0.002279988
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 3.744e-06,
+          "durable_seconds": 0.00097781
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002798245,
+          "durable_seconds": 0.000729745
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 120,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 12,
+          "max_outstanding": 83,
+          "max_unapplied": 83
+        },
+        {
+          "phase": 3,
+          "samples": 6,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010547698999999999,
+      "producer_plus_phase_2_boundary_seconds": 0.011529253
+    },
+    {
+      "label": "after",
+      "policy": "asynchronous",
+      "kind": "history",
+      "iteration": 2,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 0.081186146,
+          "durable_seconds": 0.001585139
+        },
+        {
+          "phase": 2,
+          "applied_seconds": 0.003045446,
+          "durable_seconds": 0.001374786
+        },
+        {
+          "phase": 3,
+          "applied_seconds": 0.002340756,
+          "durable_seconds": 0.00105429
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 121,
+          "max_outstanding": 4,
+          "max_unapplied": 4
+        },
+        {
+          "phase": 2,
+          "samples": 16,
+          "max_outstanding": 84,
+          "max_unapplied": 84
+        },
+        {
+          "phase": 3,
+          "samples": 6,
+          "max_outstanding": 1,
+          "max_unapplied": 1
+        }
+      ],
+      "tick_stats": [],
+      "backpressure": {
+        "calls": 0,
+        "aggregate_seconds": 0.0
+      },
+      "producer_seconds": 0.010805795,
+      "producer_plus_phase_2_boundary_seconds": 0.015226027
+    },
+    {
+      "label": "after",
+      "policy": "asynchronous",
+      "kind": "write",
+      "iteration": 0,
+      "boundaries": [
+        {
+          "phase": 1,
+          "applied_seconds": 2.065006468,
+          "durable_seconds": 0.000655153
+        }
+      ],
+      "occupancy": [
+        {
+          "phase": 1,
+          "samples": 58892,
+          "max_outstanding": 1000,
+          "max_unapplied": 1002
+        }
+      ],
+      "tick_stats": [
+        {
+          "ticks": 217.0,
+          "elapsed": 5.010707855224609,
+          "actual_hz": 43.30725443786081,
+          "mean_latency_ms": 2.664516598398235
+        },
+        {
+          "ticks": 214.0,
+          "elapsed": 5.017674446105957,
+          "actual_hz": 42.64923966242528,
+          "mean_latency_ms": 2.672840437037209
+        },
+        {
+          "ticks": 215.0,
+          "elapsed": 5.003909349441528,
+          "actual_hz": 42.96640586104853,
+          "mean_latency_ms": 2.6857237815856934
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.020582437515259,
+          "actual_hz": 43.0228967830475,
+          "mean_latency_ms": 2.689293384552002
+        },
+        {
+          "ticks": 216.0,
+          "elapsed": 5.015796899795532,
+          "actual_hz": 43.06394463635583,
+          "mean_latency_ms": 2.6874923706054688
+        },
+        {
+          "ticks": 213.0,
+          "elapsed": 5.010272026062012,
+          "actual_hz": 42.51266176607468,
+          "mean_latency_ms": 2.6791129112243652
+        },
+        {
+          "ticks": 214.0,
+          "elapsed": 5.007871627807617,
+          "actual_hz": 42.73272477906677,
+          "mean_latency_ms": 2.68157958984375
+        },
+        {
+          "ticks": 214.0,
+          "elapsed": 5.000930547714233,
+          "actual_hz": 42.792035993743724,
+          "mean_latency_ms": 2.674609661102295
+        },
+        {
+          "ticks": 208.0,
+          "elapsed": 5.0068464279174805,
+          "actual_hz": 41.54311561070075,
+          "mean_latency_ms": 3.070639133453369
+        },
+        {
+          "ticks": 166.0,
+          "elapsed": 5.00454306602478,
+          "actual_hz": 33.169861425901864,
+          "mean_latency_ms": 6.14547061920166
+        },
+        {
+          "ticks": 146.0,
+          "elapsed": 5.085022687911987,
+          "actual_hz": 28.711769634198138,
+          "mean_latency_ms": 10.049591541290283
+        }
+      ],
+      "backpressure": {
+        "calls": 157,
+        "aggregate_seconds": 7.40739944
+      },
+      "mutations": 11991440,
+      "seconds": 60.0,
+      "mutations_per_second": 199857.33333333334
+    }
+  ]
+}

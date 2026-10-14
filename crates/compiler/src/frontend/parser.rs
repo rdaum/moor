@@ -658,6 +658,7 @@ impl<'a> Parser<'a> {
                 self.builder
                     .start_node_at(checkpoint, SyntaxKind::LambdaExpr);
                 self.parse_fn_signature_and_body();
+                self.parse_lambda_metadata();
                 self.builder.finish_node();
             }
             SyntaxKind::ReturnKw => {
@@ -694,7 +695,45 @@ impl<'a> Parser<'a> {
                 SyntaxKind::RBrace,
             ],
         );
+        self.parse_lambda_metadata();
         self.builder.finish_node();
+    }
+
+    /// Closure metadata contains literal values, checked by the literal parser during lowering.
+    fn parse_lambda_metadata(&mut self) {
+        if !self.at_contextual_ident("with") {
+            return;
+        }
+        self.bump_significant();
+        if self.at_contextual_ident("captured") {
+            self.bump_significant();
+            self.expect_and_emit(SyntaxKind::LBracket, "expected capture frames");
+            while self.cursor.at(SyntaxKind::LBrace) {
+                self.bump_significant();
+                while !self.cursor.at(SyntaxKind::RBrace) && !self.cursor.at(SyntaxKind::Eof) {
+                    self.expect_and_emit(SyntaxKind::Ident, "expected captured binding");
+                    self.expect_and_emit(SyntaxKind::Colon, "expected ':' after captured binding");
+                    self.parse_required_expr(
+                        "expected captured value",
+                        &[SyntaxKind::Comma, SyntaxKind::RBrace],
+                    );
+                    if !self.cursor.bump_if(SyntaxKind::Comma) {
+                        break;
+                    }
+                    self.emit_to_cursor();
+                }
+                self.expect_and_emit(SyntaxKind::RBrace, "expected end of capture frame");
+                if !self.cursor.bump_if(SyntaxKind::Comma) {
+                    break;
+                }
+                self.emit_to_cursor();
+            }
+            self.expect_and_emit(SyntaxKind::RBracket, "expected end of captures");
+        }
+        if self.at_contextual_ident("self") {
+            self.bump_significant();
+            self.expect_and_emit(SyntaxKind::Ident, "expected recursive binding");
+        }
     }
 
     fn parse_braced_param_list(&mut self) {
@@ -828,7 +867,11 @@ impl<'a> Parser<'a> {
             self.emit_to_cursor();
             if self.cursor.at(SyntaxKind::Dot) {
                 self.bump_significant();
-                self.expect_and_emit(SyntaxKind::Ident, "expected flyweight slot name");
+                if self.cursor.at(SyntaxKind::StringLit) {
+                    self.bump_significant();
+                } else {
+                    self.expect_and_emit(SyntaxKind::Ident, "expected flyweight slot name");
+                }
                 self.expect_and_emit(SyntaxKind::Eq, "expected '=' after flyweight slot");
                 if self.starts_expr() {
                     self.parse_expr_with_stops(&[SyntaxKind::Gt]);

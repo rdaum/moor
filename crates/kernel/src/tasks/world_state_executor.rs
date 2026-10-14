@@ -903,7 +903,7 @@ mod tests {
     }
 
     fn setup_test_db() -> (TxDB, Box<dyn WorldState>) {
-        let (db, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (db, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let mut tx = db.new_world_state().unwrap();
 
         let sysobj = tx

@@ -13,9 +13,9 @@
 
 //! Fjall-backed persistence provider with per-type encoding strategies.
 //!
-//! This module implements a `Provider` using Fjall (an embedded LSM-tree database) as the backing
-//! store. The key architectural feature is **per-type encoding**: each data type can use its own
-//! optimal serialization strategy via the `EncodeFor` trait.
+//! This adapter binds logical mutations to Fjall keyspaces. Each stored type has an
+//! encoding through `EncodeFor`. Snapshot reads use `fjall_reader`; CRUD helpers
+//! are available only to unit-test fixtures.
 //!
 //! ## Encoding Strategies
 //!
@@ -40,14 +40,16 @@
 //! transaction batch. A single background writer commits those batches to Fjall
 //! atomically and in publication order.
 
+#[cfg(test)]
+use crate::{db_counters, provider::Provider};
 use crate::{
-    db_counters,
     provider::batch_writer::{BatchEncoder, BatchValue},
     tx::{EncodeFor, Error, RelationCodomain, RelationDomain, Timestamp},
 };
 use ahash::AHashMap;
 use byteview::ByteView;
 use fjall::Slice;
+#[cfg(test)]
 use moor_common::model::WorldStateTimerOp;
 use moor_var::Var;
 use planus::{ReadAsRoot, WriteAsOffset};
@@ -166,16 +168,13 @@ where
 }
 
 impl FjallProvider<crate::ObjAndUUIDHolder, Var> {
-    pub(crate) fn encode_property_value_working_set(
+    pub(crate) fn encode_property_value_changes(
         &self,
-        working_set: crate::tx::WorkingSet<crate::ObjAndUUIDHolder, Var>,
+        changes: Vec<super::logical::PreparedPropertyValueOp>,
     ) -> Vec<super::batch_writer::BatchOp> {
-        use super::{
-            batch_writer::{BatchOp, BatchOpSource, BatchOpType},
-            property_value_store::prepare_property_value_working_set,
-        };
+        use super::batch_writer::{BatchOp, BatchOpSource, BatchOpType};
 
-        prepare_property_value_working_set(working_set)
+        changes
             .into_iter()
             .map(|prepared| {
                 let object = prepared.property.obj();
@@ -193,27 +192,29 @@ impl FjallProvider<crate::ObjAndUUIDHolder, Var> {
             .collect()
     }
 
-    pub(crate) fn seeded_property_value_index(&self) -> Result<SeededPropertyValueIndex, Error> {
+    pub(crate) fn seeded_property_value_index(
+        &self,
+        snapshot: &fjall::Snapshot,
+        relation: &crate::tx::Relation<crate::ObjAndUUIDHolder, Var>,
+    ) -> Result<SeededPropertyValueIndex, Error> {
         use super::property_value_store::{PROPERTY_VALUE_CHAIN_LIMITS, PropertyValueScan};
-        use crate::tx::{HashRelationIndex, RelationIndex};
-
-        let mut index = HashRelationIndex::new();
         let mut chains = AHashMap::new();
-        let mut max_timestamp = Timestamp(0);
-        for entry in PropertyValueScan::new(self.fjall_keyspace.iter(), PROPERTY_VALUE_CHAIN_LIMITS)
-        {
+        let tuples = PropertyValueScan::new(
+            fjall::Readable::iter(snapshot, &self.fjall_keyspace),
+            PROPERTY_VALUE_CHAIN_LIMITS,
+        )
+        .map(|entry| {
             let (property, reconstructed) =
                 entry.map_err(|error| Error::RetrievalFailure(error.to_string()))?;
-            max_timestamp = max_timestamp.max(reconstructed.logical_timestamp);
             chains.insert(property.clone(), reconstructed.chain);
-            index.insert_entry(
+            Ok((
                 reconstructed.logical_timestamp,
                 property,
                 reconstructed.value,
-            );
-        }
-        index.set_provider_fully_loaded(true);
-        Ok((Box::new(index), max_timestamp, chains))
+            ))
+        });
+        let (index, max_timestamp) = relation.seeded_index(tuples)?;
+        Ok((index, max_timestamp, chains))
     }
 }
 
@@ -225,15 +226,15 @@ where
     FjallCodec: EncodeFjallValue<Codomain>,
 {
     /// Consume a published working set into operations for the BatchWriter.
-    pub fn encode_working_set(
+    pub(crate) fn encode_changes(
         &self,
-        working_set: crate::tx::WorkingSet<Domain, Codomain>,
+        changes: crate::tx::WorkingSetTuples<Domain, Codomain>,
     ) -> Result<Vec<super::batch_writer::BatchOp>, Error> {
         use super::batch_writer::{BatchOp, BatchOpType};
         use crate::tx::OpType;
 
-        let mut batch_ops = Vec::with_capacity(working_set.len());
-        for (domain, op) in working_set.tuples() {
+        let mut batch_ops = Vec::with_capacity(changes.len());
+        for (domain, op) in changes {
             match op.operation {
                 OpType::Insert(codomain) | OpType::Update(codomain) => {
                     let key_bytes = <Self as EncodeFor<Domain>>::encode(self, &domain)?;
@@ -282,6 +283,7 @@ where
     }
 }
 
+#[cfg(test)]
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
     Domain: RelationDomain,
@@ -367,9 +369,7 @@ pub(crate) struct FjallCodec;
 // ============================================================================
 // Each type gets its own EncodeFor impl, allowing custom encoding logic
 
-use crate::{
-    AnonymousObjectMetadata, EntityMetadataKey, ObjAndUUIDHolder, StringHolder, provider::Provider,
-};
+use crate::{AnonymousObjectMetadata, EntityMetadataKey, ObjAndUUIDHolder, StringHolder};
 use moor_common::{
     model::{ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs},
     util::BitEnum,

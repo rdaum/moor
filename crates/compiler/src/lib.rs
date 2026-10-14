@@ -15,6 +15,7 @@ pub use moor_var::program::names::Names;
 
 mod ast;
 mod backend;
+mod capture;
 mod codegen;
 mod compile_options;
 mod decompile;
@@ -23,6 +24,7 @@ pub mod frontend;
 mod lexer;
 mod objdef_literal;
 mod parse_tree;
+mod persistent;
 mod precedence;
 mod syntax_kind;
 mod unparse;
@@ -74,3 +76,10 @@ pub use moor_var::program::{
     stored_program::StoredProgram,
 };
 pub use var_scope::VarScope;
+
+pub use persistent::{
+    LiteralDecodeError, LiteralEncodeError, PERSISTENT_COMPILER_PROFILE_VERSION,
+    PERSISTENT_LITERAL_VERSION, PERSISTENT_SOURCE_VERSION, PersistentProgram, ProfileError,
+    SourceCodecError, SourceProfile, read_persistent_literal, read_persistent_source,
+    write_persistent_literal, write_persistent_source,
+};

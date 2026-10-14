@@ -581,7 +581,7 @@ mod tests {
 
     #[test]
     fn failed_startup_saves_restored_continuations() {
-        let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let saved = Arc::new(Mutex::new(Vec::new()));
         let scheduler = Scheduler::new(
             semver::Version::new(0, 0, 0),

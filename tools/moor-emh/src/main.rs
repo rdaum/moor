@@ -146,21 +146,28 @@ struct Args {
 
 #[derive(DeriveParser, Debug)]
 struct DatabaseArgs {
+    #[command(flatten)]
+    storage_args: moor_db::StorageArgs,
+
     #[arg(
         long,
         value_name = "db",
-        help = "Main database filename (relative to data-dir if not absolute)",
-        default_value = "world.db"
+        help = "Fjall world path (default: world.db, relative to data-dir)"
     )]
-    db: PathBuf,
+    db: Option<PathBuf>,
 }
 
 impl Args {
     fn resolved_db_path(&self) -> PathBuf {
-        if self.db_args.db.is_absolute() {
-            self.db_args.db.clone()
+        let path = self
+            .db_args
+            .db
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new("world.db"));
+        if path.is_absolute() {
+            path.to_path_buf()
         } else {
-            self.data_dir.join(&self.db_args.db)
+            self.data_dir.join(path)
         }
     }
 }
@@ -692,6 +699,24 @@ fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
     let args = Args::parse();
+    let storage = args.db_args.storage_args.resolve(
+        &moor_db::StorageSettings::default(),
+        || Some(args.resolved_db_path()),
+        args.db_args.db.is_some(),
+        false,
+    )?;
+    if args.db_args.storage_args.install_views(&storage)? {
+        println!("Installed PostgreSQL inspection views");
+        return Ok(());
+    }
+    if let Some(report) = args.db_args.storage_args.validate(&storage)? {
+        println!("{report}");
+        return Ok(());
+    }
+    if let Some(identity) = args.db_args.storage_args.initialize(&storage)? {
+        println!("Initialized PostgreSQL database {identity}");
+        return Ok(());
+    }
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
@@ -733,16 +758,15 @@ fn main() -> Result<(), Report> {
     // Acquire lock
     let _lock = acquire_data_directory_lock(&args.data_dir)?;
 
-    // Open database
-    let resolved_db_path = args.resolved_db_path();
-    info!("Opening database at {:?}", resolved_db_path);
-    let (database, _freshly_made) =
-        TxDB::try_open(Some(&resolved_db_path), DatabaseConfig::default()).map_err(|e| {
-            eyre!(
-                "Unable to open database at {}: {e}",
-                resolved_db_path.display()
-            )
-        })?;
+    info!(storage_backend = %storage.kind(), "Opening world database");
+    let (database, _freshly_made) = TxDB::try_open(
+        storage,
+        DatabaseConfig::default(),
+        args.db_args
+            .storage_args
+            .merge(&moor_db::StorageSettings::default())
+            .persistence_config()?,
+    )?;
     let export_database = database.clone();
     let database = Box::new(database);
 

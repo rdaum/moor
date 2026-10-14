@@ -23,37 +23,32 @@ use crate::{
         ancestry_cache::AncestryCache, prop_cache::PropResolutionCache,
         verb_cache::VerbResolutionCache,
     },
-    config::DatabaseConfig,
+    config::{DatabaseConfig, PersistenceConfig, StorageConfig},
     tx::{CheckRelation, Relation, RelationTransaction, Timestamp, Tx, WorkingSet},
 };
 use crate::{
     engine::relation_defs::define_relations,
     provider::{
-        batch_writer::BatchWriter, fjall_format, fjall_provider::FjallProvider,
-        fjall_snapshot_loader::FjallSnapshotLoader,
-        property_value_store::PROPERTY_VALUE_CHAIN_LIMITS,
+        backend::StorageBackend,
+        coordinator::{PersistenceCoordinator, PersistenceStatus},
+        logical::{PersistenceError, PersistenceReceipt, PublicationId, WriterEpoch},
     },
 };
-use fjall::{Database, KeyspaceCreateOptions};
 use moor_common::model::loader::SnapshotInterface;
 use moor_common::util::CachePadded;
 use moor_common::util::Instant;
 use moor_common::{
-    model::{
-        CommitResult, HasUuid, ObjFlag, PropDefs, PropPerms, ValSet, VerbDefs, WorldStateError,
-    },
+    model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs, WorldStateError},
     util::BitEnum,
 };
 use moor_var::{NOTHING, Obj, Symbol, Var, program::ProgramType};
 use std::{
-    path::Path,
     sync::{
         Arc,
         atomic::{AtomicI64, AtomicU16, AtomicU64, Ordering},
     },
     time::Duration,
 };
-use tempfile::TempDir;
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -63,21 +58,7 @@ mod snapshot_planes;
 use snapshot_planes::SnapshotPlanes;
 pub(crate) use snapshot_planes::TxSeed;
 
-define_relations! {
-    object_location == Obj, Obj,
-    object_parent == Obj, Obj,
-    object_flags => Obj, BitEnum<ObjFlag>,
-    object_owner == Obj, Obj,
-    object_name => Obj, StringHolder,
-    object_verbdefs => Obj, VerbDefs,
-    object_verbs => ObjAndUUIDHolder, ProgramType,
-    object_propdefs => Obj, PropDefs,
-    object_propvalues => ObjAndUUIDHolder, Var,
-    object_propflags => ObjAndUUIDHolder, PropPerms,
-    entity_metadata => EntityMetadataKey, Var,
-    object_last_move => Obj, Var,
-    anonymous_object_metadata => Obj, AnonymousObjectMetadata,
-}
+crate::relation_registry::relation_registry!(define_relations);
 
 // The relation macro defines the private commit-method macro used by this module.
 mod commit_pipeline;
@@ -140,7 +121,8 @@ impl Caches {
     }
 }
 
-const SEQUENCE_COUNT: usize = 15;
+pub(crate) const SEQUENCE_COUNT: usize = 15;
+pub(crate) const DEFAULT_SNAPSHOT_ACQUISITION_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) struct SequenceState {
     values: [CachePadded<AtomicI64>; SEQUENCE_COUNT],
@@ -197,16 +179,13 @@ impl SequenceState {
 /// Core storage engine for transactional world-state access.
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
-    keyspace: Database,
-    relations: Relations,
+    backend: StorageBackend,
+    relations: Arc<Relations>,
     snapshot_planes: SnapshotPlanes,
     sequences: Arc<SequenceState>,
-    sequences_partition: fjall::Keyspace,
-    /// Single background writer for all fjall operations
-    batch_writer: BatchWriter,
-    /// Keeps temp directory alive for the lifetime of the database when using
-    /// an ephemeral path. Dropped after fjall shuts down in `Drop`.
-    _tmpdir: Option<TempDir>,
+    /// Admission, publication tracking, and the background storage writer.
+    coordinator: PersistenceCoordinator,
+    shutdown_timeout: Duration,
 }
 
 impl TransactionContext for MoorDB {
@@ -225,50 +204,99 @@ impl TransactionContext for MoorDB {
     fn usage_bytes(&self) -> usize {
         self.usage_bytes()
     }
+
+    fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+        self.persistence_status().operator_metrics()
+    }
 }
 
 impl MoorDB {
     pub(crate) fn set_commit_queue_policy(&self, warn_after: Duration, timeout: Duration) {
-        self.batch_writer
+        self.coordinator
             .set_commit_queue_policy(warn_after, timeout);
     }
 
     /// Create a snapshot-based SnapshotInterface for consistent read-only access
     pub fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, crate::tx::Error> {
-        let published_version = self.snapshot_planes.load_root().version;
-        let snapshot = self
-            .batch_writer
-            .snapshot(published_version, std::time::Duration::from_secs(10))
-            .map_err(crate::tx::Error::StorageFailure)?;
-
-        // Return a custom SnapshotInterface implementation that uses this snapshot
-        Ok(Box::new(FjallSnapshotLoader {
-            snapshot,
-            object_location_keyspace: self.relations.object_location.source().partition().clone(),
-            object_flags_keyspace: self.relations.object_flags.source().partition().clone(),
-            object_parent_keyspace: self.relations.object_parent.source().partition().clone(),
-            object_owner_keyspace: self.relations.object_owner.source().partition().clone(),
-            object_name_keyspace: self.relations.object_name.source().partition().clone(),
-            object_verbdefs_keyspace: self.relations.object_verbdefs.source().partition().clone(),
-            object_verbs_keyspace: self.relations.object_verbs.source().partition().clone(),
-            object_propdefs_keyspace: self.relations.object_propdefs.source().partition().clone(),
-            object_propvalues_keyspace: self
-                .relations
-                .object_propvalues
-                .source()
-                .partition()
-                .clone(),
-            object_propflags_keyspace: self.relations.object_propflags.source().partition().clone(),
-            entity_metadata_keyspace: self.relations.entity_metadata.source().partition().clone(),
-        }))
+        self.create_snapshot_with_timeout(DEFAULT_SNAPSHOT_ACQUISITION_TIMEOUT)
     }
 
-    /// Wait for the current published world state to be committed into Fjall.
+    /// Create a snapshot with an explicit acquisition deadline.
     ///
-    /// This is an application-level handoff boundary, not an fsync request.
+    /// The deadline covers the applied barrier, queue submission, and the snapshot receipt.
+    pub fn create_snapshot_with_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Box<dyn SnapshotInterface>, crate::tx::Error> {
+        let published_version = self.snapshot_planes.load_root().version;
+        let snapshot = self
+            .coordinator
+            .snapshot(published_version, timeout)
+            .map_err(|error| crate::tx::Error::StorageFailure(error.to_string()))?;
+
+        Ok(self.backend.snapshot_loader(snapshot))
+    }
+
+    pub(crate) fn publication(&self) -> PublicationId {
+        self.coordinator.published(self.published_version())
+    }
+
+    pub(crate) fn persistence_status(&self) -> PersistenceStatus {
+        self.publication();
+        self.coordinator.status()
+    }
+
+    pub(crate) fn wait_applied(
+        &self,
+        publication: PublicationId,
+        timeout: Duration,
+    ) -> Result<PersistenceReceipt, PersistenceError> {
+        self.coordinator.wait_applied(publication, timeout)
+    }
+
+    pub(crate) fn wait_durable(
+        &self,
+        publication: PublicationId,
+        timeout: Duration,
+    ) -> Result<PersistenceReceipt, PersistenceError> {
+        self.coordinator.wait_durable(publication, timeout)
+    }
+
+    /// Wait for the current published world state to be applied to storage.
+    ///
+    /// This is an application-level handoff boundary, not a durable-storage fence. It is
+    /// explicitly unbounded and reports terminal writer failure.
     pub fn wait_for_persistence(&self) -> Result<(), String> {
         let published_version = self.snapshot_planes.load_root().version;
-        self.batch_writer.wait_for_version(published_version)
+        let publication = self.coordinator.published(published_version);
+        self.coordinator
+            .wait_applied_unbounded(publication)
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    /// Deadline-bounded variant of [`Self::wait_for_persistence`] for administrative callers.
+    pub fn wait_for_persistence_with_deadline(&self, deadline: Duration) -> Result<(), String> {
+        let published_version = self.snapshot_planes.load_root().version;
+        let publication = self.coordinator.published(published_version);
+        self.coordinator
+            .wait_applied(publication, deadline)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    /// The currently published root version.
+    pub fn published_version(&self) -> u64 {
+        self.snapshot_planes.load_root().version
+    }
+
+    /// Wait until the current published state has crossed the durable-storage fence.
+    pub fn wait_for_durability(&self, deadline: Duration) -> Result<(), String> {
+        let publication = self.coordinator.published(self.published_version());
+        self.coordinator
+            .wait_durable(publication, deadline)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 
     /// Create a transaction bound to the current published snapshot.
@@ -282,25 +310,39 @@ impl MoorDB {
         let published_version = self.snapshot_planes.load_root().version;
 
         info!(
-            "Stopping batch writer (published version: {})",
-            published_version
+            "Stopping persistence coordinator (published version: {}, deadline: {:?})",
+            published_version, self.shutdown_timeout
         );
-        let stop_result = self.batch_writer.stop();
+        let stop_result = self
+            .coordinator
+            .shutdown()
+            .map_err(|error| error.to_string());
 
-        let final_completed = self.batch_writer.completed_version();
+        let status = self.coordinator.status();
+        info!(
+            writer_epoch = status.epoch.as_u64(),
+            published = status.published,
+            last_submitted = status.last_submitted,
+            outstanding = status.outstanding,
+            healthy = status.healthy,
+            applied = status.applied,
+            durable = status.durable,
+            shutdown = status.shutdown,
+            postgres = ?status.postgres,
+            "Persistence status at shutdown"
+        );
+        let final_completed = status.applied;
         if published_version > 0 && final_completed < published_version {
             let detail = format!(
-                "batch writer stopped before completing all writes: expected {published_version}, got {final_completed}"
+                "persistence stopped before completing all writes: expected {published_version}, got {final_completed}"
             );
             error!("{detail}");
-            self.relations.stop_all();
             return Err(stop_result.err().unwrap_or(detail));
         }
         if published_version > 0 {
             info!("All writes completed up to version {}", final_completed);
         }
 
-        self.relations.stop_all();
         stop_result
     }
 
@@ -308,93 +350,26 @@ impl MoorDB {
     ///
     /// `fresh` indicates no existing relation keyspaces were found.
     pub fn try_open(
-        path: Option<&Path>,
+        storage: StorageConfig,
         config: DatabaseConfig,
+        persistence: PersistenceConfig,
     ) -> Result<(Arc<Self>, bool), DatabaseOpenError> {
-        let tmpdir = if path.is_none() {
-            Some(TempDir::new().map_err(|source| DatabaseOpenError::TempDir { source })?)
-        } else {
-            None
-        };
-        let path = path.unwrap_or_else(|| tmpdir.as_ref().unwrap().path());
-        let path_buf = path.to_path_buf();
-
-        fjall_format::fjall_check_format(path).map_err(|e| DatabaseOpenError::Format {
-            path: path_buf.clone(),
-            detail: e.to_string(),
-        })?;
-
-        let keyspace = Database::builder(path)
-            .open()
-            .map_err(|e| DatabaseOpenError::Open {
-                path: path_buf.clone(),
-                detail: e.to_string(),
-            })?;
-
-        let sequences_partition = keyspace
-            .keyspace("sequences", KeyspaceCreateOptions::default)
-            .map_err(|e| DatabaseOpenError::Keyspace {
-                path: path_buf.clone(),
-                keyspace: "sequences",
-                detail: e.to_string(),
-            })?;
-
+        let relations = Arc::new(Relations::init());
+        let epoch = WriterEpoch::random();
+        let opened = StorageBackend::open(storage, config, &relations, epoch)?;
         let sequences = Arc::new(SequenceState::new());
-
-        let mut fresh = false;
-        if !keyspace.keyspace_exists("object_location") {
-            fresh = true;
+        for (index, value) in opened.seed.sequences.iter().copied().enumerate() {
+            sequences.set_initial(index, value);
         }
-
-        if !fresh {
-            // Load sequences from existing database
-            for i in 0..SEQUENCE_COUNT {
-                let seq_value = sequences_partition
-                    .get(i.to_le_bytes())
-                    .map_err(|e| DatabaseOpenError::ReadSequence {
-                        path: path_buf.clone(),
-                        index: i,
-                        detail: e.to_string(),
-                    })?
-                    .map(|b| {
-                        b.get(..8)
-                            .and_then(|bytes| bytes.try_into().ok())
-                            .map(i64::from_le_bytes)
-                            .ok_or_else(|| DatabaseOpenError::DecodeSequence {
-                                path: path_buf.clone(),
-                                index: i,
-                                len: b.len(),
-                            })
-                    })
-                    .transpose()?
-                    .unwrap_or(-1);
-                sequences.set_initial(i, seq_value);
-            }
-        }
-
-        let relations = Relations::init(&keyspace, &config, &path_buf)?;
-        let (initial_root, property_value_chains) =
-            relations.snapshot(0, Timestamp(0), Arc::new(Caches::new()), &path_buf)?;
-        let start_tx_num = initial_root
-            .committed_ts
-            .0
-            .checked_add(1)
-            .ok_or_else(|| DatabaseOpenError::TransactionTimestampExhausted {
-                path: path_buf.clone(),
-            })?
-            .max(1);
-        let property_names = initial_root
-            .object_propdefs
-            .iter()
-            .flat_map(|(_, entry)| entry.value.iter())
-            .map(|definition| (definition.uuid(), definition.name()))
-            .collect();
-        let snapshot_planes = SnapshotPlanes::new(Arc::new(initial_root));
-        let batch_writer = BatchWriter::with_property_value_state(
-            keyspace.clone(),
-            property_names,
-            property_value_chains,
-            PROPERTY_VALUE_CHAIN_LIMITS,
+        let start_tx_num = opened.start_tx_num;
+        let snapshot_planes = SnapshotPlanes::new(Arc::new(opened.seed.root));
+        let writer = opened.writer;
+        let fresh = opened.fresh;
+        let shutdown_timeout = persistence.shutdown_timeout;
+        let coordinator = PersistenceCoordinator::new(epoch, persistence, writer);
+        info!(
+            writer_epoch = coordinator.epoch().as_u64(),
+            "Persistence coordinator started"
         );
 
         let s = Arc::new(Self {
@@ -402,10 +377,9 @@ impl MoorDB {
             relations,
             snapshot_planes,
             sequences,
-            sequences_partition,
-            batch_writer,
-            keyspace,
-            _tmpdir: tmpdir,
+            coordinator,
+            shutdown_timeout,
+            backend: opened.backend,
         });
 
         Ok((s, fresh))
@@ -413,21 +387,12 @@ impl MoorDB {
 
     /// Return current on-disk database usage in bytes.
     pub fn usage_bytes(&self) -> usize {
-        self.keyspace.disk_space().unwrap_or_default() as usize
+        self.backend.usage_bytes()
     }
 
     /// Return a point-in-time view of Fjall's background maintenance state.
-    pub fn storage_maintenance_stats(&self) -> StorageMaintenanceStats {
-        StorageMaintenanceStats {
-            write_buffer_bytes: self.keyspace.write_buffer_size(),
-            outstanding_flushes: self.keyspace.outstanding_flushes(),
-            active_compactions: self.keyspace.active_compactions(),
-            compactions_completed: self.keyspace.compactions_completed(),
-            compaction_time: self.keyspace.time_compacting(),
-            journal_count: self.keyspace.journal_count(),
-            journal_bytes: self.keyspace.journal_disk_space().unwrap_or_default(),
-            disk_bytes: self.keyspace.disk_space().unwrap_or_default(),
-        }
+    pub fn storage_maintenance_stats(&self) -> Option<StorageMaintenanceStats> {
+        self.backend.maintenance_stats()
     }
 
     /// Flush and major-compact only the selected relation keyspaces.
@@ -436,13 +401,7 @@ impl MoorDB {
         relations: &[DatabaseRelation],
     ) -> Result<Vec<RelationCompactionResult>, String> {
         self.wait_for_persistence()?;
-        Ok(self.relations.compact_relations(relations))
-    }
-
-    /// Mark all relations as fully loaded from their backing providers.
-    /// Call this after bulk import operations to enable optimized reads.
-    pub fn mark_all_fully_loaded(&self) {
-        self.snapshot_planes.mark_all_fully_loaded(&self.relations);
+        Ok(self.backend.compact_relations(relations))
     }
 }
 
@@ -482,9 +441,9 @@ mod tests {
     use crate::provider::property_value_store::{
         PropertyValueRecordKind, decode_property_value_record, decode_property_value_record_key,
     };
-    use fjall::PersistMode;
+    use fjall::{Database, KeyspaceCreateOptions, PersistMode};
     use moor_common::{
-        model::{CommitResult, ObjAttrs, ObjectKind, PropFlag},
+        model::{CommitResult, HasUuid, ObjAttrs, ObjectKind, PropFlag},
         util::BitEnum,
     };
     use moor_var::{NOTHING, Obj, Symbol, v_int, v_list};
@@ -492,9 +451,10 @@ mod tests {
     fn property_value_records(
         db: &MoorDB,
     ) -> Vec<(ObjAndUUIDHolder, u64, PropertyValueRecordKind, Timestamp)> {
-        db.relations
+        db.backend
+            .fjall()
+            .relations
             .object_propvalues
-            .provider()
             .partition()
             .iter()
             .map(|entry| {
@@ -509,6 +469,37 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn export_snapshot_survives_later_writes_and_database_shutdown() {
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
+        let mut tx = db.start_transaction();
+        let object = tx
+            .create_object(
+                ObjectKind::NextObjid,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "before"),
+            )
+            .unwrap();
+        assert!(matches!(tx.commit().unwrap(), CommitResult::Success { .. }));
+        let snapshot = db.create_snapshot().unwrap();
+        let mut tx = db.start_transaction();
+        tx.set_object_name(&object, "after".into()).unwrap();
+        assert!(matches!(tx.commit().unwrap(), CommitResult::Success { .. }));
+        let later = db.create_snapshot().unwrap();
+        db.stop().unwrap();
+        drop(db);
+        let mut export = snapshot.begin_export(&[]).unwrap();
+        assert_eq!(export.next_object().unwrap().unwrap().name, "before");
+        assert!(export.next_object().unwrap().is_none());
+        let mut export = later.begin_export(&[]).unwrap();
+        assert_eq!(export.next_object().unwrap().unwrap().name, "after");
     }
 
     #[test]
@@ -540,9 +531,13 @@ mod tests {
     fn reopen_recovers_tuple_timestamps_before_starting_new_transactions() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let db = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
 
         for _ in 0..40 {
             drop(db.start_transaction());
@@ -560,9 +555,13 @@ mod tests {
         db.stop().unwrap();
         drop(db);
 
-        let reopened = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let reopened = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let root = reopened.snapshot_planes.load_root();
         let entry = root.object_name.index_lookup(&Obj::mk_id(1)).unwrap();
         assert_eq!(entry.ts, Timestamp(committed_timestamp));
@@ -572,12 +571,107 @@ mod tests {
     }
 
     #[test]
+    fn shutdown_drains_an_attempt_admitted_before_shutdown() {
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
+        let admission = db.coordinator.admit(Timestamp(1)).unwrap();
+        let shutdown_db = db.clone();
+        let shutdown = std::thread::spawn(move || shutdown_db.stop());
+        let started = std::time::Instant::now();
+        while !db.coordinator.status().shutdown {
+            assert!(started.elapsed() < Duration::from_secs(2));
+            std::thread::yield_now();
+        }
+        assert!(!shutdown.is_finished());
+        let tx = db.start_transaction();
+        let (changes, _, _, _) = tx
+            .into_working_sets()
+            .unwrap()
+            .extract_relation_working_sets();
+        db.coordinator
+            .submit(
+                crate::provider::logical::LogicalCommit {
+                    publication: db.coordinator.published(1),
+                    timestamp: Timestamp(1),
+                    changes: changes.into_changes(),
+                    sequences: Vec::new(),
+                    property_definition_changes: Vec::new(),
+                },
+                admission,
+            )
+            .unwrap();
+        shutdown.join().unwrap().unwrap();
+        assert_eq!(db.coordinator.status().applied, 1);
+    }
+
+    #[test]
+    fn durability_fence_advances_after_a_write() {
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
+
+        let mut tx = db.start_transaction();
+        tx.set_object_name(&Obj::mk_id(1), "durable".to_string())
+            .unwrap();
+        assert!(matches!(tx.commit().unwrap(), CommitResult::Success { .. }));
+
+        db.wait_for_durability(Duration::from_secs(5)).unwrap();
+        assert!(db.coordinator.status().durable >= 1);
+    }
+
+    #[test]
+    fn sequence_high_water_survives_reopen() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
+        let db = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
+
+        let mut tx = db.start_transaction();
+        tx.create_object(ObjectKind::NextObjid, ObjAttrs::default())
+            .unwrap();
+        assert!(matches!(tx.commit().unwrap(), CommitResult::Success { .. }));
+        db.wait_for_persistence().unwrap();
+        let allocated = db.sequences.load(SEQUENCE_MAX_OBJECT);
+        assert!(allocated >= 0);
+
+        db.stop().unwrap();
+        drop(db);
+
+        let reopened = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
+        assert!(reopened.sequences.load(SEQUENCE_MAX_OBJECT) >= allocated);
+    }
+
+    #[test]
     fn property_append_chain_survives_snapshot_export_and_reopen() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let db = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
 
         let mut tx = db.start_transaction();
         let object = tx
@@ -648,9 +742,13 @@ mod tests {
         db.stop().unwrap();
         drop(db);
 
-        let reopened = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let reopened = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let root = reopened.snapshot_planes.load_root();
         let recovered = root.object_propvalues.index_lookup(&property).unwrap();
         assert_eq!(recovered.value, appended);
@@ -702,9 +800,13 @@ mod tests {
     fn reopen_rejects_a_corrupt_property_value_chain() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let db = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
 
         let mut tx = db.start_transaction();
         let object = tx
@@ -733,7 +835,11 @@ mod tests {
         drop(values);
         drop(database);
 
-        let Err(error) = MoorDB::try_open(Some(path), DatabaseConfig::default()) else {
+        let Err(error) = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        ) else {
             panic!("database with a corrupt property-value chain was accepted");
         };
         assert!(matches!(
@@ -749,9 +855,13 @@ mod tests {
     fn reopen_rejects_a_missing_database_format_marker() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let db = MoorDB::try_open(Some(path), DatabaseConfig::default())
-            .unwrap()
-            .0;
+        let db = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         db.stop().unwrap();
         drop(db);
 
@@ -764,7 +874,11 @@ mod tests {
         drop(sequences);
         drop(database);
 
-        let Err(error) = MoorDB::try_open(Some(path), DatabaseConfig::default()) else {
+        let Err(error) = MoorDB::try_open(
+            StorageConfig::fjall(path),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        ) else {
             panic!("database without a format marker was accepted");
         };
         assert!(matches!(error, DatabaseOpenError::Format { .. }));
@@ -772,7 +886,13 @@ mod tests {
 
     #[test]
     fn relation_compaction_only_rotates_selected_relation() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let mut tx = db.start_transaction();
         let object = tx
             .create_object(
@@ -792,8 +912,8 @@ mod tests {
         assert!(matches!(tx.commit().unwrap(), CommitResult::Success { .. }));
         db.wait_for_persistence().unwrap();
 
-        let selected = db.relations.object_propvalues.provider().partition();
-        let unrelated = db.relations.object_name.provider().partition();
+        let selected = db.backend.fjall().relations.object_propvalues.partition();
+        let unrelated = db.backend.fjall().relations.object_name.partition();
         let selected_tables_before = selected.table_count();
         let unrelated_tables_before = unrelated.table_count();
 
@@ -810,7 +930,13 @@ mod tests {
 
     #[test]
     fn relation_compaction_returns_one_ordered_result_per_selection() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         let selected = [
             DatabaseRelation::ObjectPropvalues,
             DatabaseRelation::ObjectPropflags,
@@ -825,9 +951,15 @@ mod tests {
 
     #[test]
     fn commit_admission_timeout_does_not_publish_transaction() {
-        let db = MoorDB::try_open(None, DatabaseConfig::default()).unwrap().0;
+        let db = MoorDB::try_open(
+            StorageConfig::temporary_fjall(),
+            DatabaseConfig::default(),
+            PersistenceConfig::default(),
+        )
+        .unwrap()
+        .0;
         db.set_commit_queue_policy(Duration::ZERO, Duration::from_millis(10));
-        let admission = db.batch_writer.hold_all_admission();
+        let admission = db.coordinator.hold_all_admission();
         let root_version = db.snapshot_planes.load_root().version;
         let object = Obj::mk_id(1);
         let mut tx = db.start_transaction();

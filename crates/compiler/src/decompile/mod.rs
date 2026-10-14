@@ -613,8 +613,11 @@ impl Decompile {
                 let jump_label = self.find_jump(&label)?;
                 // Whether it's a break or a continue depends on whether the jump is forward or
                 // backward from the current position.
-                let jump_label_name =
-                    self.decompile_name(&jump_label.name.expect("jump label must have name"))?;
+                let jump_label_name = self.decompile_name(
+                    &jump_label
+                        .name
+                        .ok_or_else(|| MalformedProgram("jump label has no name".into()))?,
+                )?;
                 let s = if jump_label.position.0 < self.position as u16 {
                     StmtNode::Continue {
                         exit: Some(jump_label_name),
@@ -645,7 +648,7 @@ impl Decompile {
                 while fork_decompile.position < fv_len {
                     fork_decompile.decompile()?;
                 }
-                let id = id.map(|x| self.decompile_name(&x).unwrap());
+                let id = id.map(|x| self.decompile_name(&x)).transpose()?;
                 self.statements.push(Stmt::new(
                     StmtNode::Fork {
                         id,
@@ -1324,7 +1327,7 @@ impl Decompile {
             Op::IfQues(label) => {
                 let condition = self.pop_expr();
                 // Read up to the jump, decompiling as we go.
-                self.decompile_statements_up_to(&label)?;
+                let mut consequent_statements = self.decompile_statements_up_to(&label)?;
 
                 // Check if this is a full ternary (with Jump) or a degenerate one-armed
                 // conditional (used for optional parameter defaults in lambdas)
@@ -1346,13 +1349,21 @@ impl Decompile {
                     };
                     self.push_expr(e);
                 } else if self.position + 1 == label_position {
-                    // Degenerate one-armed conditional (no alternative):
-                    // Used for optional parameter defaults: if (param == 0) param = default;
-                    // decompile_statements_up_to stops 1 position before the label.
-                    // The consequence was already decompiled and should be an assignment
-                    // statement on the statement list (Put followed by Pop made it a stmt).
-                    // Since this doesn't produce a value, we don't push anything.
-                    // The assignment statement was already added by the Put/Pop handling.
+                    // The default assignment's trailing Pop belongs inside the conditional.
+                    let statement_start = self.statements.len();
+                    self.decompile()?;
+                    consequent_statements.extend(self.statements.split_off(statement_start));
+                    self.statements.push(Stmt::new(
+                        StmtNode::Cond {
+                            arms: vec![CondArm {
+                                condition: condition?,
+                                statements: consequent_statements,
+                                environment_width: 0,
+                            }],
+                            otherwise: None,
+                        },
+                        line_num,
+                    ));
                 } else {
                     return Err(MalformedProgram(format!(
                         "expected Jump at position {} for IfQues, label at {}, got {:?}",
@@ -1604,7 +1615,7 @@ impl Decompile {
                 scatter_offset,
                 program_offset,
                 self_var,
-                ..
+                num_captured,
             } => {
                 // Retrieve lambda program and scatter specification
                 let lambda_program = self.program.lambda_program(program_offset);
@@ -1621,8 +1632,21 @@ impl Decompile {
                 let self_name = self_var
                     .and_then(|name| self.program.var_names().find_variable(&name).cloned());
 
+                let capture_end = self.position - 1;
+                let capture_start = capture_end
+                    .checked_sub(num_captured as usize)
+                    .ok_or_else(|| MalformedProgram("missing lambda captures".to_string()))?;
+                let captures = self.opcode_vector()[capture_start..capture_end]
+                    .iter()
+                    .map(|op| match op {
+                        Op::Capture(name) => self.decompile_name(name),
+                        _ => Err(MalformedProgram("expected lambda capture".to_string())),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
                 self.push_expr(Expr::Lambda {
                     entry_scope_count,
+                    captures,
                     params,
                     body: Box::new(lambda_body),
                     self_name,

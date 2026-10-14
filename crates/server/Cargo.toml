@@ -41,7 +41,7 @@ path = "src/main.rs"
 moor-common = { path = "../common" }
 moor-curl-worker = { path = "../curl-worker" }
 moor-daemon = { path = "../daemon" }
-moor-db = { path = "../db" }
+moor-db = { path = "../db", features = ["cli"] }
 moor-git-worker = { path = "../git-worker" }
 moor-kernel = { path = "../kernel" }
 moor-runtime-api = { path = "../runtime-api" }
@@ -72,4 +72,11 @@ tempfile.workspace = true
 tokio-rustls.workspace = true
 
 [features]
+postgres = ["moor-daemon/postgres"]
 trace_events = ["moor-daemon/trace_events"]
+
+# Keep the package identity and service paths when selecting client support.
+[package.metadata.deb.variants.postgres]
+name = "moor"
+features = ["postgres"]
+depends = "$auto, systemd, openssl, libpq5 (>= 16)"

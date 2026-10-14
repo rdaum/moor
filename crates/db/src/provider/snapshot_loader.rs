@@ -11,26 +11,21 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use byteview::ByteView;
-use fjall::{Readable, Slice};
 use std::cmp::Ordering;
 use uuid::Uuid;
 
 use crate::{
     EntityMetadataKey, ObjAndUUIDHolder, StringHolder,
-    provider::{
-        fjall_provider::{FjallCodec, decode_fjall_value, split_fjall_value},
-        property_value_store::{
-            PROPERTY_VALUE_CHAIN_LIMITS, PropertyValueScan, property_value_record_bounds,
-            reconstruct_property_value,
-        },
+    provider::read::{
+        MetadataEntity, MetadataScan, ReadKey, RelationReader, ScanRequest, SnapshotReaders,
+        TupleCursor,
     },
-    tx::{EncodeFor, Error, Timestamp},
+    tx::Error,
 };
 use moor_common::{
     model::{
-        HasUuid, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropPerms, PropertySnapshot,
-        ValSet, VerbArgsSpec, VerbDefs, VerbFlag, WorldStateError,
+        HasUuid, Named, ObjAttrs, ObjSet, ObjectRef, PropDef, PropDefs, PropFlag, PropPerms,
+        PropertySnapshot, ValSet, VerbDefs, WorldStateError,
         loader::{
             SnapshotExportMetadata, SnapshotExportObject, SnapshotExportSession,
             SnapshotExportVerb, SnapshotInterface,
@@ -39,26 +34,14 @@ use moor_common::{
     util::BitEnum,
 };
 use moor_var::{NOTHING, Obj, Symbol, Var, program::ProgramType};
-use planus::ReadAsRoot;
 use zerocopy::IntoBytes;
 
 /// A snapshot-based implementation of LoaderInterface for read-only database access
-pub struct FjallSnapshotLoader {
-    pub snapshot: fjall::Snapshot,
-    pub object_location_keyspace: fjall::Keyspace,
-    pub object_flags_keyspace: fjall::Keyspace,
-    pub object_parent_keyspace: fjall::Keyspace,
-    pub object_owner_keyspace: fjall::Keyspace,
-    pub object_name_keyspace: fjall::Keyspace,
-    pub object_verbdefs_keyspace: fjall::Keyspace,
-    pub object_verbs_keyspace: fjall::Keyspace,
-    pub object_propdefs_keyspace: fjall::Keyspace,
-    pub object_propvalues_keyspace: fjall::Keyspace,
-    pub object_propflags_keyspace: fjall::Keyspace,
-    pub entity_metadata_keyspace: fjall::Keyspace,
+pub(crate) struct SnapshotLoader {
+    pub(crate) readers: SnapshotReaders,
 }
 
-struct FjallSnapshotExportSession {
+struct SnapshotExport {
     metadata: Vec<SnapshotExportMetadata>,
     flags: ObjectRelationCursor<BitEnum<moor_common::model::ObjFlag>>,
     owners: ObjectRelationCursor<Obj>,
@@ -66,7 +49,7 @@ struct FjallSnapshotExportSession {
     ancestry: ObjectAncestryIndex,
     locations: ObjectRelationCursor<Obj>,
     names: ObjectRelationCursor<StringHolder>,
-    verbdefs: ObjectRelationCursor<Vec<SnapshotVerbDefinition>>,
+    verbdefs: ObjectRelationCursor<VerbDefs>,
     propdefs: PropertyDefinitionIndex,
     programs: ObjectUuidRelationCursor<ProgramType>,
     values: PropertyValueCursor,
@@ -422,60 +405,33 @@ fn object_order_key(bytes: &[u8]) -> Result<ObjectOrderKey, WorldStateError> {
 }
 
 struct RelationCursor<K, V> {
-    iter: fjall::Iter,
+    iter: TupleCursor<K, V>,
     pending: Option<(ObjectOrderKey, K, V)>,
-    decode_value: fn(Slice) -> Result<V, Error>,
 }
-
-impl<K, V> RelationCursor<K, V>
-where
-    FjallCodec: EncodeFor<K, Stored = ByteView>,
-{
-    fn with_decoder(
-        snapshot: &fjall::Snapshot,
-        keyspace: &fjall::Keyspace,
-        decode_value: fn(Slice) -> Result<V, Error>,
-    ) -> Self {
-        Self {
-            iter: snapshot.iter(keyspace),
+impl<K: ReadKey, V: 'static> RelationCursor<K, V> {
+    fn new(reader: &std::sync::Arc<dyn RelationReader<K, V>>) -> Result<Self, WorldStateError> {
+        Ok(Self {
+            iter: reader.scan(K::Scan::all()).map_err(database_error)?,
             pending: None,
-            decode_value,
-        }
-    }
-
-    fn next_entry(&mut self) -> Result<Option<(ObjectOrderKey, K, V)>, WorldStateError> {
-        let Some(entry) = self.iter.next() else {
-            return Ok(None);
-        };
-        let (key, value) = entry
-            .into_inner()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        let order_key = object_order_key(key.as_ref())?;
-        let key = <FjallCodec as EncodeFor<K>>::decode(&FjallCodec, ByteView::from(key))
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        let value = (self.decode_value)(value)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        Ok(Some((order_key, key, value)))
-    }
-}
-
-impl<K, V> RelationCursor<K, V>
-where
-    FjallCodec: EncodeFor<K, Stored = ByteView> + EncodeFor<V, Stored = ByteView>,
-{
-    fn new(snapshot: &fjall::Snapshot, keyspace: &fjall::Keyspace) -> Self {
-        Self::with_decoder(snapshot, keyspace, |value| {
-            decode_fjall_value(value).map(|(_, value)| value)
         })
     }
+    fn next_entry(&mut self) -> Result<Option<(ObjectOrderKey, K, V)>, WorldStateError> {
+        self.iter
+            .next()
+            .map(|entry| {
+                let (_, key, value) = entry.map_err(database_error)?;
+                Ok((object_order_key(key.object().as_bytes())?, key, value))
+            })
+            .transpose()
+    }
+}
+fn database_error(error: Error) -> WorldStateError {
+    WorldStateError::DatabaseError(error.to_string())
 }
 
 type ObjectRelationCursor<T> = RelationCursor<Obj, T>;
 
-impl<T> RelationCursor<Obj, T>
-where
-    FjallCodec: EncodeFor<Obj, Stored = ByteView>,
-{
+impl<T: 'static> RelationCursor<Obj, T> {
     fn next(&mut self) -> Result<Option<(ObjectOrderKey, Obj, T)>, WorldStateError> {
         if self.pending.is_some() {
             return Ok(self.pending.take());
@@ -504,10 +460,7 @@ where
 
 type ObjectUuidRelationCursor<T> = RelationCursor<ObjAndUUIDHolder, T>;
 
-impl<T> RelationCursor<ObjAndUUIDHolder, T>
-where
-    FjallCodec: EncodeFor<ObjAndUUIDHolder, Stored = ByteView>,
-{
+impl<T: 'static> RelationCursor<ObjAndUUIDHolder, T> {
     fn take_object(&mut self, target: &ObjectOrderKey) -> Result<UuidValues<T>, WorldStateError> {
         let mut values = Vec::new();
         loop {
@@ -530,110 +483,7 @@ where
     }
 }
 
-struct PropertyValueCursor {
-    scan: PropertyValueScan,
-    pending: Option<(ObjectOrderKey, ObjAndUUIDHolder, Var)>,
-}
-
-impl PropertyValueCursor {
-    fn new(snapshot: &fjall::Snapshot, keyspace: &fjall::Keyspace) -> Self {
-        Self {
-            scan: PropertyValueScan::new(snapshot.iter(keyspace), PROPERTY_VALUE_CHAIN_LIMITS),
-            pending: None,
-        }
-    }
-
-    fn next_entry(
-        &mut self,
-    ) -> Result<Option<(ObjectOrderKey, ObjAndUUIDHolder, Var)>, WorldStateError> {
-        let Some(entry) = self.scan.next() else {
-            return Ok(None);
-        };
-        let (property, reconstructed) =
-            entry.map_err(|error| WorldStateError::DatabaseError(error.to_string()))?;
-        let order_key = object_order_key(property.obj.as_bytes())?;
-        Ok(Some((order_key, property, reconstructed.value)))
-    }
-
-    fn take_object(&mut self, target: &ObjectOrderKey) -> Result<UuidValues<Var>, WorldStateError> {
-        let mut values = Vec::new();
-        loop {
-            if self.pending.is_none() {
-                self.pending = self.next_entry()?;
-            }
-            let Some((order_key, _, _)) = self.pending.as_ref() else {
-                break;
-            };
-            match order_key.cmp(target) {
-                Ordering::Less => self.pending = None,
-                Ordering::Equal => {
-                    let (_, holder, value) = self.pending.take().expect("pending property value");
-                    values.push((holder.uuid(), Some(value)));
-                }
-                Ordering::Greater => break,
-            }
-        }
-        Ok(UuidValues(values))
-    }
-}
-
-struct SnapshotVerbDefinition {
-    uuid: Uuid,
-    names: Vec<Symbol>,
-    argspec: VerbArgsSpec,
-    owner: Obj,
-    flags: BitEnum<VerbFlag>,
-}
-
-fn decode_snapshot_verbdefs(value: Slice) -> Result<Vec<SnapshotVerbDefinition>, Error> {
-    let (_timestamp, payload) = split_fjall_value(value)?;
-    let definitions = moor_schema::common::VerbDefsRef::read_as_root(&payload)
-        .map_err(|_| Error::EncodingFailure)?;
-    definitions
-        .verbs()
-        .map_err(|_| Error::EncodingFailure)?
-        .iter()
-        .map(|definition| {
-            let definition = definition.map_err(|_| Error::EncodingFailure)?;
-            let uuid = definition
-                .uuid()
-                .map_err(|_| Error::EncodingFailure)
-                .and_then(|uuid| {
-                    moor_schema::convert::uuid_from_ref(uuid).map_err(|_| Error::EncodingFailure)
-                })?;
-            let owner = definition
-                .owner()
-                .map_err(|_| Error::EncodingFailure)
-                .and_then(|owner| {
-                    moor_schema::convert::obj_from_ref(owner).map_err(|_| Error::EncodingFailure)
-                })?;
-            let names = definition
-                .names()
-                .map_err(|_| Error::EncodingFailure)?
-                .iter()
-                .map(|name| {
-                    let name = name.map_err(|_| Error::EncodingFailure)?;
-                    moor_schema::convert::symbol_from_ref(name).map_err(|_| Error::EncodingFailure)
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-            let flags = BitEnum::from_u16(definition.flags().map_err(|_| Error::EncodingFailure)?);
-            let argspec = definition
-                .args()
-                .map_err(|_| Error::EncodingFailure)
-                .and_then(|args| {
-                    moor_schema::convert::verb_args_spec_from_ref(args)
-                        .map_err(|_| Error::EncodingFailure)
-                })?;
-            Ok(SnapshotVerbDefinition {
-                uuid,
-                names,
-                argspec,
-                owner,
-                flags,
-            })
-        })
-        .collect()
-}
+type PropertyValueCursor = ObjectUuidRelationCursor<Var>;
 
 struct UuidValues<T>(Vec<(Uuid, Option<T>)>);
 
@@ -668,37 +518,8 @@ struct SelectedObjectMetadata {
     values: Vec<(Symbol, Var)>,
 }
 
-struct ObjectMetadataCursor {
-    iter: fjall::Iter,
-    pending: Option<(ObjectOrderKey, EntityMetadataKey, Var)>,
-}
-
-impl ObjectMetadataCursor {
-    fn new(snapshot: &fjall::Snapshot, keyspace: &fjall::Keyspace) -> Self {
-        Self {
-            iter: snapshot.iter(keyspace),
-            pending: None,
-        }
-    }
-
-    fn next_entry(
-        &mut self,
-    ) -> Result<Option<(ObjectOrderKey, EntityMetadataKey, Var)>, WorldStateError> {
-        let Some(entry) = self.iter.next() else {
-            return Ok(None);
-        };
-        let (key, value) = entry
-            .into_inner()
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        let order_key = object_order_key(key.as_ref())?;
-        let key = FjallCodec
-            .decode(ByteView::from(key))
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        let (_timestamp, value) =
-            decode_fjall_value(value).map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        Ok(Some((order_key, key, value)))
-    }
-
+type ObjectMetadataCursor = RelationCursor<EntityMetadataKey, Var>;
+impl RelationCursor<EntityMetadataKey, Var> {
     fn take_object(&mut self, target: &ObjectOrderKey) -> Result<ObjectMetadata, WorldStateError> {
         let mut object = Vec::new();
         let mut properties = Vec::<(Uuid, Vec<(Symbol, Var)>)>::new();
@@ -858,15 +679,12 @@ fn collect_export_properties(
     Ok(properties)
 }
 
-impl SnapshotInterface for FjallSnapshotLoader {
+impl SnapshotInterface for SnapshotLoader {
     fn begin_export(
         &self,
         metadata_keys: &[Symbol],
     ) -> Result<Box<dyn SnapshotExportSession + '_>, WorldStateError> {
-        Ok(Box::new(FjallSnapshotExportSession::new(
-            self,
-            metadata_keys,
-        )?))
+        Ok(Box::new(SnapshotExport::new(self, metadata_keys)?))
     }
 
     fn get_object(&self, objid: &Obj) -> Result<ObjAttrs, WorldStateError> {
@@ -896,7 +714,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
     }
 
     fn get_object_metadata(&self, objid: &Obj) -> Result<Vec<(Symbol, Var)>, WorldStateError> {
-        self.metadata_scan(|metadata_key| metadata_key.is_object_key_for(*objid))
+        self.metadata_scan(MetadataScan::Entity(*objid, MetadataEntity::Object))
     }
 
     fn get_property_metadata(
@@ -904,7 +722,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
         objid: &Obj,
         uuid: Uuid,
     ) -> Result<Vec<(Symbol, Var)>, WorldStateError> {
-        self.metadata_scan(|metadata_key| metadata_key.is_property_key_for(*objid, uuid))
+        self.metadata_scan(MetadataScan::Entity(*objid, MetadataEntity::Property(uuid)))
     }
 
     fn get_verb_metadata(
@@ -912,7 +730,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
         objid: &Obj,
         uuid: Uuid,
     ) -> Result<Vec<(Symbol, Var)>, WorldStateError> {
-        self.metadata_scan(|metadata_key| metadata_key.is_verb_key_for(*objid, uuid))
+        self.metadata_scan(MetadataScan::Entity(*objid, MetadataEntity::Verb(uuid)))
     }
 
     fn get_property_snapshots(&self, this: &Obj) -> Result<Vec<PropertySnapshot>, WorldStateError> {
@@ -927,7 +745,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
                 let key = ObjAndUUIDHolder::new(this, uuid);
                 let value = self.get_property_value(&key)?;
                 let permissions = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
-                    &self.object_propflags_keyspace,
+                    &self.readers.object_propflags,
                     &key,
                 )?;
                 let metadata = self.get_property_metadata(this, uuid)?;
@@ -950,7 +768,7 @@ impl SnapshotInterface for FjallSnapshotLoader {
     }
 }
 
-impl FjallSnapshotLoader {
+impl SnapshotLoader {
     fn collect_export_metadata(
         &self,
         keys: &[Symbol],
@@ -995,20 +813,17 @@ impl FjallSnapshotLoader {
         keys: &[Symbol],
     ) -> Result<Vec<SelectedObjectMetadata>, WorldStateError> {
         let mut selected = Vec::<SelectedObjectMetadata>::new();
-        for entry in self.snapshot.iter(&self.entity_metadata_keyspace) {
-            let (key, value) = entry
-                .into_inner()
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            let order_key = object_order_key(key.as_ref())?;
-            let metadata_key: EntityMetadataKey = FjallCodec
-                .decode(ByteView::from(key))
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
+        for entry in self
+            .readers
+            .entity_metadata
+            .scan(MetadataScan::All)
+            .map_err(database_error)?
+        {
+            let (_, metadata_key, value) = entry.map_err(database_error)?;
+            let order_key = object_order_key(metadata_key.obj().as_bytes())?;
             if !metadata_key.is_object() || !keys.contains(&metadata_key.key()) {
                 continue;
             }
-            let (_timestamp, value) = self
-                .decode(value)
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
             if let Some(metadata) = selected.last_mut()
                 && metadata.order_key == order_key
             {
@@ -1026,72 +841,49 @@ impl FjallSnapshotLoader {
     }
 
     fn read_object_ids(&self) -> Result<Vec<(ObjectOrderKey, Obj)>, WorldStateError> {
-        self.snapshot
-            .iter(&self.object_flags_keyspace)
+        self.readers
+            .object_flags
+            .scan(ScanRequest::all())
+            .map_err(database_error)?
             .map(|entry| {
-                let (key, _) = entry
-                    .into_inner()
-                    .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-                let order_key = object_order_key(key.as_ref())?;
-                let object = FjallCodec
-                    .decode(ByteView::from(key))
-                    .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-                Ok((order_key, object))
+                let (_, object, _) = entry.map_err(database_error)?;
+                Ok((object_order_key(object.as_bytes())?, object))
             })
             .collect()
     }
 }
 
-impl FjallSnapshotExportSession {
-    fn new(
-        loader: &FjallSnapshotLoader,
-        metadata_keys: &[Symbol],
-    ) -> Result<Self, WorldStateError> {
-        let parents = loader.read_object_relation(&loader.object_parent_keyspace)?;
+impl SnapshotExport {
+    fn new(loader: &SnapshotLoader, metadata_keys: &[Symbol]) -> Result<Self, WorldStateError> {
+        let parents = loader.read_object_relation(&loader.readers.object_parent)?;
         let metadata = loader.collect_export_metadata(metadata_keys, &parents)?;
         let ancestry = ObjectAncestryIndex::new(metadata.iter().map(|entry| entry.oid), &parents)?;
         let propdefs = PropertyDefinitionIndex::new(
-            loader.read_object_relation(&loader.object_propdefs_keyspace)?,
+            loader.read_object_relation(&loader.readers.object_propdefs)?,
             &ancestry,
         )?;
 
         Ok(Self {
             metadata,
-            flags: ObjectRelationCursor::new(&loader.snapshot, &loader.object_flags_keyspace),
-            owners: ObjectRelationCursor::new(&loader.snapshot, &loader.object_owner_keyspace),
+            flags: ObjectRelationCursor::new(&loader.readers.object_flags)?,
+            owners: ObjectRelationCursor::new(&loader.readers.object_owner)?,
             parents,
             ancestry,
-            locations: ObjectRelationCursor::new(
-                &loader.snapshot,
-                &loader.object_location_keyspace,
-            ),
-            names: ObjectRelationCursor::new(&loader.snapshot, &loader.object_name_keyspace),
-            verbdefs: ObjectRelationCursor::with_decoder(
-                &loader.snapshot,
-                &loader.object_verbdefs_keyspace,
-                decode_snapshot_verbdefs,
-            ),
+            locations: ObjectRelationCursor::new(&loader.readers.object_location)?,
+            names: ObjectRelationCursor::new(&loader.readers.object_name)?,
+            verbdefs: ObjectRelationCursor::new(&loader.readers.object_verbdefs)?,
             propdefs,
-            programs: ObjectUuidRelationCursor::new(
-                &loader.snapshot,
-                &loader.object_verbs_keyspace,
-            ),
-            values: PropertyValueCursor::new(&loader.snapshot, &loader.object_propvalues_keyspace),
-            permissions: ObjectUuidRelationCursor::new(
-                &loader.snapshot,
-                &loader.object_propflags_keyspace,
-            ),
-            entity_metadata: ObjectMetadataCursor::new(
-                &loader.snapshot,
-                &loader.entity_metadata_keyspace,
-            ),
+            programs: ObjectUuidRelationCursor::new(&loader.readers.object_verbs)?,
+            values: PropertyValueCursor::new(&loader.readers.object_propvalues)?,
+            permissions: ObjectUuidRelationCursor::new(&loader.readers.object_propflags)?,
+            entity_metadata: ObjectMetadataCursor::new(&loader.readers.entity_metadata)?,
             property_uuid_scratch: Vec::new(),
             property_work: ExportPropertyWork::default(),
         })
     }
 }
 
-impl SnapshotExportSession for FjallSnapshotExportSession {
+impl SnapshotExportSession for SnapshotExport {
     fn metadata(&self) -> &[SnapshotExportMetadata] {
         &self.metadata
     }
@@ -1115,20 +907,23 @@ impl SnapshotExportSession for FjallSnapshotExportSession {
 
         let mut programs = self.programs.take_object(&order_key)?;
         let mut metadata = self.entity_metadata.take_object(&order_key)?;
-        let verbdefs = self.verbdefs.take(&order_key)?.unwrap_or_default();
+        let verbdefs = self
+            .verbdefs
+            .take(&order_key)?
+            .unwrap_or_else(VerbDefs::empty);
         let mut verbs = Vec::with_capacity(verbdefs.len());
-        for definition in verbdefs {
-            let uuid = definition.uuid;
+        for definition in verbdefs.iter() {
+            let uuid = definition.uuid();
             let program = programs
                 .take(uuid)
                 .ok_or_else(|| WorldStateError::VerbNotFound(oid, uuid.to_string()))?;
             let mut entity_metadata = take_metadata(&mut metadata.verbs, uuid);
             entity_metadata.sort_by_key(|(key, _)| key.as_string());
             verbs.push(SnapshotExportVerb {
-                names: definition.names,
-                argspec: definition.argspec,
-                owner: definition.owner,
-                flags: definition.flags,
+                names: definition.names().to_vec(),
+                argspec: definition.args(),
+                owner: definition.owner(),
+                flags: definition.flags(),
                 program,
                 metadata: entity_metadata,
             });
@@ -1162,105 +957,53 @@ impl SnapshotExportSession for FjallSnapshotExportSession {
     }
 }
 
-impl FjallSnapshotLoader {
-    fn read_object_relation<Codomain>(
+impl SnapshotLoader {
+    fn read_object_relation<V: 'static>(
         &self,
-        keyspace: &fjall::Keyspace,
-    ) -> Result<SortedObjectRelation<Codomain>, WorldStateError>
-    where
-        FjallCodec: EncodeFor<Codomain, Stored = ByteView>,
-    {
-        let mut entries = Vec::new();
-        for entry in self.snapshot.iter(keyspace) {
-            let (key, value) = entry
-                .into_inner()
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            let object = <FjallCodec as EncodeFor<Obj>>::decode(&FjallCodec, ByteView::from(key))
-                .map_err(|_| {
-                WorldStateError::DatabaseError("Failed to decode object ID".to_string())
-            })?;
-            let (_timestamp, value) = self
-                .decode::<Codomain>(value)
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            entries.push((object, value));
-        }
+        reader: &std::sync::Arc<dyn RelationReader<Obj, V>>,
+    ) -> Result<SortedObjectRelation<V>, WorldStateError> {
+        let mut entries = reader
+            .scan(ScanRequest::all())
+            .map_err(database_error)?
+            .map(|entry| {
+                entry
+                    .map(|(_, key, value)| (key, value))
+                    .map_err(database_error)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         entries.sort_unstable_by_key(|(object, _)| *object);
         Ok(SortedObjectRelation { entries })
     }
-
-    /// Helper method to decode a value from a snapshot using FjallCodec
-    fn decode<Codomain>(&self, user_value: Slice) -> Result<(Timestamp, Codomain), Error>
-    where
-        FjallCodec: EncodeFor<Codomain, Stored = ByteView>,
-    {
-        decode_fjall_value(user_value)
-    }
-
-    /// Helper method to get a value from a snapshot using FjallCodec
-    fn get_from_snapshot<Domain, Codomain>(
+    fn get_from_snapshot<K: ReadKey, V>(
         &self,
-        keyspace: &fjall::Keyspace,
-        domain: &Domain,
-    ) -> Result<Option<Codomain>, WorldStateError>
-    where
-        FjallCodec: EncodeFor<Domain, Stored = ByteView> + EncodeFor<Codomain, Stored = ByteView>,
-    {
-        let key = FjallCodec
-            .encode(domain)
-            .map_err(|_| WorldStateError::DatabaseError("Failed to encode domain".to_string()))?;
-
-        let result_opt = self
-            .snapshot
-            .get(keyspace, key)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        let Some(result) = result_opt else {
-            return Ok(None);
-        };
-
-        let (_ts, codomain) = self
-            .decode::<Codomain>(result)
-            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-        Ok(Some(codomain))
+        reader: &std::sync::Arc<dyn RelationReader<K, V>>,
+        key: &K,
+    ) -> Result<Option<V>, WorldStateError> {
+        reader
+            .get(key)
+            .map(|entry| entry.map(|(_, value)| value))
+            .map_err(database_error)
     }
-
-    fn get_property_value(
-        &self,
-        property: &ObjAndUUIDHolder,
-    ) -> Result<Option<Var>, WorldStateError> {
-        let (start, end) = property_value_record_bounds(property);
-        let reconstructed = reconstruct_property_value(
-            self.snapshot
-                .range(&self.object_propvalues_keyspace, start..=end),
-            PROPERTY_VALUE_CHAIN_LIMITS,
-        )
-        .map_err(|error| WorldStateError::DatabaseError(error.to_string()))?;
-        let Some((stored_property, reconstructed)) = reconstructed else {
-            return Ok(None);
-        };
-        if stored_property != *property {
-            return Err(WorldStateError::DatabaseError(
-                "Property-value range returned a different property".to_string(),
-            ));
-        }
-        Ok(Some(reconstructed.value))
+    fn get_property_value(&self, key: &ObjAndUUIDHolder) -> Result<Option<Var>, WorldStateError> {
+        self.get_from_snapshot(&self.readers.object_propvalues, key)
     }
 
     // Individual getter methods for each keyspace
     fn get_object_owner(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_owner_keyspace, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.readers.object_owner, objid)?
             .unwrap_or(NOTHING))
     }
 
     fn get_object_parent(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_parent_keyspace, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.readers.object_parent, objid)?
             .unwrap_or(NOTHING))
     }
 
     fn get_object_location(&self, objid: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, Obj>(&self.object_location_keyspace, objid)?
+            .get_from_snapshot::<Obj, Obj>(&self.readers.object_location, objid)?
             .unwrap_or(NOTHING))
     }
 
@@ -1270,7 +1013,7 @@ impl FjallSnapshotLoader {
     ) -> Result<BitEnum<moor_common::model::ObjFlag>, WorldStateError> {
         Ok(self
             .get_from_snapshot::<Obj, BitEnum<moor_common::model::ObjFlag>>(
-                &self.object_flags_keyspace,
+                &self.readers.object_flags,
                 objid,
             )?
             .unwrap_or_default())
@@ -1278,14 +1021,14 @@ impl FjallSnapshotLoader {
 
     fn get_object_name(&self, objid: &Obj) -> Result<String, WorldStateError> {
         let name_holder = self
-            .get_from_snapshot::<Obj, StringHolder>(&self.object_name_keyspace, objid)?
+            .get_from_snapshot::<Obj, StringHolder>(&self.readers.object_name, objid)?
             .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(*objid)))?;
         Ok(name_holder.0)
     }
 
     fn get_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, VerbDefs>(&self.object_verbdefs_keyspace, objid)?
+            .get_from_snapshot::<Obj, VerbDefs>(&self.readers.object_verbdefs, objid)?
             .unwrap_or(VerbDefs::empty()))
     }
 
@@ -1295,13 +1038,13 @@ impl FjallSnapshotLoader {
         uuid: Uuid,
     ) -> Result<ProgramType, WorldStateError> {
         let key = ObjAndUUIDHolder::new(objid, uuid);
-        self.get_from_snapshot::<ObjAndUUIDHolder, ProgramType>(&self.object_verbs_keyspace, &key)?
+        self.get_from_snapshot::<ObjAndUUIDHolder, ProgramType>(&self.readers.object_verbs, &key)?
             .ok_or_else(|| WorldStateError::VerbNotFound(*objid, uuid.to_string()))
     }
 
     fn get_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {
         Ok(self
-            .get_from_snapshot::<Obj, PropDefs>(&self.object_propdefs_keyspace, objid)?
+            .get_from_snapshot::<Obj, PropDefs>(&self.readers.object_propdefs, objid)?
             .unwrap_or_else(PropDefs::empty))
     }
 
@@ -1315,44 +1058,54 @@ impl FjallSnapshotLoader {
         // Get property value
         let value = self.get_property_value(&key)?;
 
-        // Get property permissions - if not found, this property doesn't exist on this object
-        let Some(perms) = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
-            &self.object_propflags_keyspace,
+        if let Some(perms) = self.get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
+            &self.readers.object_propflags,
             &key,
-        )?
-        else {
-            return Err(WorldStateError::PropertyNotFound(*obj, uuid.to_string()));
-        };
-
-        Ok((value, perms))
+        )? {
+            return Ok((value, perms));
+        }
+        // Sparse local values can omit permissions. Derive the same canonical policy as
+        // runtime reads, without creating a local row or resolving an inherited value.
+        for ancestor in self.get_ancestors(obj, true)?.iter() {
+            if let Some(definition) = self
+                .get_properties(&ancestor)?
+                .iter()
+                .find(|definition| definition.uuid() == uuid && definition.definer() == ancestor)
+            {
+                let key = ObjAndUUIDHolder::new(&definition.definer(), uuid);
+                let perms = self
+                    .get_from_snapshot::<ObjAndUUIDHolder, PropPerms>(
+                        &self.readers.object_propflags,
+                        &key,
+                    )?
+                    .ok_or_else(|| {
+                        WorldStateError::DatabaseError(format!(
+                            "Canonical property permissions missing on {ancestor} for {uuid}"
+                        ))
+                    })?;
+                let perms = if perms.flags().contains(PropFlag::Chown) && *obj != ancestor {
+                    perms.with_owner(self.get_object_owner(obj)?)
+                } else {
+                    perms
+                };
+                return Ok((value, perms));
+            }
+        }
+        Err(WorldStateError::PropertyNotFound(*obj, uuid.to_string()))
     }
 
-    fn metadata_scan<F>(&self, predicate: F) -> Result<Vec<(Symbol, Var)>, WorldStateError>
-    where
-        F: Fn(&EntityMetadataKey) -> bool,
-    {
-        let mut values = Vec::new();
-
-        for entry in self.snapshot.iter(&self.entity_metadata_keyspace) {
-            let (key, value) = entry
-                .into_inner()
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-
-            let metadata_key: EntityMetadataKey =
-                FjallCodec.decode(ByteView::from(key)).map_err(|_| {
-                    WorldStateError::DatabaseError("Failed to decode metadata key".to_string())
-                })?;
-
-            if !predicate(&metadata_key) {
-                continue;
-            }
-
-            let (_ts, metadata_value) = self
-                .decode::<Var>(value)
-                .map_err(|e| WorldStateError::DatabaseError(e.to_string()))?;
-            values.push((metadata_key.key(), metadata_value));
-        }
-
+    fn metadata_scan(&self, request: MetadataScan) -> Result<Vec<(Symbol, Var)>, WorldStateError> {
+        let mut values = self
+            .readers
+            .entity_metadata
+            .scan(request)
+            .map_err(database_error)?
+            .map(|entry| {
+                entry
+                    .map(|(_, key, value)| (key.key(), value))
+                    .map_err(database_error)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         values.sort_by_key(|(key, _)| key.as_string());
         Ok(values)
     }
@@ -1361,6 +1114,7 @@ impl FjallSnapshotLoader {
     fn get_ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         let mut ancestors = Vec::new();
         let mut current = *obj;
+        let mut seen = ahash::AHashSet::from_iter([current]);
 
         if include_self {
             ancestors.push(current);
@@ -1368,15 +1122,16 @@ impl FjallSnapshotLoader {
 
         // Walk up the parent chain
         while let Some(parent) =
-            self.get_from_snapshot::<Obj, Obj>(&self.object_parent_keyspace, &current)?
+            self.get_from_snapshot::<Obj, Obj>(&self.readers.object_parent, &current)?
         {
-            if parent == current {
-                // Avoid infinite loops in case of self-parenting
-                break;
-            }
             // Stop at NOTHING - don't add system objects to hierarchy
             if parent.is_nothing() {
                 break;
+            }
+            if !seen.insert(parent) {
+                return Err(WorldStateError::DatabaseError(
+                    "Cycle in snapshot object ancestry".into(),
+                ));
             }
             ancestors.push(parent);
             current = parent;

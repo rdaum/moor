@@ -12,7 +12,7 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use super::commit_pipeline::RootPublication;
-use super::{Caches, Relations, WorldStateSnapshot};
+use super::{Caches, WorldStateSnapshot};
 use crate::tx::Tx;
 use arc_swap::ArcSwap;
 use std::sync::Arc;
@@ -108,12 +108,6 @@ impl SnapshotPlanes {
 
     pub(super) fn load_root(&self) -> Arc<WorldStateSnapshot> {
         self.root_state.load_full()
-    }
-
-    /// Update only provider-loading metadata, preserving the published world state.
-    pub(super) fn mark_all_fully_loaded(&self, relations: &Relations) {
-        self.root_state
-            .rcu(|root| relations.snapshot_with_all_fully_loaded(root));
     }
 }
 

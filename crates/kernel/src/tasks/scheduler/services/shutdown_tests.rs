@@ -19,7 +19,7 @@ use crate::tasks::scheduler::test_support::*;
 
 #[test]
 fn shutdown_joins_worker_response_thread_with_live_sender() {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     let (_worker_send, worker_recv) = flume::unbounded();
     let scheduler = Scheduler::new(
         semver::Version::new(0, 0, 0),

@@ -724,6 +724,12 @@ pub trait WorldState: Send {
     /// Returns the (rough) total number of bytes used by database storage subsystem.
     fn db_usage(&self) -> Result<usize, WorldStateError>;
 
+    /// Live numeric persistence diagnostics, independent of this transaction's snapshot.
+    /// Callers must restrict these operator metrics to authorized users.
+    fn persistence_metrics(&self) -> Vec<(&'static str, u64)> {
+        Vec::new()
+    }
+
     /// Increment the given sequence, return the new value.
     fn increment_sequence(&self, seq: usize) -> i64;
 
@@ -832,9 +838,15 @@ pub enum WorldStateTimerOp {
     ProviderTupleCheck,
     ProviderPendingOpsReadLockWait,
     ProviderPendingOpsWriteLockWait,
+    PostgresEncode,
+    PostgresApply,
+    PostgresCommit,
+    PostgresFence,
+    PostgresRecovery,
     BatchWriterEncode,
     BatchWriterCommit,
     BatchWriterBackpressureBlock,
+    BatchWriterDurableFlush,
     PropertyListAppendClassify,
     PropertyValueRollupEncode,
     PropertyValueReconstruct,

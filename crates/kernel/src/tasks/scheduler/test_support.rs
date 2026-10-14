@@ -153,7 +153,7 @@ impl Session for BlockingCommitSession {
 }
 
 pub(super) fn scheduler_with_system_control(system_control: Arc<dyn SystemControl>) -> Scheduler {
-    let (database, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+    let (database, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
     Scheduler::new(
         semver::Version::new(0, 0, 0),
         Box::new(database),

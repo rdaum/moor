@@ -44,6 +44,7 @@ pub(crate) fn is_name_like_token(kind: SyntaxKind) -> bool {
             | SyntaxKind::AnyKw
             | SyntaxKind::TrueKw
             | SyntaxKind::FalseKw
+            | SyntaxKind::NoneLit
     )
 }
 
@@ -58,6 +59,7 @@ pub(crate) fn is_atom_token(kind: SyntaxKind) -> bool {
             | SyntaxKind::ErrorLit
             | SyntaxKind::SymbolLit
             | SyntaxKind::BinaryLit
+            | SyntaxKind::NoneLit
             | SyntaxKind::TypeConstant
             | SyntaxKind::TrueKw
             | SyntaxKind::FalseKw

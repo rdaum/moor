@@ -1089,7 +1089,7 @@ async fn main() -> Result<(), eyre::Error> {
     };
 
     // Create database
-    let (database, _) = TxDB::try_open(Some(&db_path), Default::default()).unwrap();
+    let (database, _) = TxDB::try_open_fjall(&db_path, Default::default()).unwrap();
 
     // Setup test database and get the player object
     let player = setup_test_database(&database, args.num_objects, args.max_ticks)?;

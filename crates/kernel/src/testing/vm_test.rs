@@ -66,7 +66,7 @@ mod tests {
     }
 
     fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
-        let (state, _) = TxDB::try_open(None, DatabaseConfig::default()).unwrap();
+        let (state, _) = TxDB::try_open_temporary(DatabaseConfig::default()).unwrap();
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(
