@@ -18,7 +18,7 @@ object ADMIN_HELP_TOPICS [
     'administration,
     {"@sudo"}
   };
-  property topic_administration_dump_database (owner: ARCH_WIZARD, flags: "rc") = <HELP, .content_kind = 'djot_blocks, .name = "@dump-database", .content = "Usage: `@dump-database`\n\nManually triggers a database dump to disk.\n\nOnly admins can use this command.", .aliases = {"dump", "checkpoint", "save"}, .category = 'administration, .summary = "Trigger database dump", .see_also = {}>;
+  property topic_administration_dump_database (owner: ARCH_WIZARD, flags: "rc") = <HELP, .content_kind = 'djot_blocks, .name = "@dump-database", .content = "Usage: `@dump-database`\n\nExports a database checkpoint and waits for completion. Reports success only after the export finishes. If it fails, check the server log for details.\n\nOnly admins can use this command.", .aliases = {"dump", "checkpoint", "save"}, .category = 'administration, .summary = "Trigger database dump", .see_also = {}>;
   property topic_administration_overview (owner: ARCH_WIZARD, flags: "rc") = {
     "administration",
     "Administration commands",

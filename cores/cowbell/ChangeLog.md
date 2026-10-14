@@ -195,6 +195,9 @@ Cowbell entries.
 
 ### Fixed
 
+- `@dump-database` waits for the checkpoint export to finish and reports its result, instead of
+  announcing success when the request is only queued.
+
 - Room narratives group generated exit, contents, and occupant lines without blank lines between
   each sentence. Authored paragraphs retain their spacing, including welcome messages and room
   prose.

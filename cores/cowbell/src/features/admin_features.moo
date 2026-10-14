@@ -471,7 +471,7 @@ object ADMIN_FEATURES [
   endmethod
 
   verb "@dump-database" (none none none) owner: ARCH_WIZARD flags: "rd"
-    "HINT: -- Manually trigger a database dump to disk.";
+    "HINT: -- Export a database checkpoint and wait for its result.";
     this:_challenge_command_perms();
     "If running via @sudo, we keep the elevated perms. Otherwise, we drop to player perms.";
     if (!player:has_admin_elevation())
@@ -479,8 +479,11 @@ object ADMIN_FEATURES [
     endif
     player:inform_current($event:mk_info(player, "Triggering database dump..."));
     try
-      dump_database();
-      player:inform_current($event:mk_info(player, "Database dump completed successfully."));
+      if (dump_database(1))
+        player:inform_current($event:mk_info(player, "Database dump completed successfully."));
+      else
+        player:inform_current($event:mk_error(player, "Database dump failed. Check the server log for details."));
+      endif
     except e (ANY)
       player:inform_current($event:mk_error(player, "Database dump failed: " + toliteral(e[2])));
     endtry
