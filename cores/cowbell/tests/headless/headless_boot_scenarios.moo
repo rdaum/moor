@@ -32,28 +32,25 @@ object HEADLESS_BOOT_SCENARIOS
     this:_assert_valid_global("test_utils", #127);
     return true;
   endverb
-  method test_shipped_reactions_use_normal_installation owner: ARCH_WIZARD
-    "World initialization installs ordinary grants and a restart preserves later edits.";
+  method test_restart_preserves_authored_room owner: ARCH_WIZARD
+    "A restart preserves a builder's description and reaction edits on the First Room.";
     #0:server_started();
-    let count = 0;
-    for host in ({$couch, $henri, $kibble_cupboard})
-      for entry in ($root:_get_reactions_for(host, $arch_wizard, true))
-        const {property, reaction} = entry;
-        $test_utils:assert_type(reaction.authorization, TYPE_STR, "Shipped reactions need ordinary installation grants");
-        $test_utils:assert_eq($reaction:_authority(host, property, reaction), host.owner, "Shipped reactions use the normal installation principal");
-        count = count + 1;
-      endfor
-    endfor
-    $test_utils:assert_eq(count, 14, "Every shipped reaction must be installed");
-    const original = $henri.cupboard_open_reaction;
+    const description = $first_room.description;
     try
-      let disabled = original;
-      disabled.enabled = false;
-      const installed = $reaction:install($henri, "cupboard_open_reaction", disabled);
+      $first_room.description = "A room customized by its owner.";
+      let reaction = $reaction:mk('on_enter, 0, {{'announce, "Welcome."}});
+      reaction.enabled = false;
+      const installed = $reaction:install($first_room, "boot_probe_reaction", reaction);
       #0:server_started();
-      $test_utils:assert_true(equal($henri.cupboard_open_reaction, installed), "A restart must not replace or reauthorize edited reactions");
+      $test_utils:assert_eq($first_room.description, "A room customized by its owner.",
+        "Startup preserves the authored description");
+      $test_utils:assert_true(equal($first_room.boot_probe_reaction, installed),
+        "Startup preserves the authored reaction and its disabled state");
+      $test_utils:assert_type(installed.authorization, TYPE_STR,
+        "The authored reaction retains its signed installation");
     finally
-      $henri.cupboard_open_reaction = original;
+      $first_room.description = description;
+      $reaction:remove($first_room, "boot_probe_reaction");
     endtry
     return true;
   endmethod

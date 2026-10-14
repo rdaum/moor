@@ -180,7 +180,7 @@ Conditions and steps can use names supplied by the event:
 | `place` | The room where the event happened.                               |
 | `item`  | The item involved in taking, putting, or another item operation. |
 | `key`   | The key involved in locking or unlocking.                        |
-| `food`  | The food involved in Henri's feeding event.                      |
+| `food`  | The item supplied by a custom feeding event.                     |
 | `me`    | You, saved as a particular person when you enter the command.    |
 | `here`  | Your current room, saved when you enter the command.             |
 
@@ -193,8 +193,14 @@ List the events and their available names:
 @reaction events
 ```
 
-Most events report a completed operation. Henri's `pet_attempt` also reports a nearby attempt he
-refuses. The starting cupboard and couch send their own notifications to Henri.
+The listed events report core operations. Programmers can also send custom events with
+`fire_trigger`. For example, `after dinner_ready` responds to `on_dinner_ready` on that object.
+Custom event names use letters, digits, and underscores, and start with a letter or underscore. They
+need no global registration. Their producer supplies `actor` and `place` and defines when the event
+happens.
+
+A misspelled custom event name is still a valid name, but the reaction will not run unless something
+sends that event. Check both the sender and the receiving reaction when a response is missing.
 
 ## Remember a number or a choice
 
@@ -468,21 +474,15 @@ Reactions run with their object's owner's permissions. Naming another player as 
 give your reaction control over that player. Normal rules, location checks, and ownership checks
 still apply to actions.
 
-## Henri: a supplied example
+## Build a scene with Henri
 
-Henri starts grouchy. He refuses the first three pet attempts and hisses once for each. The fourth
-attempt makes him sleepy, resets his counter, and permits the pet. Feeding him accepted kibble also
-makes him sleepy and resets the counter.
+The [Henri tutorial](../docs/henri-and-the-cupboard.md) creates a cat, food cupboard, key, and
+couch. It continues the Pet Rock lesson and introduces interactions between objects. The scene is
+authored by an ordinary programmer; it is not part of a new world's starting objects.
 
-His reactions separate an attempted pet from a successful pet. The attempt counter can therefore
-progress even while he refuses petting. Each mood response lives in one reaction.
-
-Henri's owner or a world administrator can inspect his responses with `@reaction Henri` and his
-state with `@state Henri`. For example, `@reaction Henri pet_sleepy show` shows the sleepy response.
-The same `step`, `if`, `disable`, and `trace` commands used for your boxes apply to these reactions.
-
-Henri also has optional background grooming and idle actions. Those use separate code and stay
-disabled by default. They are not part of these interaction examples.
+Henri remembers pet attempts and changes his responses with his mood. The cupboard tells him when it
+opens. The couch responds to visitors. The tutorial also includes an optional idle schedule. You can
+inspect and edit its reactions with the commands in this guide.
 
 ## Find more commands
 

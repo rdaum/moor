@@ -373,4 +373,31 @@ object HEADLESS_AUTHORING_SCENARIOS
     endtry
     return true;
   endmethod
+  method test_custom_events_are_local_to_the_receiver owner: ARCH_WIZARD
+    "Builders can author custom events without a global registration or cross-object dispatch.";
+    const old_builder = #90102.is_builder;
+    #90102.is_builder = true;
+    const first = create($thing, #90102, 2);
+    const second = create($thing, #90102, 2);
+    try
+      for host in ({first, second})
+        const ref = tostr(host);
+        this:_author('state, ref + " visits number 0");
+        this:_author('reaction, ref + " notice after dinner_ready");
+        this:_author('reaction, ref + " notice then add visits 1");
+        this:_author('reaction, ref + " notice enable");
+      endfor
+      first:fire_trigger('on_dinner_ready, ['Actor -> #90102]);
+      $test_utils:assert_eq({first.visits, second.visits}, {1, 0},
+        "The same event name on another object does not receive the notification");
+      const invalid = `this:_author('reaction, tostr(first) + " bad after dinner-ready")
+        ! E_INVARG => E_INVARG';
+      $test_utils:assert_eq(invalid, E_INVARG, "Custom event names must be identifiers");
+    finally
+      recycle(first);
+      recycle(second);
+      #90102.is_builder = old_builder;
+    endtry
+    return true;
+  endmethod
 endobject

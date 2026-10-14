@@ -1161,7 +1161,7 @@ object BUILDER_FEATURES [
       !valid(dest_loc) && raise(E_INVARG, "That destination no longer exists.");
       "Get current location for messaging";
       old_loc = target_obj.location;
-      is_player = target_obj.player;
+      const moving_player = is_player(target_obj);
       obj_name = `target_obj.name ! ANY => tostr(target_obj)';
       dest_name = `dest_loc.name ! ANY => tostr(dest_loc)';
       success_message = "Moved " + obj_name + " (" + tostr(target_obj) + ") to " + dest_name + " (" + tostr(dest_loc) + ").";
@@ -1172,10 +1172,10 @@ object BUILDER_FEATURES [
       endif
       target_obj.location == dest_loc || raise(E_INVARG, "Could not move object.");
       "If it's a player, notify rooms after the move succeeds";
-      if (is_player && valid(old_loc))
+      if (moving_player && valid(old_loc))
         old_loc:announce_all_but({target_obj}, obj_name + " disappears suddenly for parts unknown.");
       endif
-      if (is_player && valid(dest_loc))
+      if (moving_player && valid(dest_loc))
         dest_loc:announce_all_but({target_obj}, obj_name + " materializes out of thin air.");
       endif
       "Report success to the builder";
@@ -2693,8 +2693,9 @@ object BUILDER_FEATURES [
     set_task_perms(caller_perms());
     const {?topic = "help"} = args;
     if (topic == "events")
-      let lines = {"Most events report a completed operation. pet_attempt reports a nearby attempt, even if Henri refuses it.",
-        "cupboard_open, couch_intruder, and kibble_taken are notifications sent by the starting world objects."};
+      let lines = {"These events come from core operations. Programmers can also send custom events with fire_trigger.",
+        "Use after NAME for a custom event named on_NAME. Event names belong to the receiving object.",
+        "Custom events supply actor and place; their producer defines when they happen."};
       for event in ($reaction.event_triggers)
         const scope = $rule_engine:trigger_scope(event);
         lines = {@lines, $builder_features:_author_trigger_text(event) + ": "
@@ -2928,7 +2929,7 @@ object BUILDER_FEATURES [
     elseif (operation == "after")
       length(rest) == 1 || raise(E_INVARG, "Use after EVENT. @reaction events lists the events.");
       const event = tosym("on_" + rest[1]);
-      event in $reaction.event_triggers || raise(E_INVARG, "Unknown event: " + rest[1] + ". Use @reaction events.");
+      $behavior_schema:_name(tosym(rest[1]), "event name");
       reaction.trigger = event;
     elseif (operation == "when")
       length(rest) == 3 || raise(E_INVARG, "Use when COUNTER >= NUMBER.");

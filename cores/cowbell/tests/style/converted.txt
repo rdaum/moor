@@ -1,12 +1,6 @@
 relations
 git
 initial/housekeeping.moo
-initial/henri.moo:start_behaviours
-initial/henri.moo:stop_behaviours
-initial/henri.moo:behaviour_status
-initial/henri.moo:_maybe_start_behaviours
-initial/henri.moo:_install_behaviour_schedules
-initial/henri.moo:_scheduled_behaviour
 root.moo:create
 root.moo:destroy
 root.moo:moveto
@@ -259,9 +253,6 @@ rules/reaction.moo:change
 rules/reaction.moo:_dispatch
 rules/reaction.moo:_run_installed
 initial/first_room.moo:initialize
-initial/couch.moo:initialize
-initial/henri.moo:initialize
-initial/kibble_cupboard.moo:initialize
 features/builder_features.moo:@set-r*ule
 features/builder_features.moo:@clear-rule
 rules/behavior_schema.moo
@@ -356,11 +347,4 @@ relations/relation.moo:retract
 llm/agent_building_tools.moo:list_reactions
 llm/agent_building_tools.moo:author_reaction
 features/builder_features.moo:@reaction
-initial/henri.moo:can_be_petted
-initial/henri.moo:can_be_fed
-initial/henri.moo:pet
-initial/henri.moo:_pet
-initial/henri.moo:feed
-initial/henri.moo:_feed
-initial/henri.moo:_feeding_allowed
 features/builder_features.moo:_author_relation

@@ -5,9 +5,9 @@
 ; #90100.authoring_features = $prog_features; #90101.authoring_features = $prog_features; #90101.is_builder = true; return true;
 true
 @programmer
-% @verbs $couch
+% @verbs $sittable
 ~~verbs(
-% @properties $couch
+% @properties $sittable
 ~~properties(
 ; add_property(player, "reference_probe", 1, {player, "rc"}); return true;
 true
@@ -26,7 +26,7 @@ true
 % @list $sittable:sit
 ~~Args
 @wizard
-% @verbs $couch
+% @verbs $sittable
 ~~verbs(
-% @properties $couch
+% @properties $sittable
 ~~properties(

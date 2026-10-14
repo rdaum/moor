@@ -85,8 +85,9 @@ while a nearby cat is present. If the cat is absent, the cupboard still opens. T
 its steps. The opening rule and the reaction's condition serve different purposes.
 
 Most events report a successful action. An opening reaction runs after the cupboard opens, so it
-cannot prevent that opening. Some objects offer more specific events. Henri, the supplied cat, has
-separate events for a pet attempt and a successful pet. He can react to an attempt he refuses.
+cannot prevent that opening. Some objects offer more specific events. The
+[Henri tutorial](henri-and-the-cupboard.md) gives a cat separate events for a pet attempt and a
+successful pet. He can react to an attempt he refuses.
 
 Reactions respond to the events their objects support. A condition such as “the cat is nearby” is
 checked when the selected event happens. It does not continuously watch for the cat's arrival.

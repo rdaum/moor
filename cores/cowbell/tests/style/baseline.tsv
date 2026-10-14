@@ -2176,72 +2176,6 @@ count	file	verb	kind	detail
 1	help/help_utils.moo	verb_help_from_hint owner: ARCH_WIZARD	implicit-local	hint_content
 1	help/help_utils.moo	verb_help_from_hint owner: ARCH_WIZARD	implicit-local	usage
 1	help/help_utils.moo	verb_help_from_hint owner: ARCH_WIZARD	implicit-local	verb_name
-1	initial/couch.moo	fact_is_sitting owner: HACKER	implicit-local	furniture
-1	initial/couch.moo	fact_is_sitting owner: HACKER	implicit-local	who
-1	initial/couch.moo	fact_not_is owner: HACKER	implicit-local	_
-1	initial/couch.moo	fact_not_is owner: HACKER	implicit-local	a
-1	initial/couch.moo	fact_not_is owner: HACKER	implicit-local	b
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	access_check
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	event
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	food
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	mood_changed
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	mood_descriptions
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	mood_improvements
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	old_mood
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	reaction_content
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	response
-1	initial/henri.moo	"feed give" (this with any) owner: HACKER flags: "rxd"	implicit-local	responses
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	access_check
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	complaint
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	complaint_content
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	event
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	old_pets
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	reaction
-1	initial/henri.moo	"pet stroke" (this none none) owner: HACKER flags: "rxd"	implicit-local	reaction_content
-1	initial/henri.moo	_autonomous_complain owner: HACKER	implicit-local	behaviour
-1	initial/henri.moo	_autonomous_complain owner: HACKER	implicit-local	complaint
-1	initial/henri.moo	_autonomous_complain owner: HACKER	implicit-local	new_complaints
-1	initial/henri.moo	_autonomous_construction_reaction owner: HACKER	implicit-local	behaviour
-1	initial/henri.moo	_autonomous_construction_reaction owner: HACKER	implicit-local	construction_reactions
-1	initial/henri.moo	_autonomous_groom owner: HACKER	implicit-local	behaviour
-1	initial/henri.moo	_autonomous_groom owner: HACKER	implicit-local	grooming_behaviours
-1	initial/henri.moo	_autonomous_mood_shift owner: HACKER	implicit-local	announcement
-1	initial/henri.moo	_autonomous_mood_shift owner: HACKER	implicit-local	mood_announcements
-1	initial/henri.moo	_autonomous_mood_shift owner: HACKER	implicit-local	mood_roll
-1	initial/henri.moo	_autonomous_mood_shift owner: HACKER	implicit-local	new_mood
-1	initial/henri.moo	_autonomous_mood_shift owner: HACKER	implicit-local	old_mood
-1	initial/henri.moo	_autonomous_sigh owner: HACKER	implicit-local	behaviour
-1	initial/henri.moo	_autonomous_sigh owner: HACKER	implicit-local	sighing_behaviours
-1	initial/henri.moo	_autonomous_stretch owner: HACKER	implicit-local	behaviour
-1	initial/henri.moo	_autonomous_stretch owner: HACKER	implicit-local	stretching_behaviours
-1	initial/henri.moo	_pick_message owner: HACKER	implicit-local	msg
-1	initial/henri.moo	_pick_message owner: HACKER	implicit-local	source
-1	initial/henri.moo	can_be_fed owner: HACKER	implicit-local	accessor
-1	initial/henri.moo	can_be_fed owner: HACKER	implicit-local	food
-1	initial/henri.moo	can_be_fed owner: HACKER	implicit-local	result
-1	initial/henri.moo	can_be_petted owner: HACKER	implicit-local	accessor
-1	initial/henri.moo	can_be_petted owner: HACKER	implicit-local	result
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	current_index
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	description
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	mood_descriptions
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	moods
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	new_index
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	new_mood
-1	initial/henri.moo	change_mood (none none none) owner: HACKER flags: "rxd"	implicit-local	old_mood
-1	initial/henri.moo	fact_is_curious owner: HACKER	implicit-local	henri
-1	initial/henri.moo	fact_is_grouchy owner: HACKER	implicit-local	henri
-1	initial/henri.moo	fact_is_playful owner: HACKER	implicit-local	henri
-1	initial/henri.moo	fact_is_sleepy owner: HACKER	implicit-local	henri
-1	initial/henri.moo	fact_tolerates owner: HACKER	implicit-local	accessor
-1	initial/henri.moo	fact_tolerates owner: HACKER	implicit-local	henri
-1	initial/henri.moo	look_self owner: HACKER	implicit-local	base_desc
-1	initial/henri.moo	look_self owner: HACKER	implicit-local	desc_parts
-1	initial/henri.moo	look_self owner: HACKER	implicit-local	look_data
-1	initial/henri.moo	look_self owner: HACKER	implicit-local	merged
-1	initial/henri.moo	look_self owner: HACKER	implicit-local	mood_extra
-1	initial/henri.moo	look_self owner: HACKER	missing-docstring	Describe the contract before executable statements.
-1	initial/henri.moo	moveto (none none none) owner: HACKER flags: "rxd"	implicit-local	result
-1	initial/henri.moo	on_location_enter owner: HACKER	implicit-local	who
 1	items/consumable.moo	action_consume owner: ARCH_WIZARD	implicit-local	amount
 1	items/consumable.moo	action_consume owner: ARCH_WIZARD	implicit-local	check
 1	items/consumable.moo	action_consume owner: ARCH_WIZARD	implicit-local	context
@@ -2354,39 +2288,14 @@ count	file	verb	kind	detail
 1	items/note.moo	help_topics owner: ARCH_WIZARD	implicit-local	for_player
 1	items/note.moo	help_topics owner: ARCH_WIZARD	implicit-local	my_topics
 1	items/note.moo	help_topics owner: ARCH_WIZARD	implicit-local	topic
-1	items/sittable.moo	"sit climb" (none on this) owner: HACKER flags: "rxd"	implicit-local	event
-1	items/sittable.moo	"sit climb" (none on this) owner: HACKER flags: "rxd"	implicit-local	victim
-1	items/sittable.moo	action_sit owner: ARCH_WIZARD	implicit-local	context
-1	items/sittable.moo	action_sit owner: ARCH_WIZARD	implicit-local	who
-1	items/sittable.moo	action_stand owner: ARCH_WIZARD	implicit-local	context
-1	items/sittable.moo	action_stand owner: ARCH_WIZARD	implicit-local	who
-1	items/sittable.moo	add_sitter owner: HACKER	implicit-local	event
-1	items/sittable.moo	add_sitter owner: HACKER	implicit-local	silent
-1	items/sittable.moo	add_sitter owner: HACKER	implicit-local	victim
-1	items/sittable.moo	add_sitter owner: HACKER	implicit-local	who
 1	items/sittable.moo	description (none none none) owner: HACKER flags: "rxd"	implicit-local	desc
 1	items/sittable.moo	description (none none none) owner: HACKER flags: "rxd"	implicit-local	sitters
-1	items/sittable.moo	dump_all_sitters (none none none) owner: HACKER flags: "rxd"	implicit-local	event
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	event
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	msg
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	pos
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	trigger_name
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	use_dumped
-1	items/sittable.moo	dump_sitter (none none none) owner: HACKER flags: "rxd"	implicit-local	who
 1	items/sittable.moo	help_topics owner: ARCH_WIZARD	implicit-local	for_player
 1	items/sittable.moo	help_topics owner: ARCH_WIZARD	implicit-local	my_topics
 1	items/sittable.moo	help_topics owner: ARCH_WIZARD	implicit-local	topic
 1	items/sittable.moo	is_sitting owner: HACKER	implicit-local	who
-1	items/sittable.moo	moveto (none none none) owner: HACKER flags: "rxd"	implicit-local	dest
-1	items/sittable.moo	on_location_exit owner: HACKER	implicit-local	who
-1	items/sittable.moo	remove_sitter owner: HACKER	implicit-local	event
-1	items/sittable.moo	remove_sitter owner: HACKER	implicit-local	pos
-1	items/sittable.moo	remove_sitter owner: HACKER	implicit-local	silent
-1	items/sittable.moo	remove_sitter owner: HACKER	implicit-local	who
 1	items/sittable.moo	sitters_string (none none none) owner: HACKER flags: "rxd"	implicit-local	name_list
 1	items/sittable.moo	sitters_string (none none none) owner: HACKER flags: "rxd"	implicit-local	names
-1	items/sittable.moo	stand (none from this) owner: HACKER flags: "rxd"	implicit-local	event
-1	items/sittable.moo	stand (none from this) owner: HACKER flags: "rxd"	implicit-local	pos
 1	items/sittable.moo	test_sitting (none none none) owner: HACKER flags: "rxd"	implicit-local	sitter_desc
 1	items/sittable.moo	test_sitting (none none none) owner: HACKER flags: "rxd"	implicit-local	test_obj
 1	items/thing.moo	"action_get action_take" owner: ARCH_WIZARD	implicit-local	context

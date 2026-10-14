@@ -84,19 +84,11 @@ define PROTOTYPE_BOX = #48;
 define FIRST_ROOM = #49;
 define FIRST_AREA = #50;
 define FIRST_AREA_PASSAGES = #51;
-define BRASS_KEY = #65;
-define KIBBLE_CUPBOARD = #66;
-define CAT_KIBBLE = #67;
 define TEST_PLAYER = #74;
 define HOUSEKEEPING = #79;
 define HOUSEKEEPING_SWEEP_MSGS = #80;
-define COUCH = #107;
-define HENRI = #111;
 define MAIL_ROOM = #112;
 define ARCH_WIZARD_MAILBOX = #115;
-define KIBBLE_CAN_1 = #116;
-define KIBBLE_CAN_2 = #117;
-define KIBBLE_CAN_3 = #118;
 
 // items
 define THING = #8;

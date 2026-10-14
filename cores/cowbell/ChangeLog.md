@@ -8,6 +8,11 @@ Cowbell entries.
 
 ### Added
 
+- Add an executable [Henri tutorial](docs/henri-and-the-cupboard.md) after Pet Rock. An ordinary
+  programmer builds a cat, food cupboard, key, and couch, then connects their reactions.
+- Builders can use custom event names in `@reaction OBJECT NAME after EVENT`. The names belong to
+  each receiving object and need no global registration.
+
 - Room authors can register custom exits such as portals and lifts. Room descriptions, `exits`,
   links, and route hints use the same options. Unavailable travel explains why; destinations can be
   unknown until use. Saved links recheck the actor, source, registration, and destination.
@@ -49,6 +54,9 @@ Cowbell entries.
 - Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 
 ### Changed
+
+- Henri and his cupboard, kibble, key, and couch are now tutorial content. New core imports no
+  longer contain those objects or their system aliases. The travel example rooms remain included.
 
 - Building grant lookup checks the incoming principal before reading another actor's grants.
   Ordinary callers can no longer obtain someone else's stored capability through the area helper.
@@ -158,6 +166,12 @@ Cowbell entries.
   structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
 ### Fixed
+
+- `@move` works for ordinary objects and NPCs instead of failing on a missing player property.
+- Item entry and exit reactions on characters use the surrounding room, so their messages are
+  visible there.
+- Builders can create and move furniture they own. Sitting and standing on that furniture run its
+  reactions; rejected moves leave sitters in place.
 
 - Clicking an exit in Meadow checks the room and connection shown by that link. Old links cannot use
   a different room's exit or a replacement connection. Door actions check the current state.

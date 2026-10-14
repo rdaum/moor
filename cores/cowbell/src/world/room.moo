@@ -881,6 +881,7 @@ object ROOM [
     "Register an actor as engaged with an object (sitting, swimming, etc.).";
     "If actor is already engaged with something else, disengage them first.";
     {actor, object} = args;
+    $root:check_actor(actor, caller_perms());
     if (!valid(actor) || !valid(object))
       return false;
     endif

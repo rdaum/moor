@@ -73,7 +73,9 @@ object TEST_UTILS [
     this:assert_type("cow", TYPE_STR, "string should have TYPE_STR");
     this:assert_raises(E_ASSERT, this, "assert_eq", {"cow", "bell", "mismatch should raise"}, "assert_eq mismatch");
     this:assert_eq($arch_wizard:pronouns_display(), "they/them", "player pronouns display should be readable");
-    this:assert_eq($henri:pronouns_display(), "he/him", "actor pronouns display should be readable");
+    const actor = this:anonymous($actor);
+    actor.pronouns = $pronouns:lookup("he/him");
+    this:assert_eq(actor:pronouns_display(), "he/him", "actor pronouns display should be readable");
     return true;
   endmethod
 

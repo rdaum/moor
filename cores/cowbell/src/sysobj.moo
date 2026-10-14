@@ -21,7 +21,6 @@ object SYSOBJ [
   property architects_compass (owner: HACKER, flags: "r") = ARCHITECTS_COMPASS;
   property area (owner: HACKER, flags: "r") = AREA;
   property bg_ticks (owner: HACKER, flags: "r") = 300000;
-  property brass_key (owner: HACKER, flags: "r") = BRASS_KEY;
   property builder_features (owner: HACKER, flags: "r") = BUILDER_FEATURES;
   property builder_prototypes (owner: HACKER, flags: "r") = {
     ROOM,
@@ -36,13 +35,11 @@ object SYSOBJ [
     FOOD,
     DRINK
   };
-  property cat_kibble (owner: HACKER, flags: "r") = CAT_KIBBLE;
   property change_manager (owner: ARCH_WIZARD, flags: "r") = CHANGE_MANAGER;
   property change_tools (owner: ARCH_WIZARD, flags: "r") = CHANGE_TOOLS;
   property consumable (owner: ARCH_WIZARD, flags: "r") = CONSUMABLE;
   property container (owner: HACKER, flags: "r") = CONTAINER;
   property core_version (owner: ARCH_WIZARD, flags: "rc") = "0.3.0";
-  property couch (owner: HACKER, flags: "r") = COUCH;
   property data_visor (owner: HACKER, flags: "r") = DATA_VISOR;
   property dm (owner: HACKER, flags: "r") = DM;
   property document (owner: HACKER, flags: "r") = DOCUMENT;
@@ -72,10 +69,8 @@ object SYSOBJ [
   property help (owner: HACKER, flags: "r") = HELP;
   property help_topics (owner: ARCH_WIZARD, flags: "r") = HELP_TOPICS;
   property help_utils (owner: HACKER, flags: "r") = HELP_UTILS;
-  property henri (owner: HACKER, flags: "r") = HENRI;
   property housekeeping (owner: HACKER, flags: "r") = HOUSEKEEPING;
   property int_proto (owner: HACKER, flags: "r") = INT_PROTO;
-  property kibble_cupboard (owner: HACKER, flags: "r") = KIBBLE_CUPBOARD;
   property letter (owner: HACKER, flags: "r") = LETTER;
   property list_proto (owner: HACKER, flags: "r") = LIST_PROTO;
   property llm_agent (owner: HACKER, flags: "r") = LLM_AGENT;

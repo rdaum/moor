@@ -4,7 +4,7 @@ object HEADLESS_SCHEDULER_SCENARIOS
   owner: HACKER
   readable: true
 
-  override description = "Native schedule lifecycle scenarios for housekeeping and Henri.";
+  override description = "Native schedule lifecycle scenarios for housekeeping.";
   override import_export_hierarchy = {"tests", "headless"};
   override import_export_id = "headless_scheduler_scenarios";
 
@@ -61,84 +61,16 @@ object HEADLESS_SCHEDULER_SCENARIOS
     return true;
   endmethod
 
-  method test_headless_henri_native_lifecycle owner: ARCH_WIZARD
-    "Henri creates six owner-authorized schedules, repairs stale IDs, and cancels them all.";
-    const henri = create($henri, $hacker, 2);
-    const recording_player = this:_recording_player();
-    player = recording_player;
-    try
-      henri.scheduled_behaviours = ["grooming" -> 999999];
-      henri:start_behaviours();
-      const ids = mapvalues(henri.scheduled_behaviours);
-      $test_utils:assert_eq(length(ids), 6, "all six behaviours must have native schedules");
-      "Commit registration before inspecting native schedule diagnostics.";
-      suspend(0);
-      for id in (ids)
-        const info = schedule_info(id);
-        $test_utils:assert_eq(info["target"], henri, "native schedule target must be Henri");
-        $test_utils:assert_eq(info["authority"], $hacker, "creator must remain Henri's verb-owner principal");
-        $test_utils:assert_true(info["adaptive"], "behaviours must choose a fresh delay after each firing");
-        $test_utils:assert_false(info["pass_elapsed"], "callback arguments remain explicit");
-      endfor
-      henri:start_behaviours();
-      $test_utils:assert_eq(mapvalues(henri.scheduled_behaviours), ids, "duplicate start must preserve IDs");
-      for attempt in [1..10]
-        const delay = henri:_scheduled_behaviour("grooming", "_autonomous_groom", 240, 120);
-        $test_utils:assert_true(delay > 240 && delay <= 360, "fresh delays stay in the retained random range");
-      endfor
-      henri:stop_behaviours();
-      "Commit cancellation before checking the runtime schedule store.";
-      suspend(0);
-      for id in (ids)
-        $test_utils:assert_false(schedule_valid(id), "stop must cancel every behaviour");
-      endfor
-      $test_utils:assert_eq(henri.scheduled_behaviours, [], "stop must leave a map for future starts");
-    finally
-      valid(henri) && henri:stop_behaviours();
-      valid(henri) && henri:destroy();
-      valid(recording_player) && recording_player:destroy();
-    endtry
-    return true;
-  endmethod
-
-  method test_headless_henri_actual_native_firing owner: ARCH_WIZARD
-    "Henri's actual adaptive callback runs with its explicit argument contract.";
-    const henri = create($henri, $hacker, 2);
-    let id = 0;
-    try
-      henri.behaviours_disabled = false;
-      id = schedule_every(henri, "_scheduled_behaviour", 0.1,
-        {"grooming", "_autonomous_groom", 0.2, 0}, ['adaptive -> true, 'pass_elapsed -> false]);
-      const deadline = time() + 5;
-      "Commit native registration before querying runtime diagnostics.";
-      suspend(0);
-      let info = schedule_info(id);
-      while (time() <= deadline && info["run_count"] == 0)
-        "Commit registration and wait for the native callback.";
-        suspend(0.1);
-        info = schedule_info(id);
-      endwhile
-      $test_utils:assert_true(info["run_count"] > 0, "the native Henri callback must run");
-      $test_utils:assert_eq(info["fault_count"], 0, "callback argument contract must not fault");
-      $test_utils:assert_true(schedule_valid(id), "the adaptive recurrence must remain live");
-    finally
-      schedule_stop(id);
-      valid(henri) && henri:destroy();
-    endtry
-    return true;
-  endmethod
-
   method test_headless_native_app_controls owner: ARCH_WIZARD
-    "Untrusted callers cannot start or stop housekeeping or a foreign Henri's behaviours.";
+    "Untrusted callers cannot start or stop housekeeping.";
     const housekeeping = create($housekeeping, $arch_wizard, 2);
-    const henri = create($henri, $hacker, 2);
     const recording_player = this:_recording_player();
     player = recording_player;
     try
-      for operation in ({"housekeeping_start", "housekeeping_stop", "henri_start", "henri_stop"})
+      for operation in ({"housekeeping_start", "housekeeping_stop"})
         let denied = false;
         try
-          this:_native_app_call_as_player(housekeeping, henri, operation);
+          this:_native_app_call_as_player(housekeeping, operation);
         except (E_PERM)
           denied = true;
         endtry
@@ -147,8 +79,6 @@ object HEADLESS_SCHEDULER_SCENARIOS
     finally
       valid(housekeeping) && housekeeping:stop();
       valid(housekeeping) && housekeeping:destroy();
-      valid(henri) && henri:stop_behaviours();
-      valid(henri) && henri:destroy();
       valid(recording_player) && recording_player:destroy();
     endtry
     return true;
@@ -157,11 +87,9 @@ object HEADLESS_SCHEDULER_SCENARIOS
   method _native_app_call_as_player owner: PLAYER
     "Call only application control regression methods as the player principal.";
     caller == this && this == #90001 || raise(E_PERM);
-    const {housekeeping, henri, operation} = args;
+    const {housekeeping, operation} = args;
     operation == "housekeeping_start" && return housekeeping:start();
     operation == "housekeeping_stop" && return housekeeping:stop();
-    operation == "henri_start" && return henri:start_behaviours();
-    operation == "henri_stop" && return henri:stop_behaviours();
     raise(E_PERM);
   endmethod
   method _recording_player owner: ARCH_WIZARD

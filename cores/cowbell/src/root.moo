@@ -1051,14 +1051,14 @@ object ROOT [
     "Publish entry only for an actual movement callback.";
     const {who} = args;
     $root:_is_movement_callback(this, "enterfunc") || return;
-    this:fire_trigger('on_enter, ['Who -> who, 'Actor -> who, 'Location -> this]);
+    this:fire_trigger('on_enter, ['Who -> who, 'Actor -> who]);
   endmethod
 
   method exitfunc owner: HACKER
     "Publish departure only for an actual movement callback.";
     const {who} = args;
     $root:_is_movement_callback(this, "exitfunc") || return;
-    this:fire_trigger('on_exit, ['Who -> who, 'Actor -> who, 'Location -> this]);
+    this:fire_trigger('on_exit, ['Who -> who, 'Actor -> who]);
   endmethod
 
   method initialize owner: ARCH_WIZARD

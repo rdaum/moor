@@ -42,12 +42,6 @@ object REACTION [
     'on_passage_unlock,
     'on_enter,
     'on_exit,
-    'on_pet,
-    'on_pet_attempt,
-    'on_fed,
-    'on_cupboard_open,
-    'on_couch_intruder,
-    'on_kibble_taken,
     'on_consume,
     'on_empty,
     'on_wear,
@@ -584,8 +578,7 @@ object REACTION [
       || (source[4] == $container && source[2] == "_operate")
       || (source[4] == $passage && source[2] == "operate")
       || (source[4] == $thing && source[2] == "transfer")
-      || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})
-      || (source[4] == $henri && source[2] in {"_pet", "_feed"})) || raise(E_PERM);
+      || (source[4] == $wearable && source[2] in {"do_wear", "do_remove"})) || raise(E_PERM);
     const {host, trigger_name, initial_context, ?transition = {}} = args;
     let context = initial_context;
     const chain = `context['_reaction_chain] ! E_RANGE => {}';

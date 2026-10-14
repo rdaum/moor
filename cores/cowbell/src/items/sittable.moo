@@ -37,7 +37,7 @@ object SITTABLE [
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'This>,
     "."
   };
-  property seats (owner: HACKER, flags: "r") = 2;
+  property seats (owner: HACKER, flags: "rc") = 2;
   property sit_msg (owner: HACKER, flags: "rc") = {
     <SUB, .capitalize = true, .type = 'actor>,
     " ",
@@ -150,57 +150,34 @@ object SITTABLE [
     "```"
   };
 
-  verb "sit climb" (none on this) owner: HACKER flags: "rxd" [ ui -> ["prefix" -> "Sit on"] ]
-    "Handle 'sit on <furniture>' command.";
+  verb "sit climb" (none on this) owner: ARCH_WIZARD flags: "rd" [ ui -> ["prefix" -> "Sit on"] ]
+    "Sit on nearby furniture as the person who entered the command.";
+    caller == player || raise(E_PERM);
+    set_task_perms(player);
+    let message = {};
     if (player in this.sitting)
-      event = $event:mk_error(player, @this.already_sitting_msg):with_this(this);
-      player:inform_current(event);
-      return;
+      message = this.already_sitting_msg;
+    elseif (player.location != this.location)
+      message = this.cant_reach_msg;
+    elseif (this.squeeze < 0 && length(this.sitting) >= this.seats)
+      message = this.no_room_msg;
     endif
-    if (player.location != this.location)
-      event = $event:mk_error(player, @this.cant_reach_msg):with_this(this);
-      player:inform_current(event);
-      return;
+    if (length(message))
+      player:inform_current($event:mk_error(player, @message):with_this(this));
+      return false;
     endif
-    "Check capacity.";
-    if (this.squeeze < 0 && length(this.sitting) >= this.seats)
-      event = $event:mk_error(player, @this.no_room_msg):with_this(this);
-      player:inform_current(event);
-      return;
-    endif
-    "Register engagement with room (auto-disengages from other furniture/pool).";
-    if (valid(this.location) && respond_to(this.location, 'engage_actor))
-      this.location:engage_actor(player, this);
-    endif
-    "Add player to sitting list.";
-    this.sitting = {@this.sitting, player};
-    "Announce to room.";
-    event = $event:mk_act(player, @this.sit_msg):with_this(this);
-    this.location:announce(event);
-    "Fire trigger for reactions (after announcement).";
-    this:fire_trigger('on_sit, ['Actor -> player]);
-    "Squeeze check - if over capacity, dump the first person.";
-    if (length(this.sitting) > this.seats + max(0, this.squeeze))
-      victim = this.sitting[1];
-      this:dump_sitter(victim);
-    endif
+    return this:add_sitter(player);
   endverb
 
-  verb stand (none from this) owner: HACKER flags: "rxd" [ ui -> ["prefix" -> "Stand up from"] ]
-    "Handle 'stand from <furniture>' command.";
+  verb stand (none from this) owner: ARCH_WIZARD flags: "rd" [ ui -> ["prefix" -> "Stand up from"] ]
+    "Stand from furniture as the person who entered the command.";
+    caller == player || raise(E_PERM);
+    set_task_perms(player);
     if (!(player in this.sitting))
-      event = $event:mk_error(player, @this.not_sitting_msg):with_this(this);
-      player:inform_current(event);
-      return;
+      player:inform_current($event:mk_error(player, @this.not_sitting_msg):with_this(this));
+      return false;
     endif
-    "Remove from sitting list";
-    pos = player in this.sitting;
-    this.sitting = listdelete(this.sitting, pos);
-    "Announce to room";
-    event = $event:mk_act(player, @this.stand_msg):with_this(this);
-    this.location:announce(event);
-    "Fire trigger for reactions (after announcement)";
-    this:fire_trigger('on_stand, ['Actor -> player]);
+    return this:remove_sitter(player);
   endverb
 
   method message_bindings owner: HACKER
@@ -223,53 +200,55 @@ object SITTABLE [
     return pass(@args);
   endmethod
 
-  method add_sitter owner: HACKER
-    "Programmatically add an actor to sit. Returns true if successful.";
+  method add_sitter owner: ARCH_WIZARD
+    "Seat the caller or an owned NPC, then announce and publish the completed action.";
+    const principal = caller_perms();
     const {who, ?silent = false, ?context = []} = args;
-    if (who in this.sitting)
-      return false;
-    endif
-    if (who.location != this.location)
+    $root:check_actor(who, principal);
+    if (who in this.sitting || who.location != this.location)
       return false;
     endif
     if (this.squeeze < 0 && length(this.sitting) >= this.seats)
       return false;
     endif
-    "Register engagement with room (auto-disengages from other furniture/pool).";
-    if (valid(this.location) && respond_to(this.location, 'engage_actor))
-      this.location:engage_actor(who, this);
-    endif
+    const room = this.location;
+    valid(room) && isa(room, $room) || return false;
+    const before = {this.owner, room, this.seats, this.squeeze, who.owner, who.location};
+    room:engage_actor(who, this);
+    "Disengaging other furniture can call authored code and suspend.";
+    $root:check_actor(who, principal);
+    equal(before, {this.owner, this.location, this.seats, this.squeeze, who.owner, who.location})
+      || return false;
+    who in this.sitting && return false;
     this.sitting = {@this.sitting, who};
-    this:fire_trigger('on_sit, mapmerge(context, ['Actor -> who, 'Location -> this.location]));
-    if (!silent && valid(this.location))
-      event = $event:mk_act(who, @this.sit_msg):with_this(this);
-      this.location:announce(event);
+    if (!silent)
+      room:announce($event:mk_act(who, @this.sit_msg):with_this(this));
     endif
-    "Squeeze check.";
+    this:fire_trigger('on_sit, mapmerge(context, ['Actor -> who, 'Location -> room]));
     if (length(this.sitting) > this.seats + max(0, this.squeeze))
-      victim = this.sitting[1];
-      this:dump_sitter(victim);
+      this:dump_sitter(this.sitting[1]);
     endif
     return true;
   endmethod
 
-  method remove_sitter owner: HACKER
-    "Programmatically remove an actor from sitting. Returns true if successful.";
+  method remove_sitter owner: ARCH_WIZARD
+    "Stand the caller or an owned NPC, and clear its room engagement.";
+    const principal = caller_perms();
     const {who, ?silent = false, ?context = []} = args;
-    pos = who in this.sitting;
-    if (!pos)
-      return false;
+    $root:check_actor(who, principal);
+    const position = who in this.sitting;
+    position || return false;
+    const room = this.location;
+    this.sitting = listdelete(this.sitting, position);
+    if (valid(room) && isa(room, $room))
+      if (room:get_engagement(who) == this)
+        room:disengage_actor(who);
+      endif
+      if (!silent)
+        room:announce($event:mk_act(who, @this.stand_msg):with_this(this));
+      endif
     endif
-    this.sitting = listdelete(this.sitting, pos);
-    "Clear engagement record from room.";
-    if (valid(this.location) && respond_to(this.location, 'disengage_actor))
-      this.location:disengage_actor(who);
-    endif
-    this:fire_trigger('on_stand, mapmerge(context, ['Actor -> who, 'Location -> this.location]));
-    if (!silent && valid(this.location))
-      event = $event:mk_act(who, @this.stand_msg):with_this(this);
-      this.location:announce(event);
-    endif
+    this:fire_trigger('on_stand, mapmerge(context, ['Actor -> who, 'Location -> room]));
     return true;
   endmethod
 
@@ -303,31 +282,34 @@ object SITTABLE [
     return this:remove_sitter(who, false, context);
   endmethod
 
-  verb dump_sitter (none none none) owner: HACKER flags: "rxd"
-    "Remove a sitter and announce they were squeezed off.";
-    {who, ?use_dumped = false} = args;
-    pos = who in this.sitting;
-    !pos && return;
-    this.sitting = listdelete(this.sitting, pos);
-    "Fire trigger for reactions";
-    trigger_name = use_dumped ? 'on_sittable_dump | 'on_sittable_squeeze;
-    this:fire_trigger(trigger_name, ['Actor -> who]);
-    "Announce";
-    msg = use_dumped ? this.dumped_msg | this.squeezed_msg;
-    event = $event:mk_info(who, @msg):with_dobj(who):with_this(this);
-    this.location:announce(event);
+  verb dump_sitter (none none none) owner: ARCH_WIZARD flags: "rxd"
+    "Let the furniture owner or core operations remove a sitter.";
+    const principal = caller_perms();
+    principal == this.owner || principal.wizard || raise(E_PERM);
+    const {who, ?use_dumped = false, ?room = this.location} = args;
+    const position = who in this.sitting;
+    position || return false;
+    this.sitting = listdelete(this.sitting, position);
+    if (valid(room) && isa(room, $room))
+      if (room:get_engagement(who) == this)
+        room:disengage_actor(who);
+      endif
+      const message = use_dumped ? this.dumped_msg | this.squeezed_msg;
+      room:announce($event:mk_info(who, @message):with_dobj(who):with_this(this));
+    endif
+    this:fire_trigger(use_dumped ? 'on_sittable_dump | 'on_sittable_squeeze,
+      ['Actor -> who, 'Location -> room]);
+    return true;
   endverb
 
-  verb dump_all_sitters (none none none) owner: HACKER flags: "rxd"
-    "Dump all sitters when furniture moves.";
-    length(this.sitting) == 0 && return;
-    "Fire trigger and announce for each sitter being dumped";
+  verb dump_all_sitters (none none none) owner: ARCH_WIZARD flags: "rxd"
+    "Let the furniture owner clear its seats, including after a completed move.";
+    const principal = caller_perms();
+    principal == this.owner || principal.wizard || raise(E_PERM);
+    const {?room = this.location} = args;
     for who in (this.sitting)
-      this:fire_trigger('on_sittable_dump, ['Actor -> who]);
-      event = $event:mk_info(who, @this.dumped_msg):with_dobj(who):with_this(this);
-      this.location:announce(event);
+      this:dump_sitter(who, true, room);
     endfor
-    this.sitting = {};
   endverb
 
   verb sitters_string (none none none) owner: HACKER flags: "rxd"
@@ -348,15 +330,28 @@ object SITTABLE [
     return desc + " " + sitters;
   endverb
 
-  verb moveto (none none none) owner: HACKER flags: "rxd"
-    "Dump all sitters when furniture moves.";
-    {dest} = args;
-    "Only dump if actually moving to a different location";
-    if (valid(this.location) && dest != this.location)
-      this:dump_all_sitters("dumped");
+  verb moveto (none none none) owner: ARCH_WIZARD flags: "rxd"
+    "Preserve the mover's authority and empty seats only after a successful move.";
+    const principal = caller_perms();
+    const {destination} = args;
+    const source = this.location;
+    set_task_perms(principal);
+    const result = pass(@args);
+    typeof(result) == TYPE_ERR && return result;
+    if (this.location != source)
+      $sittable:_complete_move(this, source);
     endif
-    return pass(@args);
+    return result;
   endverb
+
+  method _complete_move owner: ARCH_WIZARD
+    "Clear real furniture after moveto authorizes and completes an owner or capability move.";
+    const {receiver, source} = args;
+    const frame = callers()[1];
+    frame[1] == receiver && frame[4] == $sittable && frame[2] == "moveto" || raise(E_PERM);
+    const furniture = typeof(receiver) == TYPE_FLYWEIGHT ? receiver.delegate | receiver;
+    furniture:dump_all_sitters(source);
+  endmethod
 
   verb test_sitting (none none none) owner: HACKER flags: "rxd"
     "Test basic sitting functionality.";
@@ -389,14 +384,25 @@ object SITTABLE [
     return 0;
   endmethod
 
-  method on_location_exit owner: HACKER
-    "Stand up departing player when they leave the room.";
-    {who} = args;
-    who in this.sitting && this:remove_sitter(who);
+  method on_location_exit owner: ARCH_WIZARD
+    "Remove a departed sitter only for the room's departure callback.";
+    const {who} = args;
+    const source = callers()[1];
+    (caller == this.location && source[4] == $room && source[2] == "exitfunc")
+      || raise(E_PERM);
+    if (who.location != this.location && who in this.sitting)
+      this:remove_sitter(who);
+    endif
   endmethod
 
   method remove_occupant owner: ARCH_WIZARD
-    "Standard interface for removing an occupant. Delegates to remove_sitter.";
+    "Allow the room to switch seats; other callers must control the departing actor.";
+    const source = callers()[1];
+    const room_callback = caller == this.location && source[4] == $room
+      && source[2] == "engage_actor";
+    if (!room_callback)
+      set_task_perms(caller_perms());
+    endif
     return this:remove_sitter(@args);
   endmethod
 endobject

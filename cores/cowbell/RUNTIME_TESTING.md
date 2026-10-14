@@ -150,12 +150,13 @@ real sockets and server restart.
 
 ## Executable tutorials
 
-The [Pet Rock tutorial](docs/programming-with-rules-and-reactions.md) is also a session test. The
-default session suite runs its Markdown source alongside the `.moot` scenarios. The runner compiles
-the core once, then gives each scenario or document a fresh database. All runnable blocks in one
-document share its database and selected participant.
+The [Pet Rock](docs/programming-with-rules-and-reactions.md) and
+[Henri](docs/henri-and-the-cupboard.md) tutorials are also session tests. The default session suite
+runs their Markdown sources alongside the `.moot` scenarios. The runner compiles the core once, then
+gives each scenario or document a fresh database. All runnable blocks in one document share its
+database and selected participant.
 
-To run only the tutorial:
+To run the executable tutorials:
 
 ```sh
 make -C cores/cowbell test-tutorial
@@ -227,25 +228,25 @@ Cowbell-generated exports, overlays, and harness logs.
 ## Native scheduled work
 
 Cowbell uses the runtime `schedule_*` builtins directly. It has no core scheduler object or polling
-loop. Housekeeping creates one recurring schedule. Henri creates six adaptive recurring schedules
-and chooses a fresh delay after each firing.
+loop. Housekeeping creates one recurring schedule. The Henri tutorial creates an optional adaptive
+schedule and chooses a fresh delay after each firing.
 
 Schedule creation and cancellation commit with the calling transaction. Stored IDs and their
 schedule requests therefore commit together. `pass_elapsed` is false for these callbacks.
-Housekeeping disables adaptive returns so its swept-player count cannot change the interval. Henri
-enables adaptive returns. Each positive return adjusts the next native deadline; the native cadence
-uses scheduled deadlines, rather than callback completion times. Callback faults retain the base
-retry interval. The runtime default retires a schedule after 50 consecutive faults.
+Housekeeping disables adaptive returns so its swept-player count cannot change the interval. The
+tutorial enables adaptive returns. Each positive return adjusts the next native deadline; the native
+cadence uses scheduled deadlines, rather than callback completion times. Callback faults retain the
+base retry interval. The runtime default retires a schedule after 50 consecutive faults.
 
 Native schedules persist in the runtime task database. An objdef export contains object properties,
 including stored IDs, but does not export the schedule store. Fresh objdef imports therefore contain
-no schedules. Housekeeping and Henri replace invalid stored IDs when started. No startup resume hook
-or legacy schedule-property conversion is required.
+no schedules. Housekeeping and the tutorial start command replace invalid stored IDs.
 
-Headless scenario `#90001` tests actual housekeeping and Henri startup, duplicate starts, stale IDs,
-callback execution, adaptive delay ranges, cancellation, and caller controls. Its recording player
-captures command events without changing the production output interface. It also tests a two-player
-housekeeping sweep and one grouped room announcement.
+Headless scenario `#90001` tests housekeeping startup, duplicate starts, stale IDs, callback
+execution, cancellation, and caller controls. Its recording player captures command events. It also
+tests a two-player housekeeping sweep and one grouped room announcement. The Henri tutorial tests
+its actual adaptive callback under the author's permissions, duplicate starts, stale IDs, and
+cancellation. Its test uses a short first wait rather than waiting several minutes.
 
 ## Real connections and restart
 

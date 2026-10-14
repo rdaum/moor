@@ -207,4 +207,34 @@ object HEADLESS_REACTION_SCENARIOS
     endtry
     return true;
   endverb
+  method test_item_entry_and_exit_use_surrounding_room owner: ARCH_WIZARD
+    "Movement events on a character identify that character and its surrounding room.";
+    const room = create($room, #90100, 2);
+    const host = create($actor, #90101, 2);
+    const item = create($thing, #90102, 2);
+    try
+      move(host, room);
+      $reaction:declare_state(host, 'arrivals, 'integer, 0);
+      $reaction:declare_state(host, 'departures, 'integer, 0);
+      const condition = "input.This == " + toliteral(host) + " AND input.Who == "
+        + toliteral(item) + " AND input.Location == " + toliteral(room);
+      $reaction:install(host, "arrive_reaction", $reaction:mk('on_enter, condition,
+        {{'increment, 'arrivals}}, $reaction:state_types(host)));
+      $reaction:install(host, "leave_reaction", $reaction:mk('on_exit, condition,
+        {{'increment, 'departures}}, $reaction:state_types(host)));
+      host:enterfunc(item);
+      host:exitfunc(item);
+      $test_utils:assert_eq({host.arrivals, host.departures}, {0, 0},
+        "Calling movement hooks directly cannot forge events");
+      move(item, host);
+      move(item, room);
+      $test_utils:assert_eq({host.arrivals, host.departures}, {1, 1},
+        "Both completed movements identify the surrounding room");
+    finally
+      recycle(item);
+      recycle(host);
+      recycle(room);
+    endtry
+    return true;
+  endmethod
 endobject

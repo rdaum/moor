@@ -859,6 +859,9 @@ Try changing one choice at a time. Give the pebble a different remark. Set a rul
 pet it. Use a separate visitor book for it. Predict what will happen, then try it and inspect the
 result. That is a useful way to learn what each part does.
 
+For a larger project, [make room for Henri](henri-and-the-cupboard.md). You will build a cat, a food
+cupboard, and a couch, then teach those objects to respond to each other.
+
 The [rules and reactions introduction](rules-reactions-relations.md) has more examples, including a
 cupboard and a timed puzzle. The [command guide](../manual/reactions.md) lists the builder commands
 in more detail. Yib's original tutorial goes on to a rock-eating creature; you can read it for

@@ -19,7 +19,7 @@ through which people interact with the world. Cowbell supports plain text termin
 ## What you can do
 
 - **Meet and explore.** Talk, whisper, gesture, and move between rooms. The starting world includes
-  connected rooms, furniture, and Henri, an interactive cat.
+  connected rooms and an area with examples of doors, keys, and portals.
 - **Build places and things.** Add rooms and passages, write descriptions, and create objects from
   supplied types such as containers, clothing, seats, and notes.
 - **Give objects behavior.** Configure rules and reactions, or write MOO code for new commands and
@@ -47,6 +47,11 @@ The [introduction to rules, reactions, and relations](docs/rules-reactions-relat
 how these parts fit together. The [builder's guide](manual/reactions.md) gives commands for a
 responsive box, club membership, and a timed puzzle. These examples require builder privileges, with
 no MOO programming.
+
+For a first programming project, try
+[Let's make a pet rock](docs/programming-with-rules-and-reactions.md). Then
+[make room for Henri](docs/henri-and-the-cupboard.md), a cat with moods, a food cupboard, and a
+favourite couch. Both tutorials create their own objects and run in the test suite.
 
 The [rooms and passages guide](manual/rooms-and-passages.md) walks through building a workshop,
 connecting its rooms, and adding a keyed door. The [portal tutorial](manual/custom-exits.md) shows
