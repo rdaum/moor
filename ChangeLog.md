@@ -344,6 +344,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- History requests after an event ID no longer repeat that event when the UUID ends in `ff`.
+
 - Assigning an object's `.owner` preserves ownership of its inherited `c` properties, as in
   LambdaMOO. Previously, untouched properties changed owner while locally written properties kept
   their owner. Use `set_property_info()` or a core ownership helper to transfer properties

@@ -12,6 +12,7 @@
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
+    ops::Bound,
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -284,43 +285,18 @@ impl EventPersistence {
         debug!("Loading narrative events since {:?}", since);
         let mut events = Vec::new();
 
-        let start_bound = match since {
-            Some(since_id) => {
-                // Use the UUID as the lower bound (exclusive)
-                let mut start_key = since_id.as_bytes().to_vec();
-                // Increment the last byte to make it exclusive
-                if let Some(last_byte) = start_key.last_mut() {
-                    *last_byte = last_byte.saturating_add(1);
-                }
-                start_key
-            }
-            None => vec![],
-        };
+        let start_bound = since.as_ref().map_or(Bound::Unbounded, |id| {
+            Bound::Excluded(id.as_bytes().as_slice())
+        });
 
-        // Fjall range query from start_bound to end
-        if start_bound.is_empty() {
-            for entry in self.narrative_events_partition.iter() {
-                let (_, value) = entry.into_inner()?;
-                // Deserialize using planus from FlatBuffer bytes
-                let event_ref =
-                    <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
-                // Convert from Ref to owned type
-                let event: LoggedNarrativeEvent = event_ref.try_into()?;
-                events.push(event);
-            }
-        } else {
-            for entry in self
-                .narrative_events_partition
-                .range(start_bound.as_slice()..)
-            {
-                let (_key, value) = entry.into_inner()?;
-                // Deserialize using planus from FlatBuffer bytes
-                let event_ref =
-                    <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
-                // Convert from Ref to owned type
-                let event: LoggedNarrativeEvent = event_ref.try_into()?;
-                events.push(event);
-            }
+        for entry in self
+            .narrative_events_partition
+            .range::<&[u8], _>((start_bound, Bound::Unbounded))
+        {
+            let (_, value) = entry.into_inner()?;
+            let event_ref =
+                <moor_schema::event_log::LoggedNarrativeEventRef as ::planus::ReadAsRoot>::read_as_root(&value)?;
+            events.push(event_ref.try_into()?);
         }
 
         Ok(events)
@@ -1207,12 +1183,20 @@ mod tests {
     use uuid::Uuid;
 
     fn create_logged_event(player: Obj, message: &str) -> LoggedNarrativeEvent {
+        create_logged_event_with_id(player, message, Uuid::now_v7())
+    }
+
+    fn create_logged_event_with_id(
+        player: Obj,
+        message: &str,
+        event_id: Uuid,
+    ) -> LoggedNarrativeEvent {
         // Generate a test key for encryption (all events must be encrypted)
         let identity = age::x25519::Identity::generate();
         let pubkey = identity.to_public().to_string();
 
         let event = NarrativeEvent {
-            event_id: Uuid::now_v7(),
+            event_id,
             timestamp: SystemTime::now(),
             author: v_str("test"),
             event: Event::Notify {
@@ -1291,23 +1275,48 @@ mod tests {
     fn test_events_since_filtering() {
         let log = EventLog::new();
         let player = Obj::mk_id(1);
+        let ids = [
+            Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_00fe),
+            Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_00ff),
+            Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_0100),
+            Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_ffff),
+            Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0001_0000),
+        ];
 
-        let event1 = create_logged_event(player, "msg1");
-        let event2 = create_logged_event(player, "msg2");
-        let event3 = create_logged_event(player, "msg3");
+        // Test query bounds against a complete fixture, without waiting for async writes.
+        {
+            let mut persistence = log.persistence.lock().unwrap();
+            for id in ids {
+                let event = create_logged_event_with_id(player, "message", id);
+                persistence.write_narrative_event(id, &event).unwrap();
+            }
+        }
 
-        let id1 = log.append(event1, None);
-        let _id2 = log.append(event2, None);
-        let id3 = log.append(event3, None);
+        for (index, id) in ids.iter().enumerate() {
+            let since = log.events_for_player_since(player, Some(*id));
+            assert_eq!(
+                since.iter().map(extract_event_id).collect::<Vec<_>>(),
+                ids[index + 1..],
+                "Events after {id} must exclude the cursor"
+            );
+            let until = log.events_for_player_until(player, Some(*id));
+            assert_eq!(
+                until.iter().map(extract_event_id).collect::<Vec<_>>(),
+                ids[..index],
+                "Events before {id} must exclude the cursor"
+            );
+        }
 
-        // Give persistence thread time to write
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        let events_since_id1 = log.events_for_player_since(player, Some(id1));
-        assert_eq!(events_since_id1.len(), 2, "Should get events after id1");
-
-        let events_until_id3 = log.events_for_player_until(player, Some(id3));
-        assert_eq!(events_until_id3.len(), 2, "Should get events before id3");
+        for events in [
+            log.events_for_player_since(player, None),
+            log.events_for_player_until(player, None),
+        ] {
+            assert_eq!(
+                events.iter().map(extract_event_id).collect::<Vec<_>>(),
+                ids,
+                "An absent cursor must return the complete history"
+            );
+        }
     }
 
     #[test]
