@@ -1,6 +1,6 @@
 count	file	verb	kind	detail
-1	actor.moo	"get take steal grab" (any from this) owner: HACKER flags: "rd"	implicit-local	event
-1	actor.moo	"get take steal grab" (any from this) owner: HACKER flags: "rd"	implicit-local	msg
+1	actor.moo	"get take steal grab" (any from this) owner: ARCH_WIZARD flags: "rd"	implicit-local	event
+1	actor.moo	"get take steal grab" (any from this) owner: ARCH_WIZARD flags: "rd"	implicit-local	msg
 1	actor.moo	"pronoun_*" owner: ARCH_WIZARD	implicit-local	p
 1	actor.moo	"pronoun_*" owner: ARCH_WIZARD	implicit-local	ptype
 1	actor.moo	"pronoun_*" owner: ARCH_WIZARD	missing-docstring	Describe the contract before executable statements.
@@ -652,14 +652,14 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@create" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parent_obj
 1	features/builder_features.moo	"@create" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
 1	features/builder_features.moo	"@create" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	primary_name
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	idx
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_key
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	target
-1	features/builder_features.moo	"@del-message" (any any any) owner: HACKER flags: "rd"	implicit-local	target_name
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	idx
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_key
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_spec
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	sel
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target
+1	features/builder_features.moo	"@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_name
 1	features/builder_features.moo	"@describe" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
 1	features/builder_features.moo	"@describe" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	new_description
 1	features/builder_features.moo	"@describe" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
@@ -712,23 +712,23 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	session_id
 1	features/builder_features.moo	"@edit-description @edit-d" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	display_value
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	entries
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	header
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	idx
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	msg
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	obj_name
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	object_str
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	rows
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	table
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	target_spec
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	template_str
-1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"	implicit-local	value
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	display_value
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	entries
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	header
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	idx
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	msg
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	object_str
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	rows
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	sel
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	table
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_spec
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	template_str
+1	features/builder_features.moo	"@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"	implicit-local	value
 1	features/builder_features.moo	"@grant" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	cap
 1	features/builder_features.moo	"@grant" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	cap_list
 1	features/builder_features.moo	"@grant" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	category
@@ -742,17 +742,17 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@integrate" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
 1	features/builder_features.moo	"@integrate" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	success_message
 1	features/builder_features.moo	"@integrate" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	header
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	headers
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	msg_props
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	obj_name
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_value
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	rows
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	table_result
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: HACKER flags: "rd"	implicit-local	value_summary
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	header
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	headers
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	msg_props
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_value
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rows
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	table_result
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
+1	features/builder_features.moo	"@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	value_summary
 1	features/builder_features.moo	"@move" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	dest_loc
 1	features/builder_features.moo	"@move" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	dest_name
 1	features/builder_features.moo	"@move" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	is_player
@@ -819,17 +819,17 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@rename" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	old_name
 1	features/builder_features.moo	"@rename" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
 1	features/builder_features.moo	"@rename" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	header
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	headers
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	obj_name
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_value
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	rows
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	rule_expr
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	rule_props
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	table_result
-1	features/builder_features.moo	"@rules" (any none none) owner: HACKER flags: "rd"	implicit-local	target_obj
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	header
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	headers
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	obj_name
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_value
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rows
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rule_expr
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rule_props
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	table_result
+1	features/builder_features.moo	"@rules" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
 1	features/builder_features.moo	"@set-m*essage @setm" (any any any) owner: HACKER flags: "rd"	implicit-local	compiled_list
 1	features/builder_features.moo	"@set-m*essage @setm" (any any any) owner: HACKER flags: "rd"	implicit-local	error_msg
 1	features/builder_features.moo	"@set-m*essage @setm" (any any any) owner: HACKER flags: "rd"	implicit-local	message
@@ -883,15 +883,15 @@ count	file	verb	kind	detail
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	picbin
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	result
 1	features/builder_features.moo	"@set-thumbnail @thumbnail" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_obj
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	message
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	parsed
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_name
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	prop_spec
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	rule
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	rule_expr
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	sel
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	target
-1	features/builder_features.moo	"@show-rule" (any none none) owner: HACKER flags: "rd"	implicit-local	target_name
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	parsed
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_name
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	prop_spec
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rule
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	rule_expr
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	sel
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target
+1	features/builder_features.moo	"@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_name
 1	features/builder_features.moo	"@undig @remove-exit @delete-passage" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	area
 1	features/builder_features.moo	"@undig @remove-exit @delete-passage" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	area_cap
 1	features/builder_features.moo	"@undig @remove-exit @delete-passage" (any none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	area_target
@@ -3824,18 +3824,18 @@ count	file	verb	kind	detail
 1	utils/grant_utils.moo	format_grant_with_name owner: HACKER	implicit-local	target
 1	utils/grant_utils.moo	format_grant_with_name owner: HACKER	implicit-local	target_name
 1	utils/grant_utils.moo	format_grant_with_name owner: HACKER	implicit-local	target_str
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	cap_list
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	cap_strs
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	caps_part
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	caps_str
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	category
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	category_str
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	dot_idx
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	grant_str
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	paren_idx
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	rest
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	target
-1	utils/grant_utils.moo	parse_grant owner: HACKER	implicit-local	target_str
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	cap_list
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	cap_strs
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	caps_part
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	caps_str
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	category
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	category_str
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	dot_idx
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	grant_str
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	paren_idx
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	rest
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	target
+1	utils/grant_utils.moo	parse_grant owner: ARCH_WIZARD	implicit-local	target_str
 1	utils/grant_utils.moo	test_format_denial owner: HACKER	implicit-local	message
 1	utils/grant_utils.moo	test_format_grant owner: HACKER	implicit-local	result
 1	utils/grant_utils.moo	test_format_grant_with_name owner: HACKER	implicit-local	result
@@ -4305,11 +4305,11 @@ count	file	verb	kind	detail
 1	world/passage.moo	with_unlock_msg (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	props
 1	world/passage.moo	with_unlock_rule (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	props
 1	world/passage.moo	with_unlock_rule (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	rule
-1	world/room.moo	"`* to" (any any any) owner: HACKER flags: "rd"	implicit-local	event
-1	world/room.moo	"`* to" (any any any) owner: HACKER flags: "rd"	implicit-local	message
-1	world/room.moo	"`* to" (any any any) owner: HACKER flags: "rd"	implicit-local	space_idx
-1	world/room.moo	"`* to" (any any any) owner: HACKER flags: "rd"	implicit-local	target
-1	world/room.moo	"`* to" (any any any) owner: HACKER flags: "rd"	implicit-local	target_name
+1	world/room.moo	"`* to" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	event
+1	world/room.moo	"`* to" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	message
+1	world/room.moo	"`* to" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	space_idx
+1	world/room.moo	"`* to" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target
+1	world/room.moo	"`* to" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	target_name
 1	world/room.moo	"exits ways" (none none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	all_exits
 1	world/room.moo	"exits ways" (none none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	ambient_passages
 1	world/room.moo	"exits ways" (none none none) owner: ARCH_WIZARD flags: "rd"	implicit-local	area

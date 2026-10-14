@@ -263,3 +263,28 @@ not approval for new code.
 
 The shared checker is in `../tools/style-audit`. Do not duplicate its crate for Cowbell. Record
 baseline changes deliberately with `--write-baseline FILE`, then review the affected records.
+
+## Command text and object references
+
+Use `text:words()` for decoded words and `text:word_start()` for source positions. Both use the
+native `command_words()` scanner. `text:raw_words()` retains each word's quotes and escapes. Use
+source slices for descriptions, messages, conditions, and MOO code. Joining decoded words changes
+their contents.
+
+Use `$prog_utils:parse_target_spec(raw_reference)` for property selectors and
+`raw_reference:parse_verbref()` for verb references. Quoted dots and colons belong to the object's
+name. Keep the raw reference until these helpers have split it.
+
+Use `$match:match_object(reference, context)` for general references, including explicit IDs, system
+properties, players, and nearby names. It raises `E_INVARG` for missing or ambiguous names. Use
+`$match:resolve_in_scope(reference, scope)` when only objects in a supplied list are eligible. It
+returns one object, `$failed_match`, or `$ambiguous_match`. Literal IDs must belong to that scope.
+Use `$match:candidates_in_scope` when the caller needs the candidate list.
+
+Scope entries can be objects or `{object, names...}`. Plain objects contribute their name and
+aliases. Explicit scope names replace those defaults. Repeated entries retain their first position
+and combine explicit names. The command matcher, authoring tools, and completion choices use this
+same convention.
+
+Matching does not authorize an action. Keep the command's ownership, reachability, and operation
+checks, including checks after callbacks that can suspend.

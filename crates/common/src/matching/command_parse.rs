@@ -70,23 +70,21 @@ where
             _ => {}
         };
 
-        // Get word list
-        let words = util::parse_into_words(&command);
-        if words.is_empty() {
+        let scanned = util::command_words(&command);
+        let Some(first) = scanned.first() else {
             return Err(ParseCommandError::EmptyCommand);
-        }
-
-        // Split into verb and argument string
-        let mut parts = command.splitn(2, ' ');
-        let verb = parts.next().unwrap_or_default().into();
-        let argstr = parts.next().unwrap_or_default().to_string();
-
-        let words = util::parse_into_words(&argstr);
-
-        // Normal MOO command
-        // Find preposition, if any
-
-        let (prep_match, prep) = seek_preposition(&words);
+        };
+        let verb = command[first.bytes.clone()].into();
+        // Remove the separating character, retaining the rest of the argument exactly.
+        let tail = &command[first.bytes.end..];
+        let argstr = tail
+            .chars()
+            .next()
+            .map_or("", |ch| &tail[ch.len_utf8()..])
+            .to_string();
+        let tokens = util::command_words(&argstr);
+        let words: Vec<String> = tokens.iter().map(|word| word.text.clone()).collect();
+        let (prep_match, prep) = seek_preposition(&tokens);
 
         // Get direct object string
         let dobjstr = match prep_match {
@@ -160,14 +158,19 @@ where
 }
 // Match the earliest preposition, preferring the longest spelling at that position.
 // Token bounds keep every word of a multiword preposition out of the object strings.
-fn seek_preposition(words: &[String]) -> (Option<(usize, usize)>, PrepSpec) {
+pub fn seek_preposition(words: &[util::CommandWord]) -> (Option<(usize, usize)>, PrepSpec) {
     for (start, word) in words.iter().enumerate() {
-        let mut best = find_preposition_for_command(word).map(|prep| (1, prep));
+        if word.quoted {
+            continue;
+        }
+        let mut best = find_preposition_for_command(&word.text).map(|prep| (1, prep));
         for prep in all_prepositions() {
             for form in get_preposition_forms(prep) {
                 let mut length = 0;
                 let matches = form.split(' ').all(|part| {
-                    let matches = words.get(start + length).is_some_and(|word| word == part);
+                    let matches = words
+                        .get(start + length)
+                        .is_some_and(|word| !word.quoted && word.text.eq_ignore_ascii_case(part));
                     length += 1;
                     matches
                 });
@@ -196,6 +199,34 @@ mod tests {
             MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
         },
     };
+
+    #[test]
+    fn quoted_names_and_scanner_positions() {
+        let input = "\t\"é  rock\"\t\"\"  a\\ b";
+        let words = util::command_words(input);
+        assert_eq!(
+            words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>(),
+            ["é  rock", "", "a b"]
+        );
+        assert_eq!(words[0].chars, 1..10);
+        assert_eq!(&input[words[0].bytes.clone()], "\"é  rock\"");
+        assert!(words.iter().all(|word| word.quoted));
+        let parser = DefaultParseCommand::new();
+        let parsed = parser
+            .parse_command("look\tobj", &SimpleParseMatcher {})
+            .unwrap();
+        assert_eq!(parsed.verb.as_string(), "look");
+        assert_eq!(parsed.dobj, Some(Obj::mk_id(1)));
+        let parsed = parser
+            .parse_command("rename \"to\" to player", &SimpleParseMatcher {})
+            .unwrap();
+        assert_eq!(parsed.dobjstr.as_deref(), Some("to"));
+        assert_eq!(parsed.iobjstr.as_deref(), Some("player"));
+        let parsed = parser
+            .parse_command("#\"Dr. Moss\".name", &SimpleParseMatcher {})
+            .unwrap();
+        assert_eq!(parsed.verb.as_string(), "#\"Dr. Moss\".name");
+    }
 
     #[test]
     fn test_parse_into_words_simple() {
@@ -338,11 +369,7 @@ mod tests {
                 Some("on top of"),
                 Some("player"),
             ),
-            (
-                "test obj \"on top of\" player",
-                Some("on top of"),
-                Some("player"),
-            ),
+            ("test obj \"on top of\" player", None, None),
         ] {
             let parsed = parser
                 .parse_command(command, &SimpleParseMatcher {})

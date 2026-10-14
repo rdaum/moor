@@ -20,6 +20,27 @@ use moor_var::{E_ARGS, E_INVARG, E_TYPE, Variant, v_binary, v_int, v_list, v_str
 
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BfRet::Ret, BuiltinFunction, hash};
 
+/// Usage: `list command_words(str text)`
+/// Each entry is {decoded text, start, end, quoted}, with one-based inclusive character offsets.
+fn bf_command_words(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let input = bf_args.args[0].as_string().ok_or(BfErr::Code(E_TYPE))?;
+    let words = moor_common::util::command_words(input)
+        .into_iter()
+        .map(|word| {
+            v_list(&[
+                v_string(word.text),
+                v_int(word.chars.start as i64 + 1),
+                v_int(word.chars.end as i64),
+                bf_args.v_bool(word.quoted),
+            ])
+        })
+        .collect::<Vec<_>>();
+    Ok(Ret(v_list(&words)))
+}
+
 /// Usage: `str strsub(str subject, str what, str with [, bool case_matters])`
 /// Replaces all occurrences of 'what' in 'subject' with 'with'. Occurrences are found
 /// left to right and all substitutions happen simultaneously. By default, the search
@@ -504,6 +525,7 @@ fn bf_urldecode(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 pub(crate) fn register_bf_strings(builtins: &mut [BuiltinFunction]) {
+    builtins[offset_for_builtin("command_words")] = bf_command_words;
     builtins[offset_for_builtin("strsub")] = bf_strsub;
     builtins[offset_for_builtin("index")] = bf_index;
     builtins[offset_for_builtin("rindex")] = bf_rindex;

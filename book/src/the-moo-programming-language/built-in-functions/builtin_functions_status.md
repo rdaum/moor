@@ -42,6 +42,7 @@ open an issue on the [mooR GitHub issue tracker](https://github.com/timbran-proj
 | [`index`](strings.md#index)                     | &check;  |                                                                                                      |
 | [`rindex`](strings.md#rindex)                   | &check;  |                                                                                                      |
 | [`strcmp`](strings.md#strcmp)                   | &check;  |                                                                                                      |
+| [`command_words`](strings.md#command_words)     | &check;  | mooR extension. Command words and source positions.                                                  |
 | [`strsub`](strings.md#strsub)                   | &check;  |                                                                                                      |
 | [`salt`](crypto.md#salt)                        | &check;  | Generate a random crypto-secure salt for password. Not compatible with toast's function of same name |
 | [`binary_to_str`](strings.md#binary_to_str)     | &check;  |                                                                                                      |
@@ -104,7 +105,7 @@ open an issue on the [mooR GitHub issue tracker](https://github.com/timbran-proj
 | [`is_anonymous`](objects.md#is_anonymous)                                  | &check;  |                                                     |
 | [`is_uuobjid`](objects.md#is_uuobjid)                                      | &check;  |                                                     |
 | [`move`](objects.md#move)                                                  | &check;  |                                                     |
-| [`parse_command`](objects.md#parse_command)                                | &check;  | mooR extension. Wizard only.                        |
+| [`parse_command`](objects.md#parse_command)                                | &check;  | mooR extension.                                     |
 | [`find_command_verb`](objects.md#find_command_verb)                        | &check;  | mooR extension. Enables custom command dispatching. |
 | [`dispatch_command_verb`](objects.md#dispatch_command_verb)                | &check;  | mooR extension. Wizard only.                        |
 | [`object_metadata`](../../the-database/entity-metadata.md#object-metadata) | &check;  | mooR extension.                                     |

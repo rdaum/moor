@@ -314,7 +314,7 @@ rules/reaction.moo:_cancel_installation_timers
 rules/reaction.moo:_schedule
 rules/reaction.moo:_resume_timer
 world/passage.moo:check_unlock
-features/builder_features.moo:_author_words
+features/builder_features.moo:_author_tokens
 features/builder_features.moo:_author_text
 features/builder_features.moo:_author_object
 features/builder_features.moo:_author_type

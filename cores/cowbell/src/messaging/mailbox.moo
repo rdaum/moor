@@ -156,6 +156,11 @@ object MAILBOX [
       endif
       return;
     endif
+    "Literal IDs must not bypass the mailbox boundary, even if matching changes.";
+    if (target.location != this || !isa(target, $letter))
+      player:inform_current($event:mk_error(player, "I don't see that letter in the mailbox."));
+      return;
+    endif
     move(target, player);
     player:inform_current($event:mk_info(player, "You take ", target.name, " from the mailbox."));
   endverb

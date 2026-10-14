@@ -26,3 +26,29 @@
 > recycle(b);
 > return 1;
 1
+
+// Raw argument fields preserve authored text; offsets count characters, not UTF-8 bytes.
+; p = parse_command("describe \"é rock\" as She said \"hello\".  Twice.", {});
+> key = maphaskey(p, 'iobj_raw) ? 'iobj_raw | "iobj_raw";
+> span_key = maphaskey(p, 'iobj_span) ? 'iobj_span | "iobj_span";
+> arg_key = maphaskey(p, 'argstr) ? 'argstr | "argstr";
+> p[key] == "She said \"hello\".  Twice." || raise(E_INVARG, "raw argument text");
+> span = p[span_key];
+> p[arg_key][span[1]..span[2]] == p[key] || raise(E_INVARG, "raw argument positions");
+> return 1;
+1
+
+; words = command_words("\t\"é  rock\"\t\"\"  a\\ b");
+> words[1][1..3] == {"é  rock", 2, 10} || raise(E_INVARG, "unicode word positions");
+> words[2][1] == "" || raise(E_INVARG, "empty quoted word");
+> words[3][1] == "a b" || raise(E_INVARG, "escaped space");
+> words[1][4] && words[2][4] && words[3][4] || raise(E_INVARG, "quoted flags");
+> command_words("   ") == {} || raise(E_INVARG, "empty input");
+> return 1;
+1
+
+// Explicit mode reserves no word prefixes in object names.
+; return complex_matches("all keys", {"all keys", "keys"}, false, 0.0, false);
+{"all keys"}
+; return complex_matches("key", {"key", "key ring"}, false, 0.0, true);
+{"key", "key ring"}

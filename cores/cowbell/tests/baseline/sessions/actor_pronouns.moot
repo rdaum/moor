@@ -22,7 +22,7 @@ true
 % @set-pronouns Henri
 ~~Usage: @set-pronouns
 % @set-pronouns missingcat to he/him
-~~No actor found
+~~No object found
 % @create $thing named stone
 ~~Created
 % @set-pronouns stone to he/him

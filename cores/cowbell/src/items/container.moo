@@ -388,8 +388,8 @@ object CONTAINER [
     "Contribute visible contents to an explicitly targeted environmental search.";
     set_task_perms(caller_perms());
     const {actor, ?context = []} = args;
-    actor == player || raise(E_PERM);
-    return this:contents();
+    caller_perms() == actor || caller_perms().wizard || raise(E_PERM);
+    return this:can_view_contents(actor) ? this.contents | {};
   endmethod
 
   method look_self owner: ARCH_WIZARD

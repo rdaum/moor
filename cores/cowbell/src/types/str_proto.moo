@@ -430,64 +430,22 @@ object STR_PROTO [
   endmethod
 
   method parse_name_aliases owner: HACKER
-    "Parse name:alias,alias or name,alias,alias. Trim and deduplicate aliases.";
-    "Comma-separated entries support quoted commas and backslash escapes.";
+    "Parse name,alias,alias or name:alias,alias, respecting command quotes and escapes.";
     const {spec} = args;
-    typeof(spec) == TYPE_STR || raise(E_TYPE, "Specification must be a string");
-    const trimmed = spec:trim();
-    !trimmed && return {"", {}};
-    fn unquote(text)
-      const value = text:trim();
-      if (length(value) < 2 || value[1] != "\"" || value[$] != "\"")
-        return value;
-      endif
-      let result = "";
-      let i = 2;
-      const limit = length(value) - 1;
-      while (i <= limit)
-        if (value[i] == "\\" && i < limit)
-          i = i + 1;
-        endif
-        result = result + value[i];
-        i = i + 1;
-      endwhile
-      return result;
-    endfn
-    const colon_parts = this:to_list(trimmed, ":");
-    const use_colon = length(colon_parts) >= 2;
-    const alias_input = use_colon ? colon_parts[2] | trimmed;
-    let tokens = {};
-    let current = "";
-    let in_quotes = false;
-    let i = 1;
-    while (i <= length(alias_input))
-      const ch = alias_input[i];
-      if (ch == "\\" && i < length(alias_input))
-        current = current + alias_input[i + 1];
-        i = i + 2;
-        continue;
-      endif
-      if (ch == "\"")
-        in_quotes = !in_quotes;
-      elseif (!in_quotes && ch == ",")
-        tokens = {@tokens, current};
-        current = "";
-        i = i + 1;
-        continue;
-      endif
-      current = current + ch;
-      i = i + 1;
+    let rest = spec:trim();
+    let entries = {};
+    while (rest)
+      const separator = rest:unquoted_index(length(entries) ? "," | ",:");
+      const raw = separator ? rest[1..separator - 1] | rest;
+      entries = {@entries, raw:reference_text()};
+      rest = separator ? rest[separator + 1..$] | "";
     endwhile
-    tokens = {@tokens, current};
-    let primary = unquote(use_colon ? colon_parts[1] | tokens[1]);
-    if (!use_colon)
-      tokens = tokens[2..$];
-    endif
+    !entries && return {"", {}};
+    let primary = entries[1];
     let aliases = {};
-    for token in (tokens)
-      const alias = unquote(token);
-      if (alias && alias != primary)
-        aliases = setadd(aliases, alias);
+    for name in (entries[2..$])
+      if (name && name != primary)
+        aliases = setadd(aliases, name);
       endif
     endfor
     if (!primary && aliases)
@@ -539,68 +497,60 @@ object STR_PROTO [
   endmethod
 
   method word_start owner: HACKER
-    "Return 1-based {start, end} offsets for command words, including their quotes.";
-    let {rest} = args;
-    let wstart = match(rest, "[^ ]%|$")[1];
-    let wbefore = wstart - 1;
-    rest[1..wbefore] = "";
-    if (!rest)
-      return {};
-    endif
-    let quote = false;
-    let wslist = {};
-    let pattern = " +%|\\.?%|\"";
-    let char = 0;
-    while (true)
-      const m = match(rest, pattern);
-      if (!m)
-        break;
+    "Return 1-based inclusive source ranges, including quotes and backslash escapes.";
+    return {word[2..3] for word in (command_words(args[1]))};
+  endmethod
+
+  method raw_words owner: HACKER
+    "Return source words with their quotes and escapes intact.";
+    const {text} = args;
+    return {text[word[2]..word[3]] for word in (command_words(text))};
+  endmethod
+
+  method first_word owner: HACKER
+    "Return {decoded first word, untouched remainder}, or {} for empty input.";
+    const {text} = args;
+    const words = command_words(text);
+    !words && return {};
+    return {words[1][1], text[words[1][3] + 1..$]:trim()};
+  endmethod
+
+  method reference_text owner: HACKER
+    "Decode command quoting around a reference, preserving unquoted multiword names.";
+    const {text} = args;
+    return text:words():join(" ");
+  endmethod
+
+  method unquoted_index owner: HACKER
+    "Find the first character in delimiters outside command quotes and escapes.";
+    const {text, delimiters} = args;
+    let quoted = false;
+    let escaped = false;
+    for i in [1..length(text)]
+      const ch = text[i];
+      if (escaped)
+        escaped = false;
+      elseif (ch == "\\")
+        escaped = true;
+      elseif (ch == "\"")
+        quoted = !quoted;
+      elseif (!quoted && index(delimiters, ch))
+        return i;
       endif
-      char = rest[m[1]];
-      if (char == " ")
-        wslist = {@wslist, {wstart, wbefore + m[1] - 1}};
-        wstart = wbefore + m[2] + 1;
-      elseif (char == "\"")
-        quote = !quote;
-        pattern = quote ? "\\.?%|\"" | " +%|\\.?%|\"";
-      endif
-      rest[1..m[2]] = "";
-      wbefore = wbefore + m[2];
-    endwhile
-    return rest || char != " " ? {@wslist, {wstart, wbefore + length(rest)}} | wslist;
+    endfor
+    return 0;
+  endmethod
+
+  method raw_arguments owner: HACKER
+    "Return raw direct and indirect argument text, without matching or dispatch.";
+    const {text} = args;
+    const parsed = parse_command("command " + text, {});
+    return {parsed['dobj_raw], parsed['iobj_raw]};
   endmethod
 
   method words owner: HACKER
-    "Return command words, respecting quotes and backslash escapes.";
-    let {rest} = args;
-    rest[1..match(rest, "^ *")[2]] = "";
-    if (!rest)
-      return {};
-    endif
-    let quote = false;
-    let toklist = {};
-    let token = "";
-    let pattern = " +%|\\.?%|\"";
-    let char = 0;
-    while (true)
-      const m = match(rest, pattern);
-      if (!m)
-        break;
-      endif
-      char = rest[m[1]];
-      token = token + rest[1..m[1] - 1];
-      if (char == " ")
-        toklist = {@toklist, token};
-        token = "";
-      elseif (char == "\"")
-        quote = !quote;
-        pattern = quote ? "\\.?%|\"" | " +%|\\.?%|\"";
-      elseif (m[1] < m[2])
-        token = token + rest[m[2]];
-      endif
-      rest[1..m[2]] = "";
-    endwhile
-    return rest || char != " " ? {@toklist, token + rest} | toklist;
+    "Return decoded command words using the native command scanner.";
+    return {word[1] for word in (command_words(args[1]))};
   endmethod
 
   method append_to_paragraph owner: HACKER
@@ -614,12 +564,12 @@ object STR_PROTO [
   endmethod
 
   method parse_verbref owner: HACKER
-    "Split object:verb syntax without resolving the object; matching reports missing references.";
+    "Split object:verb at an unquoted colon; keep object quoting for the matcher.";
     const {reference} = args;
-    const colon = index(reference, ":");
+    const colon = reference:unquoted_index(":");
     colon || return false;
     const object = reference[1..colon - 1]:trim();
-    const verbname = reference[colon + 1..$]:trim();
+    const verbname = reference[colon + 1..$]:reference_text();
     object && verbname || return false;
     return {object, verbname};
   endmethod
@@ -851,9 +801,10 @@ object STR_PROTO [
     return s:indefinite_article() + " " + s;
   endmethod
 
-  method parse_curie owner: HACKER
+  method parse_curie owner: ARCH_WIZARD
     "Resolve oid:N, uuid:ID, sysobj:name.path, or match(\"name\") to an object.";
     "The optional context defaults to player. Return false when parsing fails.";
+    set_task_perms(caller_perms());
     const {curie_str, ?context = player} = args;
     typeof(curie_str) == TYPE_STR || raise(E_TYPE, "CURIE must be a string");
     if (curie_str:starts_with("oid:"))

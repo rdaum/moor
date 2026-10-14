@@ -1,5 +1,29 @@
 ## String Manipulation Functions
 
+### `command_words`
+
+```moo
+list command_words(str text)
+```
+
+Split command text with the same scanner that the command parser uses. Each result contains
+`{text, start, end, quoted}`:
+
+- `text` is the decoded word. Quotes are removed, and a backslash escapes the next character.
+- `start` and `end` are one-based, inclusive character positions in the original string.
+- `quoted` is true when the word contains quotes or backslash escapes.
+
+Whitespace separates words outside quotes. Empty quoted words remain in the result. An unfinished
+quote extends to the end of the input. A final backslash is ignored in the decoded text.
+
+```moo
+command_words("one \"two words\" \"\"")
+// { {"one", 1, 3, false}, {"two words", 5, 15, true}, {"", 17, 18, true} }
+```
+
+Use the positions to retain source text, such as a description or a MOO expression. Do not rebuild
+that text by joining decoded words: doing so removes quotes, escapes, and repeated spaces.
+
 ### `strsub`
 
 Replaces all occurrences of `what` in `subject` with `with`, performing string substitution.

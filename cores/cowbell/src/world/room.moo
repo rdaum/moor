@@ -109,9 +109,11 @@ object ROOM [
     this:announce(player:mk_say_event(argstr));
   endverb
 
-  verb "`* to" (any any any) owner: HACKER flags: "rd"
+  verb "`* to" (any any any) owner: ARCH_WIZARD flags: "rd"
     "Directed say - say something to a specific person";
     "Usage: `target message  OR  to target message";
+    caller == player || raise(E_PERM);
+    set_task_perms(player);
     if (verb[1] == "`")
       "Backtick syntax: target is in verb[2..]";
       if (length(verb) < 2)
@@ -126,14 +128,7 @@ object ROOM [
         player:inform_current($event:mk_error(player, "Usage: to <target> <message>"));
         return;
       endif
-      space_idx = index(argstr, " ");
-      if (space_idx > 0)
-        target_name = argstr[1..space_idx - 1];
-        message = argstr[space_idx + 1..$]:trim();
-      else
-        target_name = argstr;
-        message = "";
-      endif
+      {target_name, message} = argstr:first_word();
     endif
     if (!message)
       player:inform_current($event:mk_error(player, "Say what to ", target_name, "?"));

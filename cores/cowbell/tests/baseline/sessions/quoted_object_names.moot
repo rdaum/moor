@@ -31,7 +31,7 @@ true
 ~~Set message template
 ; return $sub_utils:decompile($match:match_object("pet rock", player).notice_msg);
 "She said \"hello\".  Twice."
-% @set-message "pet rock.notice_msg" A replacement.
+% @set-message "pet rock".notice_msg A replacement.
 ~~Set message template
 % @get-message "pet rock".notice_msg
 ~~notice_msg = A replacement.

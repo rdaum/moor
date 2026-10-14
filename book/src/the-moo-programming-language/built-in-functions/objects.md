@@ -892,6 +892,20 @@ results.
 | `iobj`           | object        | Indirect object found, or `#-1` if none                               |
 | `ambiguous_iobj` | list          | List of objects if iobj was ambiguous, empty list otherwise           |
 
+The map also contains `dobj_raw` and `iobj_raw`, which retain each argument's original quotes,
+escapes, and internal whitespace. `dobj_span` and `iobj_span` contain its one-based, inclusive
+character positions within `argstr`. An absent argument has raw text `""` and span `{0, 0}`. The
+existing `dobjstr` and `iobjstr` fields contain decoded words joined with single spaces.
+
+Quoted or escaped words cannot act as prepositions. For example, `rename "to" to platform` parses
+`"to"` as the direct object and the following `to` as the preposition. Tabs and other whitespace can
+separate the verb from its arguments.
+
+Repeated scope entries keep their first position. Explicit names from repeated entries combine and
+replace the object's usual name and aliases. Entries without explicit names use both its name and
+aliases. A literal object ID can still resolve outside the supplied environment: this parser
+performs lookup, not an authorization check. Commands must check access before acting.
+
 **Notes:**
 
 - Object matching searches through the provided environment list
@@ -901,8 +915,8 @@ results.
 - Multiple matching objects are reported in `ambiguous_dobj` or `ambiguous_iobj`
 - The `complex` parameter enables the enhanced matching system with ordinals and fuzzy matching
 - Fuzzy matching uses Damerau-Levenshtein distance to tolerate typos (e.g., "lammp" matches "lamp")
-- This is a wizard-only function when called directly; see [`find_command_verb`](#find_command_verb)
-  for finding actual verbs
+- This function parses and matches without dispatching. See
+  [`find_command_verb`](#find_command_verb) for finding actual verbs
 
 **Example:**
 

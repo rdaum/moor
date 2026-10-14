@@ -527,6 +527,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             false,
         ),
         mk_builtin("encode_binary", Q(0), U, vec![], false),
+        mk_builtin("command_words", Q(1), Q(1), vec![Typed(TYPE_STR)], true),
     ]);
     // IMPORTANT: ALWAYS APPEND NEW BUILTINS ABOVE THIS LINE
     pad_group(&mut builtins, start, "string/binary/encoding");
@@ -619,8 +620,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "complex_matches",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_INT)],
+            Q(5),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Any, AnyNum, Any],
             true,
         ),
         mk_builtin(
@@ -767,8 +768,14 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "parse_command",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_BOOL)],
+            Q(5),
+            vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_LIST),
+                Typed(TYPE_BOOL),
+                Typed(TYPE_FLOAT),
+                Typed(TYPE_OBJ),
+            ],
             true,
         ),
         mk_builtin(

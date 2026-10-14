@@ -598,7 +598,10 @@ object HEADLESS_WORLD_SCENARIOS
       const middle = player:command_input_context("fit tok", "en with " + tostr(alpha));
       $test_utils:assert_eq(middle["query"], "token", "cursor in a word identifies the whole argument");
       $test_utils:assert_eq(middle["after"], " with " + tostr(alpha), "bound counterpart survives unchanged");
-      $test_utils:assert_eq(player:command_input_context("fit two  tok", "ens with " + tostr(alpha)), [], "normalized ranges are not guessed");
+      const spaced = player:command_input_context("fit two  tok", "ens with " + tostr(alpha));
+      $test_utils:assert_eq(spaced["query"], "two  tokens", "completion retains internal spaces");
+      const quoted = player:command_input_context("fit \"two tok", "ens\" with " + tostr(alpha));
+      $test_utils:assert_eq(quoted["query"], "\"two tokens\"", "completion retains quotes");
       const filtered = player:suggestions("inventory", "token", $match:input_context("polish {input}"));
       $test_utils:assert_eq({row["value"] for row in (filtered["items"])}, {tostr(alpha)}, "argspec matcher excludes objects without the command");
       $test_utils:assert_eq(player:suggestions("inventory", "token", $match:input_context("polish {input} with " + tostr(box)))["items"], {}, "preposition mismatch is not suggested");

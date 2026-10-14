@@ -874,7 +874,6 @@ object PLAYER [
       endif
       env = this:help_environment();
       sources = {};
-      keys = {};
       for o in (env)
         if (!o.r)
           continue;
@@ -886,22 +885,15 @@ object PLAYER [
         if (!name)
           continue;
         endif
-        al = `o.aliases ! ANY => {}';
-        key_list = {name};
-        if (typeof(al) == TYPE_LIST)
-          for a in (al)
-            if (typeof(a) == TYPE_STR && a)
-              key_list = {@key_list, a};
-            endif
-          endfor
-        endif
         sources = {@sources, o};
-        keys = {@keys, key_list};
       endfor
       if (!sources)
         return this:inform_current($event:mk_error(this, "No help sources are available here."):with_audience('utility));
       endif
-      src = complex_match(source_query, sources, keys, 0.3);
+      src = $match:resolve_in_scope(source_query, sources);
+      if (src == $ambiguous_match)
+        return this:inform_current($event:mk_error(this, "More than one help source matches. Use a more specific name."));
+      endif
       if (src == $failed_match)
         names = {};
         for s in (sources)
@@ -1046,9 +1038,11 @@ object PLAYER [
             continue;
           endif
           sources = {@sources, o};
-          keys = {@keys, {name}};
         endfor
-        src = complex_match(source_scope, sources, keys, 0.3);
+        src = $match:resolve_in_scope(source_scope, sources);
+        if (src == $ambiguous_match)
+          return this:inform_current($event:mk_error(this, "More than one help source matches. Use a more specific name."));
+        endif
         if (src == $failed_match)
           return this:inform_current($event:mk_error(this, "No help source matches '" + source_scope + "'. Try: ", $format.code:inline("help source <source>")):with_audience('utility));
         endif
@@ -1126,20 +1120,13 @@ object PLAYER [
           if (!name)
             continue;
           endif
-          al = `obj.aliases ! ANY => {}';
-          key_list = {name};
-          if (typeof(al) == TYPE_LIST)
-            for a in (al)
-              if (typeof(a) == TYPE_STR && a)
-                key_list = {@key_list, a};
-              endif
-            endfor
-          endif
           final_targets = {@final_targets, obj};
-          keys = {@keys, key_list};
         endfor
         if (final_targets)
-          target_obj = complex_match(query, final_targets, keys, 0.3);
+          target_obj = $match:resolve_in_scope(query, final_targets);
+          if (target_obj == $ambiguous_match)
+            return this:inform_current($event:mk_error(this, "More than one object matches. Use a more specific name."));
+          endif
         endif
       endif
       if (valid(target_obj))
@@ -1505,13 +1492,11 @@ object PLAYER [
     const parsed = parse_command(probe, {}, false);
     const slot = index(parsed['dobjstr], marker) ? "dobj" | index(parsed['iobjstr], marker) ? "iobj" | "";
     !length(slot) && return [];
-    const argument = parsed[slot == "dobj" ? 'dobjstr | 'iobjstr];
-    const start = index(probe, argument);
-    "Do not guess offsets after parser normalization of quotes, escapes, or repeated whitespace.";
-    !start && return [];
-    const before = probe[1..start - 1];
-    const after = probe[start + length(argument)..$];
-    "The exact raw slice must round-trip; otherwise leave ordinary text editing alone.";
+    const argument = parsed[slot == "dobj" ? 'dobj_raw | 'iobj_raw];
+    const span = parsed[slot == "dobj" ? 'dobj_span | 'iobj_span];
+    const arg_start = length(probe) - length(parsed['argstr]);
+    const before = probe[1..arg_start + span[1] - 1];
+    const after = probe[arg_start + span[2] + 1..$];
     const query = strsub(argument, marker, "");
     before + query + after == command || return [];
     const template = before + "{input}" + after;
@@ -2165,10 +2150,13 @@ object PLAYER [
     "If it didn't resolve, attempt to match against existing gag lists.";
     match = 0;
     try
-      match = complex_match(ref, this.gaglist);
+      match = $match:resolve_in_scope(ref, this.gaglist);
     except e (ANY)
       match = $failed_match;
     endtry
+    if (match == $ambiguous_match)
+      return this:inform_current($event:mk_error(this, "More than one gagged object matches. Use a more specific name."));
+    endif
     if (match != $failed_match)
       gl = this.gaglist;
       new = {};
@@ -2182,10 +2170,13 @@ object PLAYER [
       return this:listgag();
     endif
     try
-      match = complex_match(ref, this.object_gaglist);
+      match = $match:resolve_in_scope(ref, this.object_gaglist);
     except e (ANY)
       match = $failed_match;
     endtry
+    if (match == $ambiguous_match)
+      return this:inform_current($event:mk_error(this, "More than one gagged object matches. Use a more specific name."));
+    endif
     if (match != $failed_match)
       ogl = this.object_gaglist;
       new = {};
@@ -2489,7 +2480,6 @@ object PLAYER [
     endif
     "Build list of rooms and their names for matching";
     targets = {};
-    keys = {};
     for room in (area:rooms_from(current_room, false))
       if (!valid(room) || !respond_to(room, 'name))
         continue;
@@ -2499,33 +2489,11 @@ object PLAYER [
         continue;
       endif
       targets = {@targets, room};
-      room_aliases = `room:aliases() ! ANY => {}';
-      room_keys = {room_name, @room_aliases};
-      keys = {@keys, room_keys};
     endfor
-    "Use complex_match with fuzzy matching";
-    match_result = complex_match(dest_str, targets, keys, 0.5);
+    "Use the same scope matcher as other object commands.";
+    match_result = $match:resolve_in_scope(dest_str, targets);
     if (match_result == $ambiguous_match)
-      candidates = {};
-      for i in [1..length(targets)]
-        room = targets[i];
-        room_name = `room:name() ! ANY => ""';
-        if (room_name && (index(room_name, dest_str) || index(dest_str, room_name)))
-          if (!(room_name in candidates))
-            candidates = {@candidates, room_name};
-          endif
-          continue;
-        endif
-        room_keys = keys[i];
-        for k in (room_keys)
-          if (typeof(k) == TYPE_STR && k && (index(k, dest_str) || index(dest_str, k)))
-            if (!(room_name in candidates))
-              candidates = {@candidates, room_name};
-            endif
-            break;
-          endif
-        endfor
-      endfor
+      candidates = {room.name for room in ($match:candidates_in_scope(dest_str, targets))};
       if (length(candidates) > 0)
         max = length(candidates) < 5 ? length(candidates) | 5;
         hint = " Try one of: " + candidates[1..max]:join(", ") + ".";

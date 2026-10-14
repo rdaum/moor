@@ -287,7 +287,16 @@ pub fn complex_match_strings_with_fuzzy_threshold(
     strings: &[Var],
     fuzzy_threshold: f64,
 ) -> ComplexMatchResult<Var> {
-    let (ordinal, subject) = parse_input_token(token);
+    // A literal name such as "second floor" takes precedence over an ordinal selector.
+    let (ordinal, subject) = if strings.iter().any(|value| {
+        value
+            .as_string()
+            .is_some_and(|name| name.to_lowercase() == token.to_lowercase())
+    }) {
+        (0, token.to_string())
+    } else {
+        parse_input_token(token)
+    };
 
     if subject.is_empty() {
         return ComplexMatchResult::NoMatch;
@@ -370,57 +379,11 @@ pub fn complex_match_strings_with_fuzzy_threshold(
 /// specific match as a single-element list. Otherwise returns all matches
 /// from the first non-empty tier (exact > prefix > substring > fuzzy).
 pub fn complex_match_strings_all(token: &str, strings: &[Var], fuzzy_threshold: f64) -> Vec<Var> {
-    let (ordinal, subject) = parse_input_token(token);
-
-    if subject.is_empty() {
-        return Vec::new();
+    match complex_match_strings_with_fuzzy_threshold(token, strings, fuzzy_threshold) {
+        ComplexMatchResult::NoMatch => Vec::new(),
+        ComplexMatchResult::Single(value) => vec![value],
+        ComplexMatchResult::Multiple(values) => values,
     }
-
-    let mut exact_matches = Vec::new();
-    let mut start_matches = Vec::new();
-    let mut contain_matches = Vec::new();
-    let mut fuzzy_matches = Vec::new();
-
-    let subject_lower = subject.to_lowercase();
-    let max_distance = (fuzzy_threshold > 0.0)
-        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
-
-    for string_var in strings.iter() {
-        let Some(string_val) = string_var.as_string() else {
-            continue;
-        };
-
-        match classify_match(&subject_lower, string_val, max_distance) {
-            MatchClass::Exact => exact_matches.push(string_var.clone()),
-            MatchClass::Prefix => start_matches.push(string_var.clone()),
-            MatchClass::Contains => contain_matches.push(string_var.clone()),
-            MatchClass::Fuzzy => fuzzy_matches.push(string_var.clone()),
-            MatchClass::None => {}
-        }
-    }
-
-    // Get all matches from the best non-empty tier
-    let matches = if !exact_matches.is_empty() {
-        exact_matches
-    } else if !start_matches.is_empty() {
-        start_matches
-    } else if !contain_matches.is_empty() {
-        contain_matches
-    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
-        fuzzy_matches
-    } else {
-        return Vec::new();
-    };
-
-    // If ordinal specified, return only that match (as single-element list)
-    if ordinal > 0 {
-        if ordinal <= matches.len() as i64 {
-            return vec![matches[(ordinal - 1) as usize].clone()];
-        }
-        return Vec::new(); // Ordinal out of range
-    }
-
-    matches
 }
 
 /// Return all matches from ALL tiers concatenated in priority order.
@@ -503,7 +466,15 @@ pub fn complex_match_objects_keys_with_fuzzy_threshold(
     keys: &[Var],
     fuzzy_threshold: f64,
 ) -> ComplexMatchResult<Var> {
-    let (ordinal, subject) = parse_input_token(token);
+    // A literal name such as "second floor" takes precedence over an ordinal selector.
+    let (ordinal, subject) = if keys
+        .iter()
+        .any(|key| classify_key_set(key, &token.to_lowercase(), None) == Some(MatchClass::Exact))
+    {
+        (0, token.to_string())
+    } else {
+        parse_input_token(token)
+    };
 
     if subject.is_empty() || objects.is_empty() || keys.is_empty() {
         return ComplexMatchResult::NoMatch;
@@ -598,64 +569,11 @@ pub fn complex_match_objects_keys_all(
     keys: &[Var],
     fuzzy_threshold: f64,
 ) -> Vec<Var> {
-    let (ordinal, subject) = parse_input_token(token);
-
-    if subject.is_empty() || objects.is_empty() || keys.is_empty() {
-        return Vec::new();
+    match complex_match_objects_keys_with_fuzzy_threshold(token, objects, keys, fuzzy_threshold) {
+        ComplexMatchResult::NoMatch => Vec::new(),
+        ComplexMatchResult::Single(value) => vec![value],
+        ComplexMatchResult::Multiple(values) => values,
     }
-
-    let mut exact_matches = Vec::new();
-    let mut start_matches = Vec::new();
-    let mut contain_matches = Vec::new();
-    let mut fuzzy_matches = Vec::new();
-
-    let subject_lower = subject.to_lowercase();
-    let max_distance = (fuzzy_threshold > 0.0)
-        .then(|| (subject_lower.len() as f64 * fuzzy_threshold).ceil() as usize);
-
-    // Match against keys, return corresponding objects
-    for (idx, key_set) in keys.iter().enumerate() {
-        if idx >= objects.len() {
-            break;
-        }
-
-        let obj_val = &objects[idx];
-
-        let Some(classification) = classify_key_set(key_set, &subject_lower, max_distance) else {
-            continue;
-        };
-
-        match classification {
-            MatchClass::Exact => exact_matches.push(obj_val.clone()),
-            MatchClass::Prefix => start_matches.push(obj_val.clone()),
-            MatchClass::Contains => contain_matches.push(obj_val.clone()),
-            MatchClass::Fuzzy => fuzzy_matches.push(obj_val.clone()),
-            MatchClass::None => {}
-        }
-    }
-
-    // Get all matches from the best non-empty tier
-    let matches = if !exact_matches.is_empty() {
-        exact_matches
-    } else if !start_matches.is_empty() {
-        start_matches
-    } else if !contain_matches.is_empty() {
-        contain_matches
-    } else if fuzzy_threshold > 0.0 && !fuzzy_matches.is_empty() {
-        fuzzy_matches
-    } else {
-        return Vec::new();
-    };
-
-    // If ordinal specified, return only that match (as single-element list)
-    if ordinal > 0 {
-        if ordinal <= matches.len() as i64 {
-            return vec![matches[(ordinal - 1) as usize].clone()];
-        }
-        return Vec::new(); // Ordinal out of range
-    }
-
-    matches
 }
 
 /// Return all matches from ALL tiers when matching with keys.
@@ -720,6 +638,26 @@ pub fn complex_match_objects_keys_all_tiers(
 mod tests {
     use super::*;
     use moor_var::{v_int, v_list, v_str};
+
+    #[test]
+    fn literal_ordinal_names_and_candidate_parity() {
+        let strings = vec![v_str("second floor"), v_str("first floor")];
+        assert_eq!(
+            complex_match_strings_all("second floor", &strings, 0.0),
+            vec![strings[0].clone()]
+        );
+        let objects = vec![v_str("a"), v_str("b")];
+        let keys = vec![v_list(&[v_str("key")]), v_list(&[v_str("key ring")])];
+        assert_eq!(
+            complex_match_objects_keys_all("second key", &objects, &keys, 0.0),
+            vec![objects[1].clone()]
+        );
+        let strings = vec![v_str("key"), v_str("key ring")];
+        assert_eq!(
+            complex_match_strings_all("second key", &strings, 0.0),
+            vec![strings[1].clone()]
+        );
+    }
 
     #[test]
     fn test_parse_ordinal_words() {

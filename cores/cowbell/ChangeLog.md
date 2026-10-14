@@ -183,11 +183,21 @@ Cowbell entries.
 
 ### Fixed
 
+- Mailbox retrieval cannot take an object outside the mailbox by its identifier. It accepts only
+  letters currently in that mailbox.
+- Object lookup uses the command's visible scope and handles aliases and ambiguity consistently.
+  Scoped lookups require membership even for identifiers. Repeated scope entries do not create
+  duplicate candidates.
+- Authoring commands preserve quoted punctuation in object names and retain quotes and spacing in
+  descriptions and property values. `#"Dr. Moss".name` and quoted names such as `"to"` work. Command
+  parsing and core word helpers now share whitespace, quote, and escape handling.
+
 - Quoted object names work with `#` and `@verb`. Message commands and `@property` preserve the text
   after a quoted object reference, including quotes within message text.
 
 - `#` preserves numbered object references and rejects ambiguous names instead of choosing an
   arbitrary match. Invalid expressions, denied operations, and failed lookups report command errors.
+  Property assignments accept `=` with or without surrounding spaces.
 
 - `@move` works for ordinary objects and NPCs instead of failing on a missing player property.
 - Item entry and exit reactions on characters use the surrounding room, so their messages are

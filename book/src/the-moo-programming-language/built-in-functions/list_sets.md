@@ -425,11 +425,19 @@ This function is particularly useful for implementing sophisticated object match
 Returns all matches from the best (highest priority) non-empty tier as a list.
 
 ```
-list complex_matches(STR token, LIST targets [, LIST keys] [, NUM fuzzy_threshold])
+list complex_matches(STR token, LIST targets [, LIST keys [, NUM fuzzy_threshold [, BOOL all_tiers]]])
 ```
 
 Unlike `complex_match()` which returns a single match (or uses ordinals to select one),
 `complex_matches()` returns all matching targets from the highest-priority non-empty tier.
+
+Both functions select ordinals across all match tiers in priority order. For example,
+`complex_matches("second key", {"key", "key ring"}, false, 0.0)` returns `{"key ring"}`. An exact
+full name takes precedence over ordinal syntax: `"second floor"` matches that name before the parser
+tries to interpret it as the second match for `"floor"`.
+
+For object matching, supply explicit keys containing each object's name and aliases. The
+two-argument form of `complex_matches` searches strings; it does not read object names.
 
 #### Arguments
 
@@ -447,6 +455,11 @@ Unlike `complex_match()` which returns a single match (or uses ordinals to selec
 - If an ordinal is specified, returns only the Nth match as a single-element list
 - Returns an empty list `{}` when no matches are found (or ordinal is out of range)
 - Tier priority: exact > prefix > substring > fuzzy
+
+The optional fifth argument selects the search mode explicitly: `false` returns the best tier, and
+`true` returns every tier. In either case, the token is a name, so `all keys` can match an object
+named `all keys`. Use this form for object lookup. When the fifth argument is omitted, the prefix
+syntax described below remains available.
 
 #### All-tiers prefix
 

@@ -1531,7 +1531,8 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     for env_entry in environment_list.iter() {
         // Handle simple object entries
         if let Some(obj) = env_entry.as_object() {
-            if name_map.insert(obj, Vec::new()).is_none() {
+            if let std::collections::hash_map::Entry::Vacant(entry) = name_map.entry(obj) {
+                entry.insert(Vec::<String>::new());
                 object_order.push(obj);
             }
             continue;
@@ -1576,8 +1577,14 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             names.push(name_str.to_string());
         }
 
-        if name_map.insert(obj, names).is_none() {
+        let stored_names = name_map.entry(obj).or_insert_with(|| {
             object_order.push(obj);
+            Vec::new()
+        });
+        for name in names {
+            if !name.is_empty() && !stored_names.contains(&name) {
+                stored_names.push(name);
+            }
         }
     }
     let env = ListMatchEnvironment::new(
@@ -1618,6 +1625,31 @@ fn bf_parse_command(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     result_map.push((use_sym_or_str("verb"), v_str(parsed.verb.as_str())));
     result_map.push((use_sym_or_str("argstr"), v_str(&parsed.argstr)));
     result_map.push((use_sym_or_str("args"), v_list(&parsed.args)));
+    let tokens = moor_common::util::command_words(&parsed.argstr);
+    let (prep_range, _) = moor_common::matching::command_parse::seek_preposition(&tokens);
+    let direct_end = prep_range.map_or(tokens.len(), |(start, _)| start);
+    let indirect_start = prep_range.map_or(tokens.len(), |(_, end)| end);
+    for (raw_key, span_key, range) in [
+        ("dobj_raw", "dobj_span", 0..direct_end),
+        ("iobj_raw", "iobj_span", indirect_start..tokens.len()),
+    ] {
+        let (raw, start, end) = if range.is_empty() {
+            ("", 0, 0)
+        } else {
+            let first = &tokens[range.start];
+            let last = &tokens[range.end - 1];
+            (
+                &parsed.argstr[first.bytes.start..last.bytes.end],
+                first.chars.start + 1,
+                last.chars.end,
+            )
+        };
+        result_map.push((use_sym_or_str(raw_key), v_str(raw)));
+        result_map.push((
+            use_sym_or_str(span_key),
+            v_list(&[v_int(start as i64), v_int(end as i64)]),
+        ));
+    }
 
     // dobjstr: string or ""
     result_map.push((

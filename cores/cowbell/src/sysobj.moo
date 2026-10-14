@@ -298,38 +298,51 @@ object SYSOBJ [
     else
       iobj_candidates = {pc['iobj]};
     endif
-    for dobj in (dobj_candidates)
-      for iobj in (iobj_candidates)
-        test_pc = pc;
-        test_pc['dobj] = dobj;
-        test_pc['iobj] = iobj;
-        vm_matches = find_command_verb(test_pc, command_env);
-        if (vm_matches)
-          for m in (vm_matches)
-            {target, verbspec} = m;
-            {def, flags, verbnames, v} = verbspec;
-            try
-              suspend(0);
-              dispatch_command_verb(target, v, test_pc);
-              return true;
-            except e (ANY)
-              "Command verb threw an error - report it to the player";
-              if (player.programmer || player.wizard)
-                traceback = {"Command failed: " + toliteral(e[2]) + ":"};
-                for tb in (e[4])
-                  traceback = {@traceback, tostr("... called from ", tb[4], ":", tb[2], tb[4] != tb[1] ? tostr(" (this == ", tb[1], ")") | "", ", line ", tb[6])};
-                endfor
-                traceback = {@traceback, "(End of traceback)"};
-                player:inform_current($event:mk_error(player, $format.code:mk(traceback)):with_metadata('command_exception, true));
-              else
-                player:inform_current($event:mk_error(player, "Something went wrong while processing your command. If this keeps happening, please let a wizard know what you were trying to do."):with_metadata('command_exception, true));
-              endif
-              return true;
-            endtry
-          endfor
-        endif
+    "An ambient verb accepting any object can handle text or report its own ambiguity.";
+    let choices = find_command_verb(pc, command_env);
+    let selected_pc = pc;
+    if (!choices)
+      let viable = {};
+      for candidate_dobj in (dobj_candidates)
+        for candidate_iobj in (iobj_candidates)
+          test_pc = pc;
+          test_pc['dobj] = candidate_dobj;
+          test_pc['iobj] = candidate_iobj;
+          const matches = find_command_verb(test_pc, command_env);
+          matches && (viable = {@viable, {test_pc, matches[1]}});
+        endfor
       endfor
-    endfor
+      if (length(viable) > 1)
+        player:inform_current($event:mk_error(player,
+          "Which one do you mean? Use a more specific name or an object number."));
+        return true;
+      elseif (viable)
+        selected_pc = viable[1][1];
+        choices = {viable[1][2]};
+      endif
+    endif
+    if (choices)
+      {target, verbspec} = choices[1];
+      {def, flags, verbnames, v} = verbspec;
+      try
+        suspend(0);
+        dispatch_command_verb(target, v, selected_pc);
+        return true;
+      except e (ANY)
+        "Command verb threw an error - report it to the player";
+        if (player.programmer || player.wizard)
+          traceback = {"Command failed: " + toliteral(e[2]) + ":"};
+          for tb in (e[4])
+            traceback = {@traceback, tostr("... called from ", tb[4], ":", tb[2], tb[4] != tb[1] ? tostr(" (this == ", tb[1], ")") | "", ", line ", tb[6])};
+          endfor
+          traceback = {@traceback, "(End of traceback)"};
+          player:inform_current($event:mk_error(player, $format.code:mk(traceback)):with_metadata('command_exception, true));
+        else
+          player:inform_current($event:mk_error(player, "Something went wrong while processing your command. If this keeps happening, please let a wizard know what you were trying to do."):with_metadata('command_exception, true));
+        endif
+        return true;
+      endtry
+    endif
     "Dispatch any unmatched action out to the room for potential special handling (furniture, passages, etc.)";
     set_task_perms(player);
     suspend(0);

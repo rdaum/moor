@@ -1279,7 +1279,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// Usage: `list complex_matches(str token, list targets [, list keys] [, num fuzzy_threshold])`
+/// Usage: `list complex_matches(str token, list targets [, list keys [, num fuzzy_threshold [, bool all_tiers]]])`
 /// Returns all matches from the best (highest priority) tier as a list.
 /// If no matches are found, returns an empty list.
 /// Keys can be a list of strings (one per target) or a list of lists of strings (multiple per target).
@@ -1288,7 +1288,7 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 /// (exact, prefix, contains, fuzzy) in that order, rather than just the best tier.
 /// If the token is exactly "all" or "*." with no subject, it is treated as a literal.
 fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 5 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -1301,8 +1301,18 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    // Check for "all " or "*." prefix to return all tiers
-    let all_tiers_subject = parse_all_tiers_prefix(token);
+    // An explicit mode treats the token as a name, including a leading "all ".
+    // Omitted mode retains the original prefix syntax.
+    let all_tiers_subject = if bf_args.args.len() < 5 {
+        parse_all_tiers_prefix(token)
+    } else {
+        None
+    };
+    let all_tiers = if bf_args.args.len() == 5 {
+        bf_args.args[4].is_true()
+    } else {
+        all_tiers_subject.is_some()
+    };
     let effective_token = all_tiers_subject.as_deref().unwrap_or(token);
 
     // Parse arguments: token, targets, [keys], [fuzzy_threshold]
@@ -1344,7 +1354,7 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_INVARG));
         }
 
-        let matches = if all_tiers_subject.is_some() {
+        let matches = if all_tiers {
             complex_match_objects_keys_all_tiers(
                 effective_token,
                 &target_vars,
@@ -1359,7 +1369,7 @@ fn bf_complex_matches(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // No keys - match against targets directly
     let candidate_vars: Vec<Var> = targets.iter().collect();
-    let matches = if all_tiers_subject.is_some() {
+    let matches = if all_tiers {
         complex_match_strings_all_tiers(effective_token, &candidate_vars, fuzzy_threshold)
     } else {
         complex_match_strings_all(token, &candidate_vars, fuzzy_threshold)

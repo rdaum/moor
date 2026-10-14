@@ -36,13 +36,14 @@ object GRANT_UTILS [
     return target_str + "." + category_str + "(" + caps_str + ")";
   endmethod
 
-  method parse_grant owner: HACKER
+  method parse_grant owner: ARCH_WIZARD
     "Parse a grant specification like #38.area(add_room,create_passage) into components.";
     "Returns {target, category, cap_list} or raises E_INVARG on parse error.";
+    set_task_perms(caller_perms());
     {grant_str} = args;
     typeof(grant_str) == TYPE_STR || raise(E_TYPE);
     "Find the dots separating target.category";
-    dot_idx = "." in grant_str;
+    dot_idx = grant_str:unquoted_index(".");
     if (dot_idx == 0)
       raise(E_INVARG, "Grant spec must contain '.' separator");
     endif

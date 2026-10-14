@@ -8,18 +8,20 @@ object MATCH [
   owner: HACKER
   readable: true
 
-  override description (owner: HACKER, flags: "rc") = "Object matching system with support for numbered, UUID, and flyweight objects. Provides flexible matching with fuzzy search and enhanced error reporting.";
+  override description (owner: HACKER, flags: "rc") = "Resolve object references and scoped names, including aliases and ordinal selections.";
 
-  method match_object owner: HACKER
+  method match_object owner: ARCH_WIZARD
     "Match an object reference string to an actual object.";
     "Handles: #123, #UUID-style, $system.prop, @playername, or plain name matching.";
     "Usage: $match:match_object(ref_string [, context_object])";
     "The context_object (defaults to player) determines:";
     "  - What 'me' and 'player' resolve to (the context_object itself)";
     "  - What 'here' resolves to (context_object.location)";
-    "  - Which objects to search for name matching (context_object.contents and context_object.location.contents)";
-    const {ref_string, ?context = player} = args;
+    "  - Which visible scope supplies names and aliases";
+    set_task_perms(caller_perms());
+    let {ref_string, ?context = player} = args;
     typeof(ref_string) != TYPE_STR && raise(E_TYPE, "Object reference must be a string");
+    ref_string = ref_string:reference_text();
     !ref_string && raise(E_INVARG, "Empty object reference");
     if (ref_string[1] == "#")
       const result = toobj(ref_string);
@@ -52,9 +54,11 @@ object MATCH [
     endif
   endmethod
 
-  method match_player owner: HACKER
+  method match_player owner: ARCH_WIZARD
     "Match player by name or object number using complex_match builtin.";
+    set_task_perms(caller_perms());
     const {player_name, ?context = player} = args;
+    player_name || raise(E_INVARG, "Empty player name");
     "Handle 'me'/'myself' as special case";
     if (player_name in {"me", "myself"})
       valid(context) && is_player(context) && return context;
@@ -67,14 +71,12 @@ object MATCH [
       !is_player(obj) && raise(E_INVARG, tostr(obj) + " is not a player.");
       return obj;
     endif
-    const all_players = players();
-    const result = complex_match(player_name, all_players);
-    result == $failed_match && raise(E_INVARG, "No player found matching '" + player_name + "'");
-    return result;
+    return this:require_unique(player_name, this:candidates_in_scope(player_name, players()), "player");
   endmethod
 
-  method match_by_name owner: HACKER
-    "Match object by name in current context using complex_match builtin.";
+  method match_by_name owner: ARCH_WIZARD
+    "Resolve a name using the command scope, including aliases, worn items, and scope hooks.";
+    set_task_perms(caller_perms());
     const {name_string, ?context = player} = args;
     if (name_string == "here")
       valid(context) && valid(context.location) && return context.location;
@@ -83,97 +85,107 @@ object MATCH [
       valid(context) && return context;
       raise(E_INVARG, "No context to match '" + name_string + "'");
     endif
-    "Build search objects: context.contents FIRST (for containers), then location.contents.";
-    let search_objects = {};
-    valid(context) && (search_objects = {@search_objects, @context.contents});
-    valid(context) && valid(context.location) && (search_objects = {@search_objects, @context.location.contents});
-    !length(search_objects) && raise(E_INVARG, "No objects to search");
-    "Build keys list with name and aliases for each object.";
-    "This ensures aliases are checked properly by complex_match.";
-    let keys = {};
-    for o in (search_objects)
-      let obj_keys = {o.name};
-      try
-        const aliases = o.aliases;
-        if (typeof(aliases) == TYPE_LIST)
-          obj_keys = {@obj_keys, @aliases};
-        endif
-      except e (ANY)
-      endtry
-      keys = {@keys, obj_keys};
-    endfor
-    "Use 3-arg complex_match with explicit keys to get proper alias matching.";
-    const result = complex_match(name_string, search_objects, keys);
-    result == $failed_match && raise(E_INVARG, "No object found matching '" + name_string + "'");
-    return result;
+    return this:require_unique(name_string, this:candidates_in_scope(name_string, this:environment(context)));
   endmethod
 
-  method resolve_in_scope owner: HACKER
-    "Resolve a token against a list of scope entries (objects or {obj, aliases...}).";
-    "The optional third argument is a map of options (unusual for MOO, but keeps flags extensible):";
-    "  'allow_literals (bool, default true) - skip straight to literal #obj/uuobjid lookups";
-    "  'fuzzy_threshold (num/bool, default 0.5) - fuzzy matching tolerance passed to complex_match";
-    let {token, scope, ?options = []} = args;
-    typeof(token) == TYPE_STR || raise(E_TYPE, "Token must be a string");
-    typeof(scope) == TYPE_LIST || raise(E_TYPE, "Scope must be a list");
-    options = typeof(options) == TYPE_MAP ? options | [];
-    const allow_literals = maphaskey(options, 'allow_literals) ? options['allow_literals] | true;
-    let fuzzy_threshold = maphaskey(options, 'fuzzy_threshold) ? options['fuzzy_threshold] | 0.5;
-    if (typeof(fuzzy_threshold) == TYPE_BOOL)
-      fuzzy_threshold = fuzzy_threshold ? 0.5 | 0.0;
-    elseif (typeof(fuzzy_threshold) == TYPE_INT)
-      fuzzy_threshold = tofloat(fuzzy_threshold);
-    endif
-    const token_trimmed = token:trim();
-    if (!token_trimmed)
-      return #-3;
-    endif
-    if (allow_literals)
-      const literal = $str_proto:match_objid(token_trimmed);
-      if (literal && literal['start] == 1 && literal['end] == length(token_trimmed))
-        try
-          let candidate_obj = toobj(token_trimmed);
-          if (typeof(candidate_obj) == TYPE_OBJ && valid(candidate_obj))
-            return candidate_obj;
-          endif
-        except (E_RANGE)
-        endtry
-      endif
-    endif
-    let targets = {};
+  method normalize_scope owner: ARCH_WIZARD
+    "Return {objects, keys} for objects or {object, names...} scope entries.";
+    "Preserve first occurrence order. Explicit scope names replace default name/aliases.";
+    set_task_perms(caller_perms());
+    const {scope} = args;
+    let objects = {};
     let keys = {};
-    let has_keys = false;
+    let positions = [];
+    let explicit = [];
     for entry in (scope)
-      if (typeof(entry) == TYPE_OBJ)
-        targets = {@targets, entry};
+      const object = typeof(entry) == TYPE_LIST && entry ? entry[1] | entry;
+      if (typeof(object) != TYPE_OBJ || !valid(object))
+        continue;
+      endif
+      if (!maphaskey(positions, object))
+        objects = {@objects, object};
+        positions[object] = length(objects);
         keys = {@keys, {}};
-      elseif (typeof(entry) == TYPE_LIST && entry && typeof(entry[1]) == TYPE_OBJ)
-        let entry_obj = entry[1];
-        let alias_list = {};
-        for alias in (entry[2..$])
-          if (typeof(alias) == TYPE_STR && alias)
-            alias_list = {@alias_list, alias};
-          endif
-        endfor
-        targets = {@targets, entry_obj};
-        keys = {@keys, alias_list};
-        if (alias_list)
-          has_keys = true;
+      endif
+      if (typeof(entry) == TYPE_LIST && length(entry) > 1)
+        const source_names = entry[2..$];
+        const names = {name for name in (source_names) if typeof(name) == TYPE_STR && length(name) > 0};
+        if (names)
+          const position = positions[object];
+          for name in (names)
+            keys[position] = setadd(keys[position], name);
+          endfor
+          explicit[object] = true;
         endif
       endif
     endfor
-    targets || return #-3;
-    const keys_arg = has_keys ? keys | false;
-    const result = complex_match(token_trimmed, targets, keys_arg, fuzzy_threshold);
-    return result;
+    for object in (objects)
+      if (!maphaskey(explicit, object))
+        const aliases = `object.aliases ! E_PROPNF, E_PERM => {}';
+        keys[positions[object]] = {object.name, @{name for name in (aliases) if typeof(name) == TYPE_STR && length(name) > 0}};
+      endif
+    endfor
+    return {objects, keys};
   endmethod
 
-  method test_match_object owner: HACKER
+  method candidates_in_scope owner: ARCH_WIZARD
+    "Return all best matches in scope, or the ordinal selection. IDs must belong to scope.";
+    set_task_perms(caller_perms());
+    const {token, scope, ?options = []} = args;
+    const {objects, keys} = this:normalize_scope(scope);
+    const text = token:trim();
+    !text && return {};
+    if (`options['allow_literals] ! E_RANGE => true')
+      const literal = text:match_objid();
+      if (literal && literal['start] == 1 && literal['end] == length(text))
+        const object = `toobj(text) ! E_RANGE => $nothing';
+        return object in objects ? {object} | {};
+      endif
+    endif
+    const threshold = `options['fuzzy_threshold] ! E_RANGE => 0.3';
+    return complex_matches(text, objects, keys, typeof(threshold) == TYPE_BOOL ? (threshold ? 0.3 | 0.0) | tofloat(threshold), false);
+  endmethod
+
+  method resolve_in_scope owner: ARCH_WIZARD
+    "Return one scoped match, $failed_match, or $ambiguous_match.";
+    set_task_perms(caller_perms());
+    const matches = this:candidates_in_scope(@args);
+    return !matches ? $failed_match | length(matches) == 1 ? matches[1] | $ambiguous_match;
+  endmethod
+
+  method require_unique owner: ARCH_WIZARD
+    "Return the sole candidate, with shared not-found and ambiguity diagnostics.";
+    set_task_perms(caller_perms());
+    const {text, matches, ?label = "object"} = args;
+    matches || raise(E_INVARG, "No " + label + " found matching '" + text + "'.");
+    if (length(matches) > 1)
+      const shown = matches[1..min(8, length(matches))];
+      const names = {tostr(object.name, " (", object, ")") for object in (shown)};
+      raise(E_INVARG, "More than one match for '" + text + "'. Candidates: " + names:join(", ") + ". Use a more specific name or object number.");
+    endif
+    return matches[1];
+  endmethod
+
+  method environment owner: ARCH_WIZARD
+    "Use the same visible scope as commands; non-player contexts expose their contents.";
+    set_task_perms(caller_perms());
+    const {context} = args;
+    !valid(context) && return {};
+    is_player(context) && return context:match_environment();
+    return {context, @context.contents, @(valid(context.location) ? {context.location, @context.location.contents} | {})};
+  endmethod
+
+  method test_match_object owner: ARCH_WIZARD
     "Test object matching - returns actual objects.";
     let result = this:match_object("#1");
     result != #1 && raise(E_ASSERT, "Should return actual object #1: " + toliteral(result));
     result = this:match_object("$root");
     result != $root && raise(E_ASSERT, "Should return actual $root object: " + toliteral(result));
+    try
+      this:match_object(1);
+      raise(E_ASSERT, "Non-string references must raise E_TYPE");
+    except (E_TYPE)
+    endtry
     try
       result = this:match_object("");
       raise(E_ASSERT, "Empty string should raise error, got: " + toliteral(result));
@@ -206,7 +218,8 @@ object MATCH [
     try
       uuid_str = tostr(temp);
       result = this:resolve_in_scope(uuid_str, scope);
-      result != temp && raise(E_ASSERT, "Literal uuobjid should resolve to created object: " + toliteral(result));
+      result == $failed_match || raise(E_ASSERT, "Literal ID must stay in scope");
+      this:resolve_in_scope(uuid_str, {temp}) == temp || raise(E_ASSERT, "Scoped UUID should resolve");
     finally
       temp:destroy();
     endtry
@@ -239,24 +252,14 @@ object MATCH [
   endmethod
 
   method object_suggestions owner: ARCH_WIZARD
-    "Build labelled object choices from a visible match scope, retaining scope aliases.";
+    "Build labelled choices using the same names and scope order as object matching.";
     set_task_perms(caller_perms());
-    const {scope} = args;
+    const {objects, keys} = this:normalize_scope(args[1]);
     let result = {};
-    let seen = [];
-    for entry in (scope)
-      const obj = typeof(entry) == TYPE_LIST && entry ? entry[1] | entry;
-      if (typeof(obj) != TYPE_OBJ || !valid(obj))
-        continue;
-      endif
-      const aliases = typeof(entry) == TYPE_LIST ? entry[2..$] | {};
-      if (maphaskey(seen, obj))
-        const previous = seen[obj];
-        result[previous]["keys"] = {@result[previous]["keys"], @aliases};
-        continue;
-      endif
-      seen[obj] = length(result) + 1;
-      result = {@result, ["id" -> tostr(obj), "label" -> obj:name(), "value" -> tostr(obj), "detail" -> tostr(obj), "objectKind" -> obj:reference_kind(), "keys" -> {@obj:aliases(), @aliases}]};
+    for i in [1..length(objects)]
+      const object = objects[i];
+      result = {@result, ["id" -> tostr(object), "label" -> object:name(), "value" -> tostr(object),
+        "detail" -> tostr(object), "objectKind" -> object:reference_kind(), "keys" -> keys[i]]};
     endfor
     return result;
   endmethod

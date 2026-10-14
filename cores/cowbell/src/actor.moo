@@ -88,8 +88,10 @@ object ACTOR [
     return true;
   endmethod
 
-  verb "get take steal grab" (any from this) owner: HACKER flags: "rd"
+  verb "get take steal grab" (any from this) owner: ARCH_WIZARD flags: "rd"
     "Take an object from this actor";
+    caller == player || raise(E_PERM);
+    set_task_perms(player);
     if (!dobjstr || dobjstr == "")
       event = $event:mk_error(player, "Take what?");
       player:inform_current(event);
@@ -97,7 +99,7 @@ object ACTOR [
     endif
     "Match the object from dobjstr - search in this container's contents";
     try
-      dobj = $match:match_object(dobjstr, this);
+      dobj = $match:resolve_in_scope(dobjstr, this.contents);
     except e (ANY)
       event = $event:mk_error(player, $sub:t(), " doesn't have that."):with_this(this);
       player:inform_current(event);

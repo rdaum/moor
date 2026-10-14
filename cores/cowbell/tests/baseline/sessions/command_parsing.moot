@@ -1,0 +1,92 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; const a = create($thing, #90101); a.name = "audit token"; a.aliases = {}; move(a, #90101); const b = create($thing, #90101); b.name = "audit token"; b.aliases = {}; move(b, #90101); #90100.runtime_probe = {a, b}; return true;
+true
+@programmer
+; const {a, b} = #90100.runtime_probe; return {`$match:match_object("audit token", player) ! E_INVARG => "ambiguous"' == "ambiguous", $match:resolve_in_scope("audit token", {a, b}) == $ambiguous_match, length(complex_matches("audit token", {a, b}, {{a.name}, {b.name}})), parse_command("take audit token", {a, b}, true, 0.0)['dobj] == $ambiguous_match};
+{true, true, 2, true}
+; const {a, b} = #90100.runtime_probe; return `$builder_features:_hash_match("audit token", {a, b}) ! E_INVARG => "ambiguous"';
+"ambiguous"
+; const {a, b} = #90100.runtime_probe; const keys = {{"key"}, {"key ring"}}; return {complex_match("second key", {a, b}, keys, 0.0) == b, complex_matches("second key", {a, b}, keys, 0.0) == {b}};
+{true, true}
+; const {a, b} = #90100.runtime_probe; a.name = "scope alpha"; b.name = "scope beta"; return {$match:resolve_in_scope("scope alpha", {a, {b, "scope beta"}}, ['fuzzy_threshold -> 0.0]) == a, parse_command("look scope alpha", {a, {b, "scope beta"}}, true, 0.0)['dobj] == a};
+{true, true}
+; const {a, b} = #90100.runtime_probe; a.name = "audit token"; a.aliases = {"audit alias"}; return {$match:resolve_in_scope("audit alias", {a}, ['fuzzy_threshold -> 0.0]) == a, $match:match_object("audit alias", player) == a};
+{true, true}
+; const text = "alpha\tbeta"; return {parse_command("probe " + text, {})['args], text:words()};
+{{"alpha", "beta"}, {"alpha", "beta"}}
+; const text = "\"\" alpha"; return {parse_command("probe " + text, {})['args], text:words()};
+{{"", "alpha"}, {"", "alpha"}}
+; const parsed = parse_command("@rename \"to\" to other", {}); return {parsed['dobjstr], parsed['prepstr], parsed['iobjstr]};
+{"to", "to", "other"}
+; const parsed = parse_command("@describe pet rock as She said \"hello\".  Twice.", {}); return parsed['iobj_raw];
+"She said \"hello\".  Twice."
+; return $prog_utils:parse_target_spec("\"Dr. Moss\".name")['object_str];
+"\"Dr. Moss\""
+; return "\"rock: one\":pet":parse_verbref();
+{"\"rock: one\"", "pet"}
+@wizard
+; #90101.is_builder = true; #90101.authoring_features = $prog_features; return true;
+true
+@programmer
+% @describe audit token as She said "hello".  Twice.
+~~Set description
+; return #90100.runtime_probe[1].description;
+"She said \"hello\".  Twice."
+
+; return $prog_utils:eval_literal("\"two words\" rc");
+{true, "two words", "rc"}
+% @create $thing named "Dr. Moss",doctor
+~~Created "Dr. Moss"
+% @property "Dr. Moss".greeting "hello there" rc
+~~Added
+% #"Dr. Moss".greeting
+==> "hello there"
+% @verb "Dr. Moss":greet this none none
+~~added.
+% @program "Dr. Moss":greet = return this.greeting;
+~~programmed.
+; return $match:match_object("doctor", player):greet();
+"hello there"
+% @create $thing named "to",destination
+~~Created "to"
+% @rename "to" to "on",platform
+~~Renamed "to"
+; return $match:match_object("platform", player).name;
+"on"
+% @create $thing named "Moss, Dr.","doc:one"
+~~Created "Moss, Dr."
+; return $match:match_object("doc:one", player).name;
+"Moss, Dr."
+
+@wizard
+; const a = create($thing, #90101); const b = create($thing, #90101); for o in ({a,b}) o.name = "command parsing marker"; o.aliases = {}; move(o,#90101); add_property(o,"touched",0,{#90101,"rc"}); add_verb(o,{#90101,"rxd","touch"},{"this","none","none"}); set_verb_code(o,"touch",{"this.touched = this.touched + 1; player:inform_current($event:mk_info(player, \"Touched.\"));"}); endfor add_verb(a,{#90101,"rxd","stroke"},{"this","none","none"}); set_verb_code(a,"stroke",{"this.touched = this.touched + 1; player:inform_current($event:mk_info(player, \"Stroked.\"));"}); #90100.runtime_probe = {a,b}; return true;
+true
+@programmer
+% touch command parsing marker
+~~Which one do you mean?
+; return {o.touched for o in (#90100.runtime_probe)};
+{0, 0}
+% touch second command parsing marker
+~~Touched.
+; return {o.touched for o in ($match:candidates_in_scope("command parsing marker", $match:environment(player)))};
+{0, 1}
+; for o in (#90100.runtime_probe) o.touched = 0; endfor return true;
+true
+% stroke command parsing marker
+~~Stroked.
+; return {o.touched for o in (#90100.runtime_probe)};
+{1, 0}
+
+@wizard
+; #90102.name = "Sam Example"; return true;
+true
+@programmer
+% to "Sam Example" Hello there.
+~~Hello there.
+; return `$match:environment(#90102) ! E_PERM => "denied"';
+"denied"
+
+; return $grant_utils:parse_grant("\"Dr. Moss\".room(dig_from)")[1] == $match:match_object("doctor", player);
+true

@@ -1,0 +1,21 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+@wizard
+; const box = #90101:find_mailbox(); box.name = "audit mailbox"; box.aliases = {}; move(box, #90101); #90100.runtime_probe = box; move(#90113, #90100); return {#90113.owner == #90100, #90113.location == #90100};
+{true, true}
+@programmer
+; return $match:resolve_in_scope("#90113", {}) == $failed_match;
+true
+% take #90113 from audit mailbox
+~~I don't see that in the mailbox.
+; return #90113.location == #90100;
+true
+
+@wizard
+; const box = #90101:find_mailbox(); move(#90106, box); return true;
+true
+@programmer
+% take #90106 from audit mailbox
+~~You take
+; return #90106.location == player;
+true

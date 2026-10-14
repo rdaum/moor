@@ -28,19 +28,7 @@ object BUILDER_FEATURES [
       (length(dobjstr) && prepstr == "to" && length(iobjstr)) || raise(E_INVARG,
         "Usage: @set-pronouns ACTOR to PRESET|custom. See help @set-pronouns.");
       const reference = dobjstr:trim();
-      let target;
-      if (reference[1] in {"#", "$"} || reference in {"me", "player", "here"})
-        target = $match:match_object(reference, player);
-      else
-        const nearby = valid(player.location) ? player.location.contents | {};
-        const candidates = {@player.contents, @nearby};
-        const names = {{object.name, @object.aliases} for object in (candidates)};
-        const matches = complex_matches(reference, candidates, names);
-        length(matches) || raise(E_INVARG, "No actor found matching '" + reference + "'.");
-        length(matches) == 1 || raise(E_INVARG,
-          "More than one match for '" + reference + "'. Use an object identifier.");
-        target = matches[1];
-      endif
+      const target = $match:match_object(reference, player);
       isa(target, $actor) || raise(E_INVARG, "Choose an actor, such as an NPC or player.");
       $root:_check_permissions_as(target, player, 'set_pronouns);
       let input = iobjstr:trim();
@@ -75,7 +63,7 @@ object BUILDER_FEATURES [
       player:inform_current($event:mk_error(player, "Usage: @add-message <object>.<prop> <template>"):with_audience('utility));
       return;
     endif
-    const prop_spec = args[1];
+    const prop_spec = argstr:raw_words()[1];
     const text = argstr[argstr:word_start()[1][2] + 1..$]:trim();
     const parsed = $prog_utils:parse_target_spec(prop_spec);
     let target_name;
@@ -106,16 +94,17 @@ object BUILDER_FEATURES [
     player:inform_current($event:mk_info(player, "Added message to " + tostr(target) + "." + prop_name):with_audience('utility));
   endverb
 
-  verb "@del-message" (any any any) owner: HACKER flags: "rd"
+  verb "@del-message" (any any any) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object>.<property> <index> -- Remove one message bag entry.";
     "Remove a message entry by index from a message bag property. Usage: @del-message <object>.<prop> <index>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (length(args) < 2)
       player:inform_current($event:mk_error(player, "Usage: @del-message <object>.<prop> <index>"):with_audience('utility));
       return;
     endif
-    prop_spec = args[1];
+    prop_spec = argstr:raw_words()[1];
     idx = toint(args[2]);
     parsed = $prog_utils:parse_target_spec(prop_spec);
     if (parsed && parsed['type] == 'property)
@@ -153,7 +142,7 @@ object BUILDER_FEATURES [
       if (!parent_obj.f && !player.wizard && parent_obj.owner != player)
         raise(E_PERM, "You do not have permission to create children of " + tostr(parent_obj) + ".");
       endif
-      parsed = $str_proto:parse_name_aliases(iobjstr);
+      parsed = $str_proto:parse_name_aliases(argstr:raw_arguments()[2]);
       primary_name = parsed[1];
       alias_list = parsed[2];
       !primary_name && raise(E_INVARG, "Primary object name cannot be blank.");
@@ -233,7 +222,7 @@ object BUILDER_FEATURES [
     endif
     try
       "Parse grant specification using $grant_utils";
-      {target_obj, category, cap_list} = $grant_utils:parse_grant(dobjstr);
+      {target_obj, category, cap_list} = $grant_utils:parse_grant(argstr:raw_arguments()[1]);
       "Permission check - must be owner or wizard";
       !player.wizard && target_obj.owner != player && raise(E_PERM, "You must be owner or wizard to grant capabilities for " + tostr(target_obj) + ".");
       "Match grantee - use iobj from parser, or fall back to match_object if parser failed";
@@ -387,28 +376,10 @@ object BUILDER_FEATURES [
     target_area = valid(current_room) ? current_room.location | #-1;
     parent_obj = $room;
     working = command_str;
-    "Tokenize while preserving quoted segments for robust 'in/as' parsing";
-    tokens = {};
-    buf = "";
-    in_quotes = false;
-    for i in [1..length(working)]
-      ch = working[i];
-      if (ch == "\"")
-        in_quotes = !in_quotes;
-        continue;
-      endif
-      if (ch == " " && !in_quotes)
-        if (buf != "")
-          tokens = {@tokens, buf};
-          buf = "";
-        endif
-      else
-        buf = buf + ch;
-      endif
-    endfor
-    buf != "" && (tokens = {@tokens, buf});
+    const scanned = command_words(working);
+    tokens = {word[1] for word in (scanned)};
     "Parse trailing 'as <parent>'";
-    if (length(tokens) >= 2 && tokens[$ - 1]:lowercase() == "as")
+    if (length(tokens) >= 2 && !scanned[length(tokens) - 1][4] && tokens[$ - 1]:lowercase() == "as")
       parent_spec = tokens[$];
       parent_obj = $match:match_object(parent_spec, player);
       typeof(parent_obj) != TYPE_OBJ && raise(E_INVARG, "That parent reference is not an object.");
@@ -416,7 +387,7 @@ object BUILDER_FEATURES [
       tokens = tokens[1..$ - 2];
     endif
     "Parse trailing 'in <area>'";
-    if (length(tokens) >= 2 && tokens[$ - 1]:lowercase() == "in")
+    if (length(tokens) >= 2 && !scanned[length(tokens) - 1][4] && tokens[$ - 1]:lowercase() == "in")
       area_spec = tokens[$];
       if (area_spec:lowercase() == "ether")
         target_area = #-1;
@@ -427,7 +398,7 @@ object BUILDER_FEATURES [
       endif
       tokens = tokens[1..$ - 2];
     endif
-    name_part = tokens ? tokens:join(" ") | "";
+    name_part = tokens ? working[scanned[1][2]..scanned[length(tokens)][3]] | "";
     "Parse room name using same logic as @create";
     parsed = $str_proto:parse_name_aliases(name_part);
     room_name = parsed[1];
@@ -727,7 +698,7 @@ object BUILDER_FEATURES [
       if (!player.wizard && target_obj.owner != player)
         raise(E_PERM, "You do not have permission to rename " + tostr(target_obj) + ".");
       endif
-      parsed = $str_proto:parse_name_aliases(iobjstr);
+      parsed = $str_proto:parse_name_aliases(argstr:raw_arguments()[2]);
       new_name = parsed[1];
       new_aliases = parsed[2];
       !new_name && raise(E_INVARG, "Object name cannot be blank.");
@@ -765,6 +736,7 @@ object BUILDER_FEATURES [
       player:inform_current($event:mk_error(player, $format.code:mk("@describe OBJECT_OR_DIRECTION as DESCRIPTION")));
       return;
     endif
+    const description_text = argstr:raw_arguments()[2];
     try
       "Try to match as object first, then fall through to passage matching on ordinary not-found errors.";
       const {target_spec, description_kind} = $builder_features:description_target(dobjstr);
@@ -781,7 +753,7 @@ object BUILDER_FEATURES [
         if (!player.wizard && target_obj.owner != player)
           raise(E_PERM, "You do not have permission to describe " + tostr(target_obj) + ".");
         endif
-        new_description = iobjstr:trim();
+        new_description = description_text;
         !new_description && raise(E_INVARG, "Description cannot be blank.");
         this:_do_describe_object(target_obj, new_description,
           typeof(description_kind) == TYPE_SYM ? description_kind | target_obj.description_kind);
@@ -791,7 +763,7 @@ object BUILDER_FEATURES [
         return 1;
       else
         "Not an object - try to match as a passage direction";
-        result = this:_do_describe_passage(target_spec, iobjstr,
+        result = this:_do_describe_passage(target_spec, description_text,
           description_kind == 'djot_blocks ? 'djot_inline | description_kind);
         if (result)
           return 1;
@@ -1298,7 +1270,7 @@ object BUILDER_FEATURES [
       raise(E_INVARG, "Usage: @set-message OBJECT.PROPERTY template string...");
     endif
     try
-      const target_spec = args[1];
+      const target_spec = argstr:raw_words()[1];
       const template_string = argstr[argstr:word_start()[1][2] + 1..$]:trim();
       "Parse property reference";
       const parsed = $prog_utils:parse_target_spec(target_spec);
@@ -1380,7 +1352,7 @@ object BUILDER_FEATURES [
     this:_require_builder_command(player);
     set_task_perms(player);
     length(args) >= 1 || raise(E_INVARG, "Use " + verb + " OBJECT.PROPERTY.");
-    const parsed = $prog_utils:parse_target_spec(args[1]);
+    const parsed = $prog_utils:parse_target_spec(argstr:raw_words()[1]);
     (parsed && parsed['type] == 'compound && length(parsed['selectors]) == 1
       && parsed['selectors][1]['kind] == 'property)
       || raise(E_INVARG, "Use an object.property reference.");
@@ -1408,14 +1380,15 @@ object BUILDER_FEATURES [
     endfor
   endverb
 
-  verb "@get-m*essage @getm" (any none any) owner: HACKER flags: "rd"
+  verb "@get-m*essage @getm" (any none any) owner: ARCH_WIZARD flags: "rd"
     "Show a message template for a single property.";
     "Usage: @get-message OBJECT.PROPERTY";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     !argstr && raise(E_INVARG, "Usage: @get-message OBJECT.PROPERTY");
     try
-      target_spec = args[1];
+      target_spec = argstr:raw_words()[1];
       parsed = $prog_utils:parse_target_spec(target_spec);
       "Handle both 'property and 'compound parse results";
       if (parsed && parsed['type] == 'property)
@@ -1487,7 +1460,7 @@ object BUILDER_FEATURES [
     endif
     try
       "args[1] is the object.property part, rest of argstr is the rule expression";
-      const prop_spec = args[1];
+      const prop_spec = argstr:raw_words()[1];
       const rule_expr = argstr[length(prop_spec) + 1..$]:trim();
       if (!rule_expr || rule_expr == "")
         raise(E_INVARG, "Usage: @set-rule OBJECT.RULE_PROPERTY EXPRESSION");
@@ -1583,10 +1556,11 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
-  verb "@show-rule" (any none none) owner: HACKER flags: "rd"
+  verb "@show-rule" (any none none) owner: ARCH_WIZARD flags: "rd"
     "Show a rule property. Usage: @show-rule <object>.<rule-property>";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!argstr)
       raise(E_INVARG, "Usage: @show-rule OBJECT.RULE_PROPERTY");
     endif
@@ -1633,10 +1607,11 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
-  verb "@mes*sages @msg" (any none none) owner: HACKER flags: "rd"
+  verb "@mes*sages @msg" (any none none) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object> -- Show all customizable message properties.";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     !dobjstr && raise(E_INVARG, "Usage: @messages OBJECT");
     try
       target_obj = $match:match_object(dobjstr, player);
@@ -1679,10 +1654,11 @@ object BUILDER_FEATURES [
     endtry
   endverb
 
-  verb "@rules" (any none none) owner: HACKER flags: "rd"
+  verb "@rules" (any none none) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object> -- Show all rule properties on an object.";
     caller != player && raise(E_PERM);
     this:_require_builder_command(player);
+    set_task_perms(player);
     if (!dobjstr)
       raise(E_INVARG, "Usage: @rules OBJECT");
     endif
@@ -1916,7 +1892,7 @@ object BUILDER_FEATURES [
     try
       {direction, prop} = {args[1]:trim(), args[2]:trim():initial_lowercase()};
       "Get value - everything after first two args";
-      offset = index(argstr, args[2]) + length(args[2]);
+      offset = argstr:word_start()[2][2] + 1;
       value = argstr[offset..length(argstr)]:trim();
       current_room = player.location;
       !valid(current_room) && raise(E_INVARG, "You must be in a room.");
@@ -1972,7 +1948,7 @@ object BUILDER_FEATURES [
           new_passage = passage:with_unlock_rule(0):with_locked(false);
         else
           const scope = $rule_engine:passage_scope();
-          const tree = $builder_features:_author_condition($builder_features:_author_words(value), scope, player);
+          const tree = $builder_features:_author_condition($builder_features:_author_tokens(value), scope, player);
           new_passage = passage:with_unlock_rule($rule:mk('unlock_rule, tree, scope));
         endif
         prop_display = "access condition";
@@ -2002,11 +1978,19 @@ object BUILDER_FEATURES [
       is_builder || raise(E_PERM, "Builder features required.");
       const input = verb[2..$] + (length(argstr) ? " " + argstr | "");
       const spans = input:word_start();
-      const lookup = length(spans) ? input[spans[1][1]..spans[1][2]]:words()[1] | "";
-      const tail = length(spans) ? input[spans[1][2] + 1..$]:trim() | "";
-      const parts = lookup:split(".");
-      let reference = parts[1];
-      const properties = length(parts) > 1 ? parts[2..$] | {};
+      const word_end = length(spans) ? spans[1][2] | 0;
+      const equals = input[1..word_end]:unquoted_index("=");
+      const lookup_end = equals ? equals - 1 | word_end;
+      const lookup = input[1..lookup_end]:trim();
+      const tail = input[lookup_end + 1..$]:trim();
+      const parsed_reference = $prog_utils:parse_target_spec(lookup);
+      parsed_reference || raise(E_INVARG, "Invalid object reference.");
+      let reference = parsed_reference['object_str]:reference_text();
+      const properties = {selector['item_name] for selector in (parsed_reference['selectors])};
+      for selector in (parsed_reference['selectors])
+        !selector['inherited] || raise(E_INVARG, "A dot must be followed by a property name.");
+        selector['kind] == 'property || raise(E_INVARG, "Use .PROPERTY after the object name.");
+      endfor
       if (!length(reference))
         return player:inform_current($event:mk_info(player,
           "Use #NAME[.PROPERTY...] [exit|player|inventory] [for EXPRESSION], or #NAME.PROPERTY = EXPRESSION. See help #."));
@@ -2077,8 +2061,7 @@ object BUILDER_FEATURES [
         elseif (reference[1] in {"#", "$"} || reference in {"me", "player", "here"})
           target = $match:match_object(reference, player);
         else
-          const nearby = valid(player.location) ? player.location.contents | {};
-          target = $builder_features:_hash_match(reference, {@player.contents, @nearby});
+          target = $builder_features:_hash_match(reference, $match:environment(player));
           if (target == $failed_match)
             target = match_player(reference);
           endif
@@ -2149,106 +2132,19 @@ object BUILDER_FEATURES [
   endverb
 
   method _hash_match owner: ARCH_WIZARD
-    "Return a unique best match for # lookup; reject ambiguity before reading or writing properties.";
+    "Return a unique best match, or $failed_match. Explicit keys also support passage values.";
     set_task_perms(caller_perms());
     const {name, objects, ?keys = {}} = args;
-    const names = length(keys) ? keys | {{object.name, @object.aliases} for object in (objects)};
-    const matches = complex_matches(name, objects, names);
-    length(matches) <= 1 || raise(E_INVARG,
-      "More than one match for '" + name + "'. Use a more specific name or object number.");
-    return length(matches) ? matches[1] | $failed_match;
+    const matches = keys ? complex_matches(name, objects, keys, 0.3, false) | $match:candidates_in_scope(name, objects);
+    return matches ? $match:require_unique(name, matches) | $failed_match;
   endmethod
 
-  verb _matching_candidates (this none none) owner: ARCH_WIZARD flags: "rxd"
-    "Internal helper: list likely candidate objects for a plain-name token in context.";
-    caller == this || raise(E_PERM);
-    set_task_perms(player);
-    {token, ?context = player} = args;
-    typeof(token) == TYPE_STR || return {};
-    valid(context) || return {};
-    needle = token:trim():lowercase();
-    !needle && return {};
-    scope = {};
-    scope = {@scope, @context.contents};
-    if (valid(context.location))
-      scope = {@scope, @context.location.contents};
-    endif
-    candidates = {};
-    seen = [];
-    for o in (scope)
-      if (!(o in mapkeys(seen)))
-        seen[o] = 1;
-      else
-        continue;
-      endif
-      names = {o.name};
-      aliases = o.aliases;
-      if (typeof(aliases) == TYPE_LIST)
-        names = {@names, @aliases};
-      endif
-      matched = 0;
-      for n in (names)
-        if (typeof(n) == TYPE_STR)
-          lower = n:lowercase();
-          if (index(lower, needle) || index(needle, lower))
-            matched = 1;
-            break;
-          endif
-        endif
-      endfor
-      if (matched)
-        candidates = {@candidates, o};
-      endif
-    endfor
-    return candidates;
-  endverb
-
   verb _resolve_object_ref (this none none) owner: ARCH_WIZARD flags: "rxd"
-    "Internal helper: resolve object references with better ambiguity diagnostics.";
+    "Resolve a reference through the shared matcher under the player's permissions.";
     caller == this || raise(E_PERM);
     set_task_perms(player);
-    {ref_string, ?context = player, ?label = "object"} = args;
-    typeof(ref_string) == TYPE_STR || raise(E_TYPE, "Object reference must be a string.");
-    ref = ref_string:trim();
-    ref || raise(E_INVARG, "Empty " + label + " reference.");
-    if (ref[1] in {"#", "$", "@"} || ref in {"me", "player", "here"})
-      return $match:match_object(ref, context);
-    endif
-    if (!valid(context))
-      context = player;
-    endif
-    scope = {};
-    scope = {@scope, @context.contents};
-    if (valid(context.location))
-      scope = {@scope, @context.location.contents};
-    endif
-    if (!scope)
-      return $match:match_object(ref, context);
-    endif
-    result = $match:resolve_in_scope(ref, scope, ['fuzzy_threshold -> 0.5]);
-    if (result == $failed_match)
-      raise(E_INVARG, "No " + label + " found matching '" + ref + "'.");
-    endif
-    if (result == $ambiguous_match)
-      candidates = this:_matching_candidates(ref, context);
-      if (!candidates)
-        raise(E_INVARG, "Ambiguous " + label + " reference '" + ref + "'.");
-      endif
-      formatted = {};
-      max_show = 8;
-      count = 0;
-      for o in (candidates)
-        count = count + 1;
-        if (count > max_show)
-          break;
-        endif
-        formatted = {@formatted, tostr(o.name, " (", o, ")")};
-      endfor
-      suffix = length(candidates) > max_show ? " ..." | "";
-      msg = "Ambiguous " + label + " '" + ref + "'. Candidates: " + formatted:join(", ") + suffix;
-      raise(E_INVARG, msg);
-    endif
-    return result;
+    const {reference, ?context = player, ?label = "object"} = args;
+    return $match:match_object(reference, context);
   endverb
 
   method test_require_unique_room_name_detects_duplicate owner: ARCH_WIZARD
@@ -2292,8 +2188,8 @@ object BUILDER_FEATURES [
     endtry
     return true;
   endmethod
-  method _author_words owner: HACKER
-    "Split command text while preserving quoted names and messages. Do not evaluate code.";
+  method _author_tokens owner: HACKER
+    "Tokenize the authoring language, including fields, assignments, and condition operators.";
     const {text} = args;
     return {token['text] for token in ($condition:_tokens(text))};
   endmethod
@@ -2315,8 +2211,7 @@ object BUILDER_FEATURES [
       (typeof(object) == TYPE_OBJ && valid(object)) || raise(E_INVARG, "No object matches " + name + ".");
       return object;
     endif
-    const nearby = valid(who.location) ? who.location.contents | {};
-    let object = $builder_features:_hash_match(name, {@who.contents, @nearby});
+    let object = $builder_features:_hash_match(name, $match:environment(who));
     if (object == $failed_match && valid(who.location) && valid(who.location.location))
       const rooms = {room for room in (who.location.location.contents) if isa(room, $room)};
       object = $builder_features:_hash_match(name, rooms);
@@ -2518,7 +2413,7 @@ object BUILDER_FEATURES [
     this:_require_builder_command(player);
     set_task_perms(player);
     try
-      const words = $builder_features:_author_words(argstr);
+      const words = $builder_features:_author_tokens(argstr);
       if (length(words) == 0 || words == {"help"})
         player:inform_current($event:mk_info(player,
           "Use @act Henri sit target=couch. Use @reaction actions to list actions and arguments."));
@@ -2557,7 +2452,7 @@ object BUILDER_FEATURES [
     this:_require_builder_command(player);
     set_task_perms(player);
     try
-      const words = $builder_features:_author_words(argstr);
+      const words = $builder_features:_author_tokens(argstr);
       if (length(words) == 0 || words == {"help"})
         player:inform_current($event:mk_info(player,
           "Use @exit-provider ROOM to list custom exits, or @exit-provider ROOM add|remove|refresh OBJECT."));
@@ -2991,7 +2886,7 @@ object BUILDER_FEATURES [
     (principal == who || principal.wizard) || raise(E_PERM);
     who.is_builder || raise(E_PERM, "Builder privileges are required. Programmer privileges are not.");
     set_task_perms(who);
-    const words = $builder_features:_author_words(text);
+    const words = $builder_features:_author_tokens(text);
     if (length(words) == 0 || words[1] in {"help", "events", "steps", "actions", "facts", "conditions"})
       return $builder_features:reaction_help(length(words) == 0 ? "help" | words[1]);
     endif
@@ -3296,7 +3191,7 @@ object BUILDER_FEATURES [
     (caller_perms() == who || caller_perms().wizard) || raise(E_PERM);
     (who.is_builder || who.programmer) || raise(E_PERM, "Builder privileges are required.");
     set_task_perms(who);
-    const words = $builder_features:_author_words(text);
+    const words = $builder_features:_author_tokens(text);
     if (length(words) == 0 || words == {"help"})
       return {"Usage: @schedule OBJECT EVENT every SECONDS [jitter SECONDS], or @schedule ID.",
         "Example: @schedule Henri idle every 300 jitter 60.",

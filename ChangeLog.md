@@ -22,6 +22,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   selected effect. Administrators can finish partial reviews without accepting deferred changes, and
   retained results include all decisions through pagination.
 
+- `command_words()` exposes decoded command words and original character positions.
+  `parse_command()` also returns raw object argument slices and spans. Quoted words no longer act as
+  prepositions, empty quoted arguments are retained, and whitespace consistently separates command
+  words.
+- `complex_match()` and `complex_matches()` select ordinals across the same match tiers. Exact names
+  such as `second floor` take precedence over ordinal syntax.
+
 ### Changed
 
 - Cowbell no longer requires a group for local edits or already-installed code just because the same

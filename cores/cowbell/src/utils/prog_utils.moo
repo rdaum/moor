@@ -291,25 +291,9 @@ object PROG_UTILS [
     "Returns 0 if invalid";
     spec = args[1]:trim();
     !spec && return 0;
-    "Find where the object reference ends and selectors begin";
-    "Selectors start at first . or : that isn't part of $name or #num";
-    obj_end = 0;
-    for i in [1..length(spec)]
-      c = spec[i];
-      if (c == "." || c == ":")
-        "Check if this could be start of selector";
-        "If we're at start or previous char suggests end of object ref, this is a selector";
-        if (i == 1)
-          "Can't start with selector";
-          return 0;
-        endif
-        "Check if it's a $system.prop style reference - those have . but followed by alphanumeric";
-        "For simplicity: first . or : after the object name starts selectors";
-        "Object names are: #num, $name, or alphanumeric words";
-        obj_end = i - 1;
-        break;
-      endif
-    endfor
+    const separator = spec:unquoted_index(".:");
+    separator == 1 && return 0;
+    obj_end = separator ? separator - 1 | 0;
     "If no separators found, it's just an object";
     if (obj_end == 0)
       return ['type -> 'object, 'object_str -> spec, 'selectors -> {}];
@@ -319,7 +303,7 @@ object PROG_UTILS [
     "Parse selector string into individual selectors";
     "Valid patterns: . .. .name : :: :name and combinations";
     selectors = {};
-    i = 1;
+    let i = 1;
     while (i <= length(selector_str))
       c = selector_str[i];
       if (c == ".")
@@ -510,11 +494,11 @@ object PROG_UTILS [
     except e (E_INVARG, E_TYPE)
       parse_error = e[2];
     endtry
-    words = input_str:words();
+    words = input_str:word_start();
     word_count = length(words);
     while (word_count >= 1)
-      literal_part = words[1..word_count]:join(" ");
-      remaining = word_count < length(words) ? words[word_count + 1..$]:join(" ") | "";
+      literal_part = input_str[1..words[word_count][2]];
+      remaining = input_str[words[word_count][2] + 1..$]:trim();
       try
         return {true, fromliteral(literal_part), remaining};
       except e (E_INVARG, E_TYPE)

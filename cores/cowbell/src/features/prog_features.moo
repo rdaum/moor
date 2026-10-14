@@ -69,7 +69,7 @@ object PROG_FEATURES [
     endif
     target_string = argstr:trim();
     "Determine if this is a verb or property reference";
-    if (":" in target_string)
+    if (target_string:unquoted_index(":"))
       "Verb reference";
       parsed = target_string:parse_verbref();
       if (!parsed)
@@ -105,7 +105,7 @@ object PROG_FEATURES [
         player:inform_current($event:mk_error(player, "Verb '" + tostr(verb_name) + "' not found on " + target_obj.name + "."));
         return;
       endtry
-    elseif ("." in target_string)
+    elseif (target_string:unquoted_index("."))
       "Property reference";
       parsed = $prog_utils:parse_target_spec(target_string);
       if (!parsed || parsed['type] != 'compound)
@@ -348,16 +348,12 @@ object PROG_FEATURES [
       return;
     endif
     "Parse the arguments";
-    colon = index(argstr, ":");
+    colon = argstr:unquoted_index(":");
     if (!colon)
       player:inform_current($event:mk_error(player, "Invalid verb reference format. Use 'object:verb-name(s)'"));
       return;
     endif
     object_token = argstr[1..colon - 1]:trim();
-    const object_words = object_token:words();
-    if (length(object_words) == 1)
-      object_token = object_words[1];
-    endif
     remainder = argstr[colon + 1..length(argstr)]:trim();
     if (!remainder)
       player:inform_current($event:mk_error(player, "Verb name required. Use 'object:verb-name(s)'"));
@@ -635,7 +631,7 @@ object PROG_FEATURES [
     set_task_perms(player);
     "Parse and validate arguments";
     !argstr && return player:inform_current($event:mk_error(player, "Usage: @property OBJECT.PROP-NAME [VALUE [PERMS [OWNER]]]"));
-    parsed = $prog_utils:parse_target_spec(args[1]);
+    parsed = $prog_utils:parse_target_spec(argstr:raw_words()[1]);
     !parsed || parsed['type] != 'compound && return player:inform_current($event:mk_error(player, "Usage: @property <object>.<prop-name>"));
     selector = parsed['selectors][1];
     selector['kind] != 'property || !selector['item_name] && return player:inform_current($event:mk_error(player, "Usage: @property <object>.<prop-name>"));
@@ -765,7 +761,7 @@ object PROG_FEATURES [
       player:inform_current($event:mk_error(player, "Invalid verb reference format. Use 'object:verb-name'"));
       return;
     endif
-    target_spec = words[1];
+    target_spec = argstr:raw_words()[1];
     parsed = target_spec:parse_verbref();
     if (!parsed)
       player:inform_current($event:mk_error(player, "Invalid verb reference format. Use 'object:verb-name'"));
@@ -847,14 +843,6 @@ object PROG_FEATURES [
     {target_obj, verb_name} = args;
     set_task_perms(player, {{"object_read", target_obj}});
     return target_obj:find_verb_definer(verb_name);
-  endmethod
-
-  method _do_get_object_match_info owner: ARCH_WIZARD
-    "Internal helper to get object matching fields with elevated permissions";
-    caller == this || raise(E_PERM);
-    {target_obj} = args;
-    set_task_perms(player, {{"object_read", target_obj}});
-    return ['name -> target_obj.name, 'aliases -> `target_obj.aliases ! ANY => {}', 'contents -> target_obj.contents, 'location -> target_obj.location];
   endmethod
 
   verb "@sh*ow @d*isplay" (any any any) owner: ARCH_WIZARD flags: "rd"
@@ -1181,7 +1169,7 @@ object PROG_FEATURES [
       maybe_perms = words[$];
       if (match(maybe_perms, "^[+-]?[rwxcd]*$"))
         perms_spec = maybe_perms;
-        target_spec = words[1..$ - 1]:join(" "):trim();
+        target_spec = spec[1..spec:word_start()[$][1] - 1]:trim();
         show_only = 0;
         if (!target_spec)
           player:inform_current($event:mk_error(player, $format.code:mk("@chmod OBJECT[.PROPERTY|:VERB] [PERMISSIONS]")));
@@ -1733,7 +1721,7 @@ object PROG_FEATURES [
     player.programmer || raise(E_PERM, "Programmer features required.");
     set_task_perms(player);
     "Check for verb rename syntax (colon in dobjstr)";
-    if (dobjstr && ":" in dobjstr)
+    if (dobjstr && argstr:raw_arguments()[1]:unquoted_index(":"))
       "Verb rename - validate args";
       if (!argstr || (prepstr && prepstr != "to") || !iobjstr)
         player:inform_current($event:mk_error(player, $format.code:mk("@rename OBJECT:VERB to NEW-VERB-NAME")));
@@ -1741,7 +1729,7 @@ object PROG_FEATURES [
       endif
       try
         "Parse object:verb";
-        parsed = dobjstr:parse_verbref();
+        parsed = argstr:raw_arguments()[1]:parse_verbref();
         if (!parsed)
           player:inform_current($event:mk_error(player, "Invalid verb reference format. Use 'object:verb'"));
           return;
@@ -2309,7 +2297,7 @@ object PROG_FEATURES [
       player:inform_current($event:mk_error(player, "Invalid format. Use 'object:verb' or 'object:number'."));
       return;
     endif
-    parsed = words[1]:parse_verbref();
+    parsed = input:raw_words()[1]:parse_verbref();
     if (!parsed)
       player:inform_current($event:mk_error(player, "Invalid format. Use 'object:verb' or 'object:number'."));
       return;
@@ -2556,8 +2544,8 @@ object PROG_FEATURES [
       player:inform_current($event:mk_error(player, "Refusing to move without confirmation. Add --confirm (or use --dry-run)."));
       return;
     endif
-    src_spec = dobjstr:trim();
-    dst_spec = iobjstr:trim();
+    src_spec = argstr:raw_arguments()[1];
+    dst_spec = argstr:raw_arguments()[2];
     dst_spec = dst_spec:replace_all(" --dry-run", "");
     dst_spec = dst_spec:replace_all("--dry-run", "");
     dst_spec = dst_spec:replace_all(" --confirm", "");
@@ -2642,8 +2630,8 @@ object PROG_FEATURES [
       player:inform_current($event:mk_error(player, $format.code:mk("@cpverb SRC_OBJ:VERB to DEST_OBJ[:NEW_VERB]")));
       return;
     endif
-    src_spec = dobjstr:trim();
-    dst_spec = iobjstr:trim();
+    src_spec = argstr:raw_arguments()[1];
+    dst_spec = argstr:raw_arguments()[2];
     parsed = $prog_utils:parse_target_spec(src_spec);
     if (!parsed || parsed['type] != 'compound)
       player:inform_current($event:mk_error(player, "Source must be OBJECT:VERB"));
@@ -2717,110 +2705,20 @@ object PROG_FEATURES [
     endtry
   endverb
 
-  method _resolve_object_ref owner: HACKER
-    "Internal helper: resolve object references with better ambiguity diagnostics.";
+  method _resolve_object_ref owner: ARCH_WIZARD
+    "Resolve a reference through the shared matcher under the player's permissions.";
     caller == this || raise(E_PERM);
-    {ref_string, ?context = player, ?label = "object"} = args;
-    typeof(ref_string) == TYPE_STR || raise(E_TYPE, "Object reference must be a string.");
-    ref = ref_string:trim();
-    ref || raise(E_INVARG, "Empty " + label + " reference.");
-    if (ref[1] in {"#", "$", "@"} || ref in {"me", "player", "here"})
-      return $match:match_object(ref, context);
-    endif
-    if (!valid(context))
-      context = player;
-    endif
-    context_info = this:_do_get_object_match_info(context);
-    scope = {};
-    scope = {@scope, @context_info['contents]};
-    if (valid(context_info['location]))
-      location_info = this:_do_get_object_match_info(context_info['location]);
-      scope = {@scope, @location_info['contents]};
-    endif
-    if (!scope)
-      return $match:match_object(ref, context);
-    endif
-    scope_entries = {};
-    for o in (scope)
-      candidate_info = this:_do_get_object_match_info(o);
-      entry = {o, candidate_info['name]};
-      aliases = candidate_info['aliases];
-      if (typeof(aliases) == TYPE_LIST)
-        entry = {@entry, @aliases};
-      endif
-      scope_entries = {@scope_entries, entry};
-    endfor
-    result = $match:resolve_in_scope(ref, scope_entries, ['fuzzy_threshold -> 0.5]);
-    if (result == $failed_match)
-      raise(E_INVARG, "No " + label + " found matching '" + ref + "'.");
-    endif
-    if (result == $ambiguous_match)
-      candidates = this:_matching_candidates(ref, context);
-      if (!candidates)
-        raise(E_INVARG, "Ambiguous " + label + " reference '" + ref + "'.");
-      endif
-      formatted = {};
-      max_show = 8;
-      count = 0;
-      for o in (candidates)
-        count = count + 1;
-        if (count > max_show)
-          break;
-        endif
-        candidate_info = this:_do_get_object_match_info(o);
-        formatted = {@formatted, tostr(candidate_info['name], " (", o, ")")};
-      endfor
-      suffix = length(candidates) > max_show ? " ..." | "";
-      msg = "Ambiguous " + label + " '" + ref + "'. Candidates: " + formatted:join(", ") + suffix;
-      raise(E_INVARG, msg);
-    endif
-    return result;
+    set_task_perms(player);
+    const {reference, ?context = player, ?label = "object"} = args;
+    return $match:match_object(reference, context);
   endmethod
 
-  method _matching_candidates owner: HACKER
-    "Internal helper: list likely candidate objects for a plain-name token in context.";
+  method _matching_candidates owner: ARCH_WIZARD
+    "Use the same candidates as command matching for diagnostics.";
     caller == this || raise(E_PERM);
-    {token, ?context = player} = args;
-    typeof(token) == TYPE_STR || return {};
-    valid(context) || return {};
-    needle = token:trim():lowercase();
-    !needle && return {};
-    context_info = this:_do_get_object_match_info(context);
-    scope = {};
-    scope = {@scope, @context_info['contents]};
-    if (valid(context_info['location]))
-      location_info = this:_do_get_object_match_info(context_info['location]);
-      scope = {@scope, @location_info['contents]};
-    endif
-    candidates = {};
-    seen = [];
-    for o in (scope)
-      if (!(o in mapkeys(seen)))
-        seen[o] = 1;
-      else
-        continue;
-      endif
-      candidate_info = this:_do_get_object_match_info(o);
-      names = {candidate_info['name]};
-      aliases = candidate_info['aliases];
-      if (typeof(aliases) == TYPE_LIST)
-        names = {@names, @aliases};
-      endif
-      matched = 0;
-      for n in (names)
-        if (typeof(n) == TYPE_STR)
-          lower = n:lowercase();
-          if (index(lower, needle) || index(needle, lower))
-            matched = 1;
-            break;
-          endif
-        endif
-      endfor
-      if (matched)
-        candidates = {@candidates, o};
-      endif
-    endfor
-    return candidates;
+    set_task_perms(player);
+    const {text, ?context = player} = args;
+    return $match:candidates_in_scope(text, $match:environment(context));
   endmethod
 
   method test_grep_object_literal_owner_filter owner: ARCH_WIZARD
@@ -3057,7 +2955,7 @@ object PROG_FEATURES [
   endmethod
 
   method test_object_resolver_helpers_scoped_grants owner: ARCH_WIZARD
-    "Unit test: object resolver helpers use scoped grants for private context matching.";
+    "Wizard-authorized resolution can inspect a private non-player context.";
     context = #-1;
     target = #-1;
     try
@@ -3072,9 +2970,9 @@ object PROG_FEATURES [
       target:set_name_aliases("private resolver target", {"hidden-resolver"});
       target:moveto(context);
       resolved = this:_resolve_object_ref("hidden-resolver", context, "object");
-      $test_utils:assert_eq(resolved, target, "_resolve_object_ref should match private contents through object_read grants");
+      $test_utils:assert_eq(resolved, target, "wizard resolution can inspect private contents");
       candidates = this:_matching_candidates("resolver", context);
-      $test_utils:assert_true(target in candidates, "_matching_candidates should inspect private candidate names through object_read grants");
+      $test_utils:assert_true(target in candidates, "candidate diagnostics use the same private scope under wizard authority");
     finally
       valid(target) && recycle(target);
       valid(context) && recycle(context);

@@ -43,6 +43,30 @@ true
 ~~.food_kind = #
 % #Henri.food_kind.name
 ==> "kibble"
+
+// Assignment does not require spaces around =, and preserves quoted text.
+% #Henri.aliases={"box"}
+~~.aliases = {"box"}
+% #Henri.aliases
+==> {"box"}
+% #Henri.counter=13
+~~.counter = 13
+% #Henri.counter= 14
+~~.counter = 14
+% #Henri.counter =15
+~~.counter = 15
+% #Henri.counter = 12
+~~.counter = 12
+% #Henri.words="x.y:z = w"
+~~.words = "x.y:z = w"
+% #Henri.words
+==> "x.y:z = w"
+% @create $thing named "x=y"
+~~Created
+% #"x=y".aliases={"equal sign"}
+~~.aliases = {"equal sign"}
+% #"x=y".aliases
+==> {"equal sign"}
 % #Henri.counter for %# + 1
 ==> 13
 % #Henri.name inventory
@@ -60,6 +84,8 @@ true
 
 // Malformed input stays an ordinary command error and preserves properties.
 % #Henri.counter =
+~~Missing value after =
+% #Henri.counter=
 ~~Missing value after =
 % #Henri.counter = 1 +
 ~~Invalid expression
@@ -103,6 +129,8 @@ true
 ~~denied
 % #90100.runtime_probe = 17
 ~~denied
+% #90100.runtime_probe=17
+~~denied
 % #90100 for %#.runtime_probe = 17
 ~~denied
 % #me.runtime_probe = #90100.hash_secret
@@ -122,6 +150,8 @@ E_PERM
 % #Ada.name player
 ==> "Ada"
 % #me.runtime_probe = 17
+=Assignment requires programmer privileges.
+% #me.runtime_probe=17
 =Assignment requires programmer privileges.
 % #me for 1 + 2
 =The for clause requires programmer privileges.

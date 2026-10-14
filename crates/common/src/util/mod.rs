@@ -346,51 +346,62 @@ pub fn write_quoted_str<W: std::fmt::Write + ?Sized>(writer: &mut W, s: &str) ->
     writer.write_char('"')
 }
 
-pub fn parse_into_words(input: &str) -> Vec<String> {
-    // Initialize state variables.
+/// One command word, with decoded text and its original byte and character ranges.
+/// Ranges are zero-based and end-exclusive. `quoted` includes backslash escapes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandWord {
+    pub text: String,
+    pub bytes: std::ops::Range<usize>,
+    pub chars: std::ops::Range<usize>,
+    pub quoted: bool,
+}
+
+/// Scan command text once, retaining empty quoted arguments and source positions.
+/// An unfinished quote consumes the remaining input; a final backslash is ignored.
+pub fn command_words(input: &str) -> Vec<CommandWord> {
+    let mut words = Vec::new();
+    let mut current: Option<CommandWord> = None;
     let mut in_quotes = false;
-    let mut previous_char_was_backslash = false;
-
-    // Define the fold function's logic as a closure.
-    let accumulate_words = |mut acc: Vec<String>, c| {
-        if previous_char_was_backslash {
-            // Handle escaped characters.
-            if let Some(last_word) = acc.last_mut() {
-                last_word.push(c);
-            } else {
-                acc.push(c.to_string());
+    let mut escaped = false;
+    for (character, (byte, ch)) in input.char_indices().enumerate() {
+        if ch.is_whitespace() && !in_quotes && !escaped {
+            if let Some(word) = current.take() {
+                words.push(word);
             }
-            previous_char_was_backslash = false;
-        } else if c == '\\' {
-            // Mark the next character as escaped.
-            previous_char_was_backslash = true;
-        } else if c == '"' {
-            // Toggle whether we're inside quotes.
-            in_quotes = !in_quotes;
-        } else if c.is_whitespace() && !in_quotes {
-            // Add a new empty string to the accumulator if we've reached a whitespace boundary.
-            if let Some(last_word) = acc.last()
-                && !last_word.is_empty()
-            {
-                acc.push(String::new());
-            }
-        } else {
-            // Append the current character to the last word in the accumulator,
-            // or create a new word if there isn't one yet.
-            if let Some(last_word) = acc.last_mut() {
-                last_word.push(c);
-            } else {
-                acc.push(c.to_string());
-            }
+            continue;
         }
-        acc
-    };
+        let word = current.get_or_insert_with(|| CommandWord {
+            text: String::new(),
+            bytes: byte..byte,
+            chars: character..character,
+            quoted: false,
+        });
+        word.bytes.end = byte + ch.len_utf8();
+        word.chars.end = character + 1;
+        if escaped {
+            word.text.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            word.quoted = true;
+            escaped = true;
+        } else if ch == '"' {
+            word.quoted = true;
+            in_quotes = !in_quotes;
+        } else {
+            word.text.push(ch);
+        }
+    }
+    if let Some(word) = current {
+        words.push(word);
+    }
+    words
+}
 
-    // Use the fold function to accumulate the words in the input string.
-    let words = input.chars().fold(vec![], accumulate_words);
-
-    // Filter out empty strings and return the result.
-    words.into_iter().filter(|w| !w.is_empty()).collect()
+pub fn parse_into_words(input: &str) -> Vec<String> {
+    command_words(input)
+        .into_iter()
+        .map(|word| word.text)
+        .collect()
 }
 
 #[cfg(test)]
