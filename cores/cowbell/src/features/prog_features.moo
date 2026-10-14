@@ -354,6 +354,10 @@ object PROG_FEATURES [
       return;
     endif
     object_token = argstr[1..colon - 1]:trim();
+    const object_words = object_token:words();
+    if (length(object_words) == 1)
+      object_token = object_words[1];
+    endif
     remainder = argstr[colon + 1..length(argstr)]:trim();
     if (!remainder)
       player:inform_current($event:mk_error(player, "Verb name required. Use 'object:verb-name(s)'"));
@@ -642,8 +646,7 @@ object PROG_FEATURES [
     perms = "rc";
     owner = player;
     if (length(args) > 1)
-      offset = index(argstr, args[1]) + length(args[1]);
-      remainder = argstr[offset..$]:trim();
+      remainder = argstr[argstr:word_start()[1][2] + 1..$]:trim();
       if (remainder)
         "Try to evaluate initial value";
         eval_result = $prog_utils:eval_literal(remainder);
@@ -2179,103 +2182,6 @@ object PROG_FEATURES [
     blocks = {@blocks, "", summary};
     const output = $format.block:mk(@blocks);
     player:inform_current($event:mk_info(player, output));
-  endverb
-
-  method _schedule_rows owner: ARCH_WIZARD
-    "Return live schedule rows visible to caller_perms(); wizard callers see all owners.";
-    set_task_perms(caller_perms());
-    let rows = {};
-    for id in (schedules())
-      try
-        const info = schedule_info(id);
-        if (!info["retired"])
-          const timing = info["kind"] == "at" ? "once" | (info["adaptive"] ? "adaptive, base " | "every ") + tostr(info["interval"]) + "s";
-          rows = {@rows, {tostr(id), tostr(info["owner"]), tostr(info["target"]) + ":" + info["verb"], timing, $prog_features:_schedule_next(info), info["running_task"] ? tostr(info["running_task"]) | "-"}};
-        endif
-      except (E_INVARG)
-        "A schedule can disappear between listing its ID and reading its diagnostics.";
-      endtry
-    endfor
-    return rows;
-  endmethod
-
-  method _schedule_table owner: ARCH_WIZARD
-    "Format schedule rows with schedule IDs distinct from running task IDs.";
-    const {rows} = args;
-    return $format.table:mk({"Schedule ID", "Owner", "Verb", "Timing", "Next", "Running task"}, rows);
-  endmethod
-
-  method _schedule_next owner: ARCH_WIZARD
-    "Format a schedule deadline; adaptive schedules can wait for a firing to finish.";
-    const {info} = args;
-    if (info["next_run"] == 0.0)
-      return info["running_task"] && !info["retired"] ? "after firing" | "-";
-    endif
-    const remaining = info["next_run"] - tofloat(time());
-    return remaining > 0.0 ? "in " + tostr(max(1, toint(remaining))) + "s" | "ready";
-  endmethod
-
-  method _schedule_id owner: ARCH_WIZARD
-    "Parse one positive decimal schedule ID; raise E_INVARG for malformed input.";
-    const {text} = args;
-    const trimmed = text:trim();
-    match(trimmed, "^[0-9]+$") || raise(E_INVARG, "Expected a positive schedule ID.");
-    const id = toint(trimmed);
-    id > 0 || raise(E_INVARG, "Expected a positive schedule ID.");
-    return id;
-  endmethod
-
-  verb "@schedules" (none none none) owner: ARCH_WIZARD flags: "rd"
-    "USAGE: @schedules -- List your live schedules; wizards see all owners.";
-    this:_challenge_command_perms();
-    set_task_perms(player);
-    const rows = $prog_features:_schedule_rows();
-    const output = $format.block:mk($format.title:mk("Schedules", 3), length(rows) ? $prog_features:_schedule_table(rows) | "(none)", tostr(length(rows)) + " scheduled", "Use @schedule <id> for details or @stop-schedule <id> to stop future firings.");
-    player:inform_current($event:mk_info(player, output));
-  endverb
-
-  verb "@schedule" (any none none) owner: ARCH_WIZARD flags: "rd"
-    "USAGE: @schedule <id> -- Inspect a schedule you own; wizards may inspect any schedule.";
-    this:_challenge_command_perms();
-    set_task_perms(player);
-    let id = 0;
-    try
-      id = $prog_features:_schedule_id(argstr);
-    except (E_INVARG)
-      player:inform_current($event:mk_error(player, "Usage: @schedule <positive schedule-id>"));
-      return;
-    endtry
-    try
-      const info = schedule_info(id);
-      const rows = {{"Owner", tostr(info["owner"])}, {"Verb", tostr(info["target"]) + ":" + info["verb"]}, {"Arguments", toliteral(info["args"])}, {"Kind", info["kind"] == "at" ? "once" | "recurring"}, {"Base interval", tostr(info["interval"]) + "s"}, {"Adaptive", info["adaptive"] ? "yes" | "no"}, {"Next", $prog_features:_schedule_next(info)}, {"Running task", info["running_task"] ? tostr(info["running_task"]) | "-"}, {"Runs / faults", tostr(info["run_count"]) + " / " + tostr(info["fault_count"])}, {"Missed / overlap", tostr(info["missed_count"]) + " / " + tostr(info["overlap_count"])}, {"Catchup / overlap policy", info["catchup"] + " / " + info["overlap"]}, {"State", toliteral(info["state"])}, {"Last fault", toliteral(info["last_fault"])}, {"Status", info["retired"] ? "retired: " + info["retire_reason"] | "live"}};
-      player:inform_current($event:mk_info(player, $format.block:mk($format.title:mk("Schedule " + tostr(id), 3), $format.table:mk({"Field", "Value"}, rows))));
-    except (E_INVARG)
-      player:inform_current($event:mk_error(player, "No such schedule: " + tostr(id)));
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "Permission denied: you don't own schedule " + tostr(id) + "."));
-    endtry
-  endverb
-
-  verb "@stop-schedule @kill-schedule" (any none none) owner: ARCH_WIZARD flags: "rd"
-    "USAGE: @stop-schedule <id> -- Stop future firings of your schedule; wizards may stop any schedule.";
-    this:_challenge_command_perms();
-    set_task_perms(player);
-    let id = 0;
-    try
-      id = $prog_features:_schedule_id(argstr);
-    except (E_INVARG)
-      player:inform_current($event:mk_error(player, "Usage: @stop-schedule <positive schedule-id>"));
-      return;
-    endtry
-    try
-      if (schedule_stop(id))
-        player:inform_current($event:mk_info(player, "Stopped schedule " + tostr(id) + ". Running firings are unchanged; use @kill <task-id> to stop one."));
-      else
-        player:inform_current($event:mk_info(player, "No live schedule: " + tostr(id)));
-      endif
-    except (E_PERM)
-      player:inform_current($event:mk_error(player, "Permission denied: you don't own schedule " + tostr(id) + "."));
-    endtry
   endverb
 
   verb "@kill-task @kill" (any any any) owner: ARCH_WIZARD flags: "rd"

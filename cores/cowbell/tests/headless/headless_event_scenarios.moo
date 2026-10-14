@@ -262,7 +262,7 @@ object HEADLESS_EVENT_SCENARIOS
       {$player, "dms", "none", "none", "dms"},
       {$player, "listgag", "none", "none", "@listgag"},
       {$prog_features, "@ps", "none", "none", "@ps"},
-      {$prog_features, "@schedules", "none", "none", "@schedules"},
+      {$builder_features, "@schedules", "none", "none", "@schedules"},
       {$prog_features, "@codepaste", "none", "none", "@codepaste"},
       {$social_features, "frown", "none", "none", "frown"},
       {$social_features, "applaud", "none", "none", "applaud"}

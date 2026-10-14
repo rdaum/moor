@@ -11,6 +11,10 @@ This continues [Let's make a pet rock](programming-with-rules-and-reactions.md).
 lesson's inspiration, [Yib's Pet Rock tutorial](https://lisdude.com/moo/yib_rock.html). You do not
 need to bring your rock along. The examples here create a separate set of objects.
 
+The rock lesson introduces properties, verbs, variables, and events. Here we use those ideas to make
+several objects cooperate. You will write two verbs: one for petting and one for deciding which
+gifts Henri accepts. Commands will supply his moods, rules, reactions, furniture, and schedule.
+
 ## Before you begin
 
 You need builder and programmer privileges, as in the rock lesson. You do not need wizard
@@ -20,11 +24,11 @@ Keep the example names while you follow the lesson. Commands such as `@reaction 
 names to find your objects. Another cat named Henri in the same room will make that confusing.
 
 As before, `%` marks a command to type. `=` marks the response, and `~~` matches part of a response.
-Leave those markers out. A command beginning with `;` runs a short piece of MOO code.
+Leave those markers out. The collapsible test checks are for the test runner; you can skip them.
 
 For a longer program, enter the named `@program` command. Paste the code, then finish with a period
-on a line by itself. The collapsible test sections are for the project's test runner. You do not
-enter those instructions.
+on a line by itself. Code marked as an excerpt explains part of a program; the complete body is
+separately identified when it is time to enter it.
 
 <details>
 <summary>Test setup: an ordinary programmer and a visitor</summary>
@@ -66,21 +70,9 @@ This command works on actors you own and needs no programmer privileges. For cus
 `@set-pronouns Henri to custom`. It asks you to fill in sentences, then shows a preview before
 saving. Type `help @set-pronouns` for details. `@pronouns` sets your own pronouns.
 
-We can also ask Henri to show us his pronouns:
-
-```moot
-% #Henri for %#:pronouns_display()
-==> "he/him"
-```
-
-`#` is a builder's Swiss army knife for finding objects and doing things with them. It can inspect
-properties, assign values, and call verbs. `#Henri` finds your cat by name. After `for`, `%#` stands
-for the object you found. Here, `pronouns_display()` returns the short label `"he/him"`.
-
-You can also read a property with `#Henri.name`, or follow several properties with
-`#Henri.location.name`. Type `help #` for the reference, or follow the
-[object shortcuts tutorial](object-shortcuts.md) for a guided tour. Assignments and `for` require
-programmer privileges.
+For a quick look at an object's properties, use `#Henri.name`. `#` is a handy utility for finding
+objects and inspecting them. Type `help #` for its other uses, or follow the
+[object shortcuts tutorial](object-shortcuts.md).
 
 New objects start in your inventory. Move Henri into the room:
 
@@ -97,48 +89,14 @@ The rock lesson introduced a `pet` command, a message, and an access rule. Henri
 pieces. He also announces an **attempt** before checking his rule. This lets him remember an
 approach even when he refuses the pet.
 
-Add the rule and message properties:
+Add a place for his petting rule:
 
 ```moot
 % @property Henri.pet_rule 0 rc
 ~~Added
-% @property Henri.pet_msg {} rc
-~~Added
-% @property Henri.pet_denied_msg {} rc
-~~Added
-% @property Henri.pet_changed_msg {} rc
-~~Added
-% @property Henri.pet_out_of_reach_msg {} rc
-~~Added
-% @verb Henri:message_bindings this none this rxd
-~~added
 ```
 
 A rule of `0` permits the operation. We will give Henri a reason to refuse later.
-
-As with the rock, the message editor needs to know who each message can mention. Enter
-`@program Henri:message_bindings`, then this code:
-
-```moo verb=Henri:message_bindings
-"Describe the participants in Henri's petting messages.";
-const {property} = args;
-if (!property:starts_with("pet_") || !property:ends_with("_msg"))
-  return pass(@args);
-endif
-let participants = $sub_utils:standard_bindings("The person trying to pet the cat.");
-participants['dobj] = ['kind -> 'object, 'description -> "The cat.", 'example -> 'host];
-return participants;
-```
-
-<details>
-<summary>Test check: the message declaration compiled</summary>
-
-```moot
-~~Now programming
-~~lines programmed.
-```
-
-</details>
 
 Write the messages:
 
@@ -158,34 +116,72 @@ Write the messages:
 `{nc}` names the person, and `{d}` names the cat. `{dc}` starts the cat's name with a capital
 letter. The first message says “You pet Henri.” to the person and “Ada pets Henri.” to a visitor.
 
-Enter `@program Henri:pet`, then this code:
+### An attempt and a successful action are different events
+
+Suppose someone reaches toward a grouchy cat. Henri can notice the approach even if he refuses the
+pet. We need to remember the attempt before we ask whether petting is allowed.
+
+The command will do these things in order:
+
+1. Check that the person and Henri are in the same room.
+2. Send `on_pet_attempt` to Henri. Reactions to this event run now.
+3. Ask his current `pet_rule` whether the pet is allowed.
+4. If the rule refuses, show the refusal message and stop.
+5. Otherwise, announce the pet and send `on_pet`.
+
+That order matters. Later, an attempt will change Henri's mood. The rule must see his new mood
+before it decides whether to allow that same pet.
+
+Here is the new part of the program, shown as an excerpt:
+
+```moo example
+const context = ['Actor -> who, 'Location -> room];
+this:fire_trigger('on_pet_attempt, context);
+```
+
+As in the rock lesson, the map holds the person and room. We save it in a variable called `context`
+because both events need the same information. `fire_trigger` calls the reactions that listen for
+`on_pet_attempt`. When they finish, the next instruction reads `this.pet_rule`. The verb later uses
+the same context for `on_pet`, but only after the rule allows the action.
+
+We keep the earlier checks for reach, ownership, and changes during rule evaluation. The rule
+result's `'success` field becomes the yes-or-no value in `allowed`. If it is false, the verb sends
+`pet_denied_msg` privately. If it is true, the verb announces `pet_msg` to everyone in the room.
+
+Enter `@program Henri:pet`, then this complete body:
 
 ```moo verb=Henri:pet
 "Pet a nearby cat if his current rule permits it.";
-caller == player || raise(E_PERM, "Use the pet command to pet this cat.");
-this.owner == task_perms()[1]
-  || raise(E_PERM, "This cat and its pet verb need the same owner. Ask the owner to check the verb.");
+if (caller != player)
+  raise(E_PERM, "Use the pet command to pet this cat.");
+endif
+if (this.owner != task_perms()[1])
+  raise(E_PERM, "This cat and its pet verb need the same owner. Ask the owner to check the verb.");
+endif
 const who = player;
 const room = who.location;
 if (!valid(room) || !isa(room, $room) || this.location != room)
-  who:inform_current($event:mk_error(who, @this.pet_out_of_reach_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_out_of_reach_msg", 'error));
   return false;
 endif
 const context = ['Actor -> who, 'Location -> room];
 this:fire_trigger('on_pet_attempt, context);
 const policy = this.pet_rule;
 const before = {this.owner, this.location, who.location, policy};
-const allowed = policy == 0 || $rule_engine:evaluate(policy,
-  ['This -> this, 'Accessor -> who])['success];
+let allowed = true;
+if (policy != 0)
+  const result = $rule_engine:evaluate(policy, ['This -> this, 'Accessor -> who]);
+  allowed = result['success];
+endif
 if (!equal(before, {this.owner, this.location, who.location, this.pet_rule}))
-  who:inform_current($event:mk_error(who, @this.pet_changed_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_changed_msg", 'error));
   return false;
 endif
 if (!allowed)
-  who:inform_current($event:mk_error(who, @this.pet_denied_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_denied_msg", 'error));
   return false;
 endif
-room:announce($event:mk_info(who, @this.pet_msg):with_dobj(this));
+room:announce(this:message_event(who, "pet_msg"));
 this:fire_trigger('on_pet, context);
 return true;
 ```
@@ -221,7 +217,12 @@ Try it:
 
 ## 3. Give him a mood
 
-Henri needs to remember his mood and the number of attempts. Declare those two state values:
+Henri's mood must last between commands. A local variable in `pet` would disappear when the verb
+finishes, so we store the mood as a property through `@state`.
+
+We will use a **choice** for the mood: one of a fixed set of words. This catches mistakes such as
+setting it to `slepy` when we meant `sleepy`. We also need a number to count petting attempts.
+Declare both values, then give his pet rule a condition:
 
 ```moot
 % @state Henri mood choice grouchy sleepy playful
@@ -233,7 +234,14 @@ Henri needs to remember his mood and the number of attempts. Declare those two s
 ```
 
 The first choice, `grouchy`, is the initial mood. The rule permits a pet only when Henri is not
-grouchy. `property_is` reads the named property; `NOT` reverses that condition.
+grouchy. Read the rule from the inside out:
+
+- `fact property_is object=this field=mood value=grouchy` asks whether this cat's mood is `grouchy`.
+- `NOT` reverses the answer. A grouchy cat refuses; a cat in either other mood permits the pet.
+
+`property_is` is a built-in question about an object's current property value. We use `this` for
+Henri because the rule belongs to him. There is no cat named `this` to create or find. The rule
+reads the property each time someone tries to pet him.
 
 Count each attempt:
 
@@ -264,8 +272,19 @@ Now give his patience a limit:
 This is a **threshold reaction**. It runs when the counter crosses from less than four to four or
 more. Its steps change the mood, reset the counter, and describe the result.
 
+An event reaction starts because something happened, such as a petting attempt. This threshold
+reaction starts because remembered state crosses a boundary. Resetting the counter to zero lets it
+cross that boundary again after four more attempts.
+
+The threshold value is a choice we made for this cat. The `pet` verb knows nothing about four
+attempts or sleepy cats. Those choices live in the reactions, where you can change them later.
+
 An `emote` step supplies the object's name. The quoted text is a message template, so it can use
 pronouns as well as plain words. The message stays outside the pet command's code.
+
+A reaction can also have a **condition**. The event makes it eligible to run, and the condition
+decides whether its steps fit the current situation. Henri needs one response while sleepy and
+another while playful.
 
 Add different responses for successful pets:
 
@@ -306,6 +325,11 @@ Try four pets:
 The fourth attempt changes his mood before the rule is checked. That pet succeeds. The other three
 attempts still count, but never produce a successful pet event.
 
+Follow the fourth command through the pieces: `on_pet_attempt` increases the counter to four. The
+threshold reaction makes Henri sleepy and resets the counter. The pet rule then sees a sleepy cat
+and allows the pet. Finally, `on_pet` reaches the sleepy response. Nothing in the playful response
+runs, because its condition is false.
+
 You can change a state value directly while you experiment:
 
 ```moot
@@ -343,9 +367,9 @@ Create a cupboard and a key:
 ~~Created
 % @describe cupboard as A wooden food cupboard with a small brass lock.
 ~~Set description
-% @create $thing named brasskey
+% @create $thing named brass key
 ~~Created
-% @describe brasskey as A small brass key. It fits the food cupboard.
+% @describe brass key as A small brass key. It fits the food cupboard.
 ~~Set description
 ```
 
@@ -375,16 +399,16 @@ Make a kind of food, then three meals of that kind:
 ~~You dropped cupboard.
 % @rule cupboard get never
 ~~Set
-% @rule cupboard lock key is brasskey
+% @rule cupboard lock key is "brass key"
 ~~Set
-% @rule cupboard unlock key is brasskey
+% @rule cupboard unlock key is "brass key"
 ~~Set
 % @set-message cupboard.open_msg {nc} {open|opens} {d}, releasing a familiar smell of cat food.
 ~~Set message template
 % close cupboard
 ~~You close cupboard.
-% lock cupboard with brasskey
-~~You lock cupboard with brasskey.
+% lock cupboard with brass key
+~~You lock cupboard with brass key.
 % open cupboard
 ~~Cupboard is locked.
 ```
@@ -394,7 +418,7 @@ remain separate objects. Henri will recognize descendants of this prototype as f
 name them.
 
 The `get never` rule stops visitors from picking up the furniture. It does not prevent them from
-opening it. The lock and unlock rules select your particular key. Another object named `brasskey`
+opening it. The lock and unlock rules select your particular key. Another object named `brass key`
 will not open this cupboard.
 
 ## 5. Dinner improves his mood
@@ -406,22 +430,32 @@ rule.
 First, tell Henri which kind of food he accepts:
 
 ```moot
-% @property Henri.food_kind #-1 rc
-~~Added
-% #Henri.food_kind = $match:match_object("kibble", player)
-~~.food_kind =
+% @state Henri food_kind object kibble
+~~Declared food_kind
 % #Henri.food_kind.name
 ==> "kibble"
 % @verb Henri:acceptable this none this rxd
 ~~added
 ```
 
-`$match:match_object("kibble", player)` finds your kibble prototype. `food_kind` stores the object
-reference, so you can rename the prototype later without breaking the connection. The next command
-follows that reference and reads the food's name.
+`food_kind` remembers the kibble prototype itself. Renaming the prototype later will not break the
+connection. `#Henri.food_kind.name` follows that reference and shows its name.
 
-Before moving an item, `give` asks the recipient's `acceptable` method whether it can accept it.
-Enter `@program Henri:acceptable` and give that method a more particular opinion:
+### Answer a question from another verb
+
+Before moving an item, `give` calls the recipient's `acceptable` verb. This is a **method**: a verb
+that other code calls, rather than a command a person types. It receives the proposed gift as an
+argument and returns `true` or `false`.
+
+This is a useful place for a small custom program. The existing gift operation asks this method for
+its answer. Our answer needs to recognize a family of food objects. After writing that test once, we
+can choose another food prototype through `@state` without changing the method.
+
+Read the three lines before entering them. The first describes the method for readers. The second
+names the argument, and the third returns the answer. There are no messages or movements here:
+`give` uses this answer to decide whether it can proceed.
+
+Enter `@program Henri:acceptable` and supply this body:
 
 ```moo verb=Henri:acceptable
 "Accept only descendants of this cat's food prototype.";
@@ -439,8 +473,19 @@ return valid(this.food_kind) && isa(item, this.food_kind);
 
 </details>
 
-This replaces the actor's default acceptance method on Henri alone. `isa` asks whether the item is
-the prototype itself or one of its descendants.
+`args` is MOO's list of the arguments supplied to a verb. `const {item} = args;` takes the one
+argument from that list and names it `item`. The braces on the left describe the list we expect.
+This method expects exactly one item.
+
+`valid(this.food_kind)` asks whether the food prototype still exists. `isa(item, this.food_kind)`
+asks whether the offered item is that prototype or one of its descendants. Unlike a method call, a
+built-in function such as `isa` has no object and colon before its name.
+
+`&&` means “and.” Both tests must be true for the method to return `true`. For `supper`, which we
+created from `kibble`, the answer is true. For `brass key`, it is false. We test both below.
+
+This replaces the actor's default acceptance method on Henri alone. Other actors keep their usual
+behavior. The `food_kind` property lets us change Henri's preferred family of food later.
 
 An object receives an `enter` event when something moves into it. For this event, `who` identifies
 the arriving object. Add a reaction for arriving food:
@@ -456,10 +501,10 @@ the arriving object. Add a reaction for arriving food:
 ~~Saved
 % @reaction Henri dinner enable
 ~~Saved
-% give brasskey to Henri
+% give brass key to Henri
 ~~That recipient can't accept the item.
-% unlock cupboard with brasskey
-~~You unlock cupboard with brasskey.
+% unlock cupboard with brass key
+~~You unlock cupboard with brass key.
 % open cupboard
 ~~You open cupboard, releasing a familiar smell of cat food.
 % take supper from cupboard
@@ -483,7 +528,7 @@ cans, leftovers, or a cat's inventory.
 <summary>Test checks: refused food stays carried, and visitors can feed the cat</summary>
 
 ```moot
-; const cat = $match:match_object("Henri", player); return {$match:match_object("brasskey", player).location == player, cat.pet_attempts, cat.mood};
+; const cat = $match:match_object("Henri", player); return {$match:match_object("brass key", player).location == player, cat.pet_attempts, cat.mood};
 {true, 1, "sleepy"}
 @attach dinner_visitor nonprogrammer
 @dinner_visitor
@@ -507,6 +552,10 @@ cans, leftovers, or a cat's inventory.
 Henri currently notices food only when it reaches him. A real cat usually notices much sooner. Let
 the cupboard tell him when someone opens it.
 
+The cupboard and cat are separate objects. Opening the cupboard sends an `open` event to the
+cupboard, not to every object in the room. We will add a cupboard reaction that forwards the news to
+Henri, then give Henri his own response. This lets each object keep its own behavior.
+
 Give Henri a response to a new event named `cupboard_open`:
 
 ```moot
@@ -524,22 +573,20 @@ For an emote, `{p}` means the reacting object's possessive pronoun: Henri swivel
 condition keeps him quiet when the cupboard opens in another room. `place` is the room where the
 original event happened.
 
-The cupboard needs a reaction that sends this event to Henri. The MOO interface can express that
-step. Enter this whole line as one command:
+Now tell the cupboard to send that event when someone opens it:
 
 ```moot
-% #cupboard for $reaction:install(%#, "notify_cat_reaction", $reaction:mk('on_open, 0, {{'trigger, $match:match_object("Henri", player), 'on_cupboard_open}})).enabled
-==> true
+% @reaction cupboard notify_cat after open
+~~Saved
+% @reaction cupboard notify_cat then trigger Henri cupboard_open
+~~Saved
+% @reaction cupboard notify_cat enable
+~~Saved
 ```
 
-Here is what the line does:
-
-- `#cupboard` finds the cupboard; `%#` stands for it in the expression.
-- `$match:match_object("Henri", player)` finds the cat.
-- `$reaction:mk` makes a reaction for `on_open`. The `0` means it has no extra condition.
-- The `trigger` step sends `on_cupboard_open` to Henri. The original participants and room travel
-  with it.
-- `$reaction:install` saves and enables the reaction on the cupboard you own.
+`trigger Henri cupboard_open` tells Henri that the cupboard opened. His `ears` reaction responds to
+that event. The original person and room travel with the event, so he can check whether he is
+nearby. The command remembers this particular cat, even if you rename him later.
 
 You own both ends of this connection. Sending a trigger can change its recipient's state, so the
 sender needs the recipient owner's permissions. Merely knowing another cat's object number does not
@@ -555,8 +602,7 @@ Try the connection:
 =You open cupboard, releasing a familiar smell of cat food.
 ```
 
-You can inspect this reaction with `@reaction cupboard notify_cat show`, even though you installed
-it with MOO code. It is the same kind of reaction as the ones made with commands.
+Use `@reaction cupboard notify_cat show` to inspect the connection.
 
 <details>
 <summary>Test check: a cupboard in another room does not make Henri speak here</summary>
@@ -594,23 +640,23 @@ The `$sittable` prototype supplies sitting and standing. Give Henri a seat throu
 interface that reactions use:
 
 ```moot
-; const couch = $match:match_object("couch", player); const cat = $match:match_object("Henri", player); return $reaction:perform_action('sit, ['target -> couch, 'actor -> cat])['status];
-'applied
+% @act Henri sit target=couch
+~~Henri
+~~Done: Henri sit.
 ```
 
 <details>
 <summary>Test check: Henri really took a seat</summary>
 
 ```moot
-@text Henri sits on the couch.
 ; const couch = $match:match_object("couch", player); return $match:match_object("Henri", player) in couch.sitting;
 1
 ```
 
 </details>
 
-`target` names the seat and `actor` names the sitter. You can direct Henri because you own him. This
-permission does not let you make another player's character sit down.
+`@act Henri` chooses who acts; `sit` chooses the action; `target=couch` chooses the seat. You can
+direct Henri because you own him. You cannot direct another player's character.
 
 Give Henri a response when someone joins him:
 
@@ -628,9 +674,26 @@ Give Henri a response when someone joins him:
 Connect the couch to the cat. This reaction has a condition: Henri must be sitting there, and the
 new sitter must be someone else.
 
+The world already records who sits on which seat. We can ask for that **fact**, just as the rock
+lesson asked its visitor book whether someone had visited. Here the shared fact is called `sitting`.
+Its two fields are `actor`, the sitter, and `seat`, the furniture.
+
+The reaction's setting `cat` will refer to Henri. In `actor=cat`, the left side selects the fact's
+field and the right side supplies the object to look for. In `seat=this`, `this` is the couch
+because the reaction belongs to the couch. The final `AND actor is not cat` excludes Henri's own
+arrival: the event's `actor` must be someone else.
+
 ```moot
-; const couch = $match:match_object("couch", player); const cat = $match:match_object("Henri", player); const condition = "sitting(actor: " + toliteral(cat) + ", seat: input.This) AND input.Actor != " + toliteral(cat); return $reaction:install(couch, "company_reaction", $reaction:mk('on_sit, condition, {{'trigger, cat, 'on_couch_intruder}})).enabled;
-true
+% @reaction couch company after sit
+~~Saved
+% @reaction couch company with cat object Henri
+~~Saved
+% @reaction couch company if fact sitting actor=cat seat=this AND actor is not cat
+~~Saved
+% @reaction couch company then trigger cat couch_intruder
+~~Saved
+% @reaction couch company enable
+~~Saved
 % sit on couch
 =You sit on the couch.
 =Henri shifts pointedly away from the new arrival. This is HIS couch.
@@ -638,9 +701,9 @@ true
 =You stand up from the couch.
 ```
 
-The condition uses the MOO rule expression syntax. `input.This` is the couch receiving the sitting
-event. `input.Actor` is the new sitter. `toliteral(cat)` writes the cat's object reference into that
-expression. The shorter builder conditions use `this` and `actor` for the same inputs.
+`with cat object Henri` gives this reaction a setting named `cat`. Here, `this` is the couch and
+`actor` is the new sitter. The condition checks that Henri already sits there and the newcomer is
+someone else. The final step sends the cat an event about his new company.
 
 Food can persuade Henri to leave his seat. Add a response on the cat:
 
@@ -659,12 +722,21 @@ Food can persuade Henri to leave his seat. Add a response on the cat:
 ~~Saved
 ```
 
+In this reaction, `this` means Henri, because it belongs to him. `with seat object couch` saves the
+couch as a setting named `seat`. The condition checks that Henri is nearby and sitting there.
+`do stand target=seat actor=this` asks Henri to stand from that seat. The action performs the normal
+standing checks and updates the world's sitting fact. It does more than print a sentence.
+
 The cupboard can send this notification whenever someone takes something from it. Henri expects food
 from this cupboard. He can be disappointed if you keep something else there.
 
 ```moot
-% #cupboard for $reaction:install(%#, "dinner_bell_reaction", $reaction:mk('on_take, 0, {{'trigger, $match:match_object("Henri", player), 'on_food_taken}})).enabled
-==> true
+% @reaction cupboard dinner_bell after take
+~~Saved
+% @reaction cupboard dinner_bell then trigger Henri food_taken
+~~Saved
+% @reaction cupboard dinner_bell enable
+~~Saved
 % take breakfast from cupboard
 =Henri stands up from the couch.
 =Henri perks up, suddenly interested in dinner.
@@ -692,96 +764,45 @@ Start with one idle reaction:
 ~~Saved
 % @reaction Henri idle enable
 ~~Saved
-% @property Henri.idle_schedule 0 rc
-~~Added
-% @verb Henri:idle this none this rxd
-~~added
 ```
 
-Enter `@program Henri:idle`, then this code:
+Send an `idle` event roughly every five minutes:
 
-```moo verb=Henri:idle
-"Send one idle event and choose the delay until the next one.";
-caller_perms() == this.owner
-  || raise(E_PERM, "Only the cat's owner can run its idle behaviour.");
-if (valid(this.location) && isa(this.location, $room))
-  this:fire_trigger('on_idle, ['Actor -> this, 'Location -> this.location]);
-endif
-return 240 + random(120);
+```moot
+% @schedule Henri idle every 300 jitter 60
+~~Scheduled Henri idle
+% @schedule Henri idle
+~~Henri idle: every 300
 ```
+
+Times are in seconds. `jitter 60` varies the wait by up to a minute, so Henri does not groom himself
+like clockwork. Leave that part out for a regular interval. The schedule sends the event; the
+reaction supplies his response. You can change either one separately.
+
+Repeating the start command replaces your schedule for that object and event. It does not start a
+second copy. Schedules survive a server restart and stop if the object's ownership changes.
+
+Keep the scene quiet while you finish the lesson:
+
+```moot
+% @schedule Henri idle stop
+~~Stopped schedule for Henri idle.
+% @schedule Henri idle
+=No schedule for Henri idle.
+```
+
+You can use the start command again whenever you want. His other reactions keep working while the
+idle schedule is stopped. `@schedules` lists your schedules.
 
 <details>
-<summary>Test check: the idle callback compiled</summary>
+<summary>Test check: the scheduled event reaches the reaction</summary>
 
 ```moot
-~~Now programming
-~~lines programmed.
-```
-
-</details>
-
-The scheduler will call this method for you. Its result chooses the next delay: more than four
-minutes and at most six minutes. The method only sends the event. The reaction contains the prose,
-so you can change Henri's idle response without rewriting the schedule.
-
-Start it with this command:
-
-```moot
-; const cat = $match:match_object("Henri", player); if (!schedule_valid(cat.idle_schedule)) cat.idle_schedule = schedule_every(cat, "idle", 300.0, {}, ['adaptive -> true, 'pass_elapsed -> false]); endif return schedule_valid(cat.idle_schedule);
-true
-```
-
-`300.0` sets the first wait to five minutes. `adaptive` tells the scheduler to use the method's
-return value for later waits. `pass_elapsed` is false because our method takes no arguments. The
-`schedule_valid` check prevents a second copy when you repeat the start command.
-
-<details>
-<summary>Test check: repeat the start without creating another schedule</summary>
-
-```moot
-; const cat = $match:match_object("Henri", player); const first = cat.idle_schedule; if (!schedule_valid(cat.idle_schedule)) cat.idle_schedule = schedule_every(cat, "idle", 300.0, {}, ['adaptive -> true, 'pass_elapsed -> false]); endif const info = schedule_info(cat.idle_schedule); return {cat.idle_schedule == first, info["authority"] == player, info["target"] == cat, info["adaptive"], info["pass_elapsed"]};
-{true, true, true, true, false}
-```
-
-</details>
-
-`@schedules` lists your schedules. Keep the scene quiet while you finish the lesson by stopping
-Henri's schedule:
-
-```moot
-; const cat = $match:match_object("Henri", player); schedule_stop(cat.idle_schedule); cat.idle_schedule = 0; return true;
-true
-```
-
-You can use the start command again whenever you want. The other reactions keep working while the
-idle schedule is stopped.
-
-<details>
-<summary>Test checks: the actual callback, stale IDs, and a foreign caller</summary>
-
-The test uses a short first wait, then checks that the ordinary programmer's callback really runs.
-The callback itself still chooses its usual four-to-six-minute delay.
-
-```moot
-; const cat = $match:match_object("Henri", player); cat.idle_schedule = 999999; if (!schedule_valid(cat.idle_schedule)) cat.idle_schedule = schedule_every(cat, "idle", 0.1, {}, ['adaptive -> true, 'pass_elapsed -> false]); endif return true;
-true
+% @schedule Henri idle every 0.1
+~~Scheduled Henri idle
 @text-within 5 Henri grooms one paw, then inspects the room with renewed disappointment.
-; const cat = $match:match_object("Henri", player); let info = schedule_info(cat.idle_schedule); for attempt in [1..100] if (info["run_count"] > 0) break; endif suspend(0.01); info = schedule_info(cat.idle_schedule); endfor schedule_stop(cat.idle_schedule); return {info["run_count"] == 1, info["fault_count"] == 0};
-{true, true}
-; const cat = $match:match_object("Henri", player); return schedule_valid(cat.idle_schedule);
-false
-@wizard
-; #90102.programmer = true; return true;
-true
-@nonprogrammer
-; const cat = $match:match_object("Henri", player); try cat:idle(); return false; except (E_PERM) return true; endtry
-true
-@wizard
-; #90102.programmer = false; return true;
-true
-@programmer
-; const cat = $match:match_object("Henri", player); cat.idle_schedule = 0; return true;
-true
+% @schedule Henri idle stop
+~~Stopped schedule for Henri idle.
 ```
 
 </details>

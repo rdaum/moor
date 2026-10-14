@@ -1,0 +1,51 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.is_builder = true; #90101.authoring_features = $prog_features; return true;
+true
+@programmer
+% @create $thing named pet rock
+~~Created
+% @describe pet rock as A smooth stone.
+~~Set description
+% #"pet rock".name
+==> "pet rock"
+% #"pet rock".name inventory
+==> "pet rock"
+% #pet\ rock.name
+==> "pet rock"
+% @property "pet rock".counter 12 rc
+~~Added
+% #"pet rock".counter
+==> 12
+% #"pet rock".counter = 2 * 7
+~~counter = 14
+% @verb "pet rock":remember this none this rxd
+~~added
+% @program "pet rock":remember = return args[1];
+~~programmed
+% #"pet rock" for %#:remember("two words")
+==> "two words"
+% @set-message "pet rock".notice_msg She said "hello".  Twice.
+~~Set message template
+; return $sub_utils:decompile($match:match_object("pet rock", player).notice_msg);
+"She said \"hello\".  Twice."
+% @set-message "pet rock.notice_msg" A replacement.
+~~Set message template
+% @get-message "pet rock".notice_msg
+~~notice_msg = A replacement.
+% @add-message "pet rock".remarks_msg_bag A "quiet" reply.
+~~Added message
+; return $sub_utils:decompile($match:match_object("pet rock", player).remarks_msg_bag:entries()[1]);
+"A \"quiet\" reply."
+% @preview-message "pet rock".notice_msg A "quoted" preview.
+~~Nothing is saved or sent.
+~~Alex uses they/them
+~~Actor (Alex): A "quoted" preview.
+~~Recipient (Sam): A "quoted" preview.
+~~Observer (Robin): A "quoted" preview.
+; return $sub_utils:decompile($match:match_object("pet rock", player).notice_msg);
+"A replacement."
+; return "  \"pet rock\".pet_msg  rest":word_start();
+{{3, 20}, {23, 26}}

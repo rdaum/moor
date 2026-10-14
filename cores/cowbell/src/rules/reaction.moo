@@ -216,6 +216,10 @@ object REACTION [
           $relation:schema(target, effect.fields, true);
         endif
         $behavior_schema:_arguments(effect.arguments, effect.fields, scope, "fact fields", 0);
+      elseif (effect.type == 'trigger)
+        const target = typeof(effect.target) == TYPE_MAP ? effect.target
+          | ['kind -> 'literal, 'value -> effect.target];
+        $behavior_schema:_compatible($behavior_schema:expression(target, scope), 'object, "event recipient");
       elseif (effect.type == 'schedule)
         $reaction:_validate_effects({effect.effect}, scope, depth + 1, parameters, check_targets);
       endif
@@ -867,6 +871,56 @@ object REACTION [
     return msg;
   endmethod
 
+  method event_schedules owner: ARCH_WIZARD
+    "Find this author's live native schedules for one object's event. No separate registry is kept.";
+    set_task_perms(caller_perms());
+    const {host, event, author} = args;
+    let ids = {};
+    for id in (schedules(author))
+      const info = schedule_info(id);
+      if (info["target"] == $reaction && info["verb"] == "scheduled_event"
+        && length(info["args"]) == 4 && info["args"][1] == host && info["args"][2] == event)
+        ids = {@ids, id};
+      endif
+    endfor
+    return ids;
+  endmethod
+
+  method scheduled_event owner: ARCH_WIZARD
+    "Send a recurring event with the schedule owner's authority; stop after host ownership changes.";
+    const principal = caller_perms();
+    set_task_perms(principal);
+    const {host, event, owner, interval} = args;
+    if (!(typeof(host) == TYPE_OBJ && valid(host) && host.owner == owner)
+      || !(principal == owner || principal.wizard))
+      "Returning zero preserves a recurring schedule's cadence, so cancel stale firings explicitly.";
+      for id in (schedules(principal))
+        const info = schedule_info(id);
+        if (info["target"] == $reaction && info["verb"] == "scheduled_event" && equal(info["args"], args))
+          schedule_stop(id);
+        endif
+      endfor
+      return 0;
+    endif
+    const room = isa(host, $room) ? host | host.location;
+    if (valid(room) && isa(room, $room))
+      host:fire_trigger(event, ['Actor -> host, 'Location -> room]);
+    endif
+    return interval;
+  endmethod
+
+  method message_templates owner: ARCH_WIZARD
+    "Read a named message or every bag entry without making a random choice or changing the bag.";
+    set_task_perms(caller_perms());
+    const {message, host} = args;
+    const value = typeof(message) == TYPE_SYM ? host.(tostr(message)) | message;
+    if ($msg_bag:is_msg_bag(value))
+      return value:entries();
+    endif
+    typeof(value) == TYPE_LIST || raise(E_INVARG, "Expected a compiled message or message bag.");
+    return {value};
+  endmethod
+
   method preview_message owner: ARCH_WIZARD
     "Show example wording for a message or scheduled message without running the effect.";
     set_task_perms(caller_perms());
@@ -880,8 +934,14 @@ object REACTION [
     endwhile
     !(message.type in {'announce, 'emote, 'tell}) && return {};
     try
-      const template = typeof(message.msg) == TYPE_STR ? message.msg | $sub_utils:decompile(message.msg);
-      return $sub_utils:preview(template, $reaction:message_bindings(message.type), host, message);
+      const templates = typeof(message.msg) == TYPE_STR ? {$sub_utils:compile(message.msg)}
+        | $reaction:message_templates(message.msg, host);
+      let lines = {};
+      for template in (templates)
+        lines = {@lines, @$sub_utils:preview($sub_utils:decompile(template),
+          $reaction:message_bindings(message.type), host, message)};
+      endfor
+      return length(lines) ? lines | {"This message bag is empty."};
     except error (E_INVARG, E_TYPE, E_PERM, E_VERBNF, E_PROPNF)
       return {"Cannot preview this message: " + error[2]};
     endtry
@@ -954,8 +1014,10 @@ object REACTION [
       move(target, dest);
     elseif (effect.type == 'trigger)
       "Fire another trigger on another object";
-      valid(effect.target) || raise(E_INVARG, "The trigger target no longer exists.");
-      effect.target:fire_trigger(effect.event, context);
+      const recipient = typeof(effect.target) == TYPE_MAP
+        ? $condition:resolve(effect.target, environment) | effect.target;
+      valid(recipient) || raise(E_INVARG, "The trigger target no longer exists.");
+      recipient:fire_trigger(effect.event, context);
     elseif (effect.type == 'schedule)
       return $reaction:_schedule(target, effect.name, effect.seconds, effect.effect, context, installation, environment);
     elseif (effect.type == 'cancel)

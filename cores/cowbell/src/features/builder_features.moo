@@ -76,6 +76,7 @@ object BUILDER_FEATURES [
       return;
     endif
     const prop_spec = args[1];
+    const text = argstr[argstr:word_start()[1][2] + 1..$]:trim();
     const parsed = $prog_utils:parse_target_spec(prop_spec);
     let target_name;
     let prop_name;
@@ -93,9 +94,6 @@ object BUILDER_FEATURES [
     const target = $match:match_object(target_name, player);
     valid(target) || raise(E_INVARG, "Object not found");
     prop_name:ends_with("_msg_bag") || prop_name:ends_with("_msgs") || raise(E_INVARG, "Property must end with _msg_bag or _msgs");
-    "Preserve full template text after target spec";
-    const offset = index(argstr, prop_spec) + length(prop_spec);
-    const text = argstr[offset..length(argstr)]:trim();
     !text && raise(E_INVARG, "Usage: @add-message <object>.<prop> <template>");
     const {success, compiled} = $obj_utils:validate_and_compile_template(text, target, prop_name);
     if (!success)
@@ -1301,6 +1299,7 @@ object BUILDER_FEATURES [
     endif
     try
       const target_spec = args[1];
+      const template_string = argstr[argstr:word_start()[1][2] + 1..$]:trim();
       "Parse property reference";
       const parsed = $prog_utils:parse_target_spec(target_spec);
       if (!parsed)
@@ -1336,15 +1335,16 @@ object BUILDER_FEATURES [
       except e (ANY)
         raise(e[1], "Object lookup failed: " + toliteral(e));
       endtry
-      "Get remainder after target spec";
-      const offset = index(argstr, target_spec) + length(target_spec);
-      const template_string = argstr[offset..length(argstr)]:trim();
       typeof(target_obj) != TYPE_OBJ && raise(E_INVARG, "That reference is not an object.");
       !valid(target_obj) && raise(E_INVARG, "That object does not exist.");
       "Check if property is writable";
-      const {writable, error_msg} = $obj_utils:check_message_property_writable(target_obj, prop_name, player);
-      if (!writable)
-        raise(E_PERM, error_msg);
+      const existing = $obj_utils:property_key(target_obj, prop_name);
+      if (existing == E_PROPNF)
+        (target_obj.owner == player || player.wizard)
+          || raise(E_PERM, "You must own the object to add a message.");
+      else
+        const {writable, error_msg} = $obj_utils:check_message_property_writable(target_obj, prop_name, player);
+        writable || raise(E_PERM, error_msg);
       endif
       "Compile and validate the template";
       const {success, result} = $obj_utils:validate_and_compile_template(template_string, target_obj, prop_name);
@@ -1356,8 +1356,15 @@ object BUILDER_FEATURES [
       const success_message = "Set message template on " + obj_name + " (" + tostr(target_obj) + ")." + prop_name + ".";
       "Set the compiled message";
       const prop_key = $obj_utils:property_key(target_obj, prop_name);
-      prop_key == E_PROPNF && raise(E_PROPNF, "Property not found: " + prop_name);
-      $obj_utils:set_compiled_message(target_obj, prop_key, compiled_list, player, {{"property_write", target_obj, prop_key}});
+      if (prop_key == E_PROPNF)
+        (target_obj.owner == player || player.wizard)
+          || raise(E_PERM, "You no longer own the object.");
+        const value = prop_name:ends_with("_msg") ? compiled_list | $msg_bag:mk(compiled_list);
+        add_property(target_obj, prop_name, value, {target_obj.owner, "rc"});
+      else
+        $obj_utils:set_compiled_message(target_obj, prop_key, compiled_list, player,
+          {{"property_write", target_obj, prop_key}});
+      endif
       player:inform_current($event:mk_info(player, success_message));
       return true;
     except e (ANY)
@@ -1383,7 +1390,7 @@ object BUILDER_FEATURES [
     let lines = {"Bindings for " + args[1] + ":"};
     if (verb == "@preview-message")
       length(args) > 1 || raise(E_INVARG, "Use @preview-message OBJECT.PROPERTY TEMPLATE.");
-      const template = argstr[length(args[1]) + 1..$]:trim();
+      const template = argstr[argstr:word_start()[1][2] + 1..$]:trim();
       lines = $sub_utils:preview(template, bindings, target);
     else
       length(args) == 1 || raise(E_INVARG, "Use @message-bindings OBJECT.PROPERTY.");
@@ -1993,7 +2000,11 @@ object BUILDER_FEATURES [
     set_task_perms(player);
     try
       is_builder || raise(E_PERM, "Builder features required.");
-      const parts = verb[2..$]:split(".");
+      const input = verb[2..$] + (length(argstr) ? " " + argstr | "");
+      const spans = input:word_start();
+      const lookup = length(spans) ? input[spans[1][1]..spans[1][2]]:words()[1] | "";
+      const tail = length(spans) ? input[spans[1][2] + 1..$]:trim() | "";
+      const parts = lookup:split(".");
       let reference = parts[1];
       const properties = length(parts) > 1 ? parts[2..$] | {};
       if (!length(reference))
@@ -2003,7 +2014,7 @@ object BUILDER_FEATURES [
       for property in (properties)
         length(property) || raise(E_INVARG, "A dot must be followed by a property name.");
       endfor
-      let rest = argstr:trim();
+      let rest = tail;
       const assignment = length(rest) > 0 && rest[1] == "=";
       let expression = "";
       let scope = "";
@@ -2294,11 +2305,23 @@ object BUILDER_FEATURES [
   endmethod
 
   method _author_object owner: ARCH_WIZARD
-    "Resolve an object from the author's perspective, under the author's read permissions.";
+    "Resolve a unique object nearby, then a room in the current area. Never evaluate input.";
     set_task_perms(caller_perms());
     const {word, who} = args;
-    const object = $match:match_object($builder_features:_author_text(word), who);
-    typeof(object) == TYPE_OBJ && valid(object) || raise(E_INVARG, "No object matches " + word + ".");
+    const name = $builder_features:_author_text(word);
+    length(name) || raise(E_INVARG, "Supply an object name or identifier.");
+    if (name[1] in {"#", "$", "@"} || name in {"me", "here", "player"})
+      const object = $match:match_object(name, who);
+      (typeof(object) == TYPE_OBJ && valid(object)) || raise(E_INVARG, "No object matches " + name + ".");
+      return object;
+    endif
+    const nearby = valid(who.location) ? who.location.contents | {};
+    let object = $builder_features:_hash_match(name, {@who.contents, @nearby});
+    if (object == $failed_match && valid(who.location) && valid(who.location.location))
+      const rooms = {room for room in (who.location.location.contents) if isa(room, $room)};
+      object = $builder_features:_hash_match(name, rooms);
+    endif
+    object != $failed_match || raise(E_INVARG, "No object matches " + name + ".");
     return object;
   endmethod
 
@@ -2489,21 +2512,122 @@ object BUILDER_FEATURES [
     return values;
   endmethod
 
+  verb "@act" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "Request a normal action as yourself or an owned NPC. Usage: @act ACTOR ACTION target=OBJECT ...";
+    caller == player || raise(E_PERM);
+    this:_require_builder_command(player);
+    set_task_perms(player);
+    try
+      const words = $builder_features:_author_words(argstr);
+      if (length(words) == 0 || words == {"help"})
+        player:inform_current($event:mk_info(player,
+          "Use @act Henri sit target=couch. Use @reaction actions to list actions and arguments."));
+        return;
+      endif
+      length(words) >= 2 || raise(E_INVARG, "Use @act ACTOR ACTION target=OBJECT ...");
+      const actor = $builder_features:_author_object(words[1], player);
+      $root:check_actor(actor);
+      const action = tosym(words[2]);
+      const schemas = $reaction:action_schemas();
+      maphaskey(schemas, action) || raise(E_INVARG, "Unknown action. Use @reaction actions.");
+      const inputs = mapdelete(schemas[action]['inputs], 'actor);
+      const expressions = $builder_features:_author_arguments(words[3..$], inputs,
+        $rule_engine:scope(), player);
+      let values = ['actor -> actor];
+      for field in (mapkeys(expressions))
+        values[field] = expressions[field]['value];
+      endfor
+      const result = $reaction:perform_action(action, values);
+      if (result['status] == 'error)
+        const error = result['error];
+        raise(error[1], error[2], error[3]);
+      elseif (result['status] == 'denied)
+        player:inform_current($event:mk_error(player, @result['reason]));
+      else
+        player:inform_current($event:mk_info(player, "Done: " + actor.name + " " + tostr(action) + "."));
+      endif
+    except problem (E_INVARG, E_TYPE, E_PERM, E_PROPNF)
+      player:inform_current($event:mk_error(player, problem[2]));
+    endtry
+  endverb
+
+  verb "@exit-provider" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "List or approve custom room exits. Usage: @exit-provider ROOM [add|remove|refresh OBJECT].";
+    caller == player || raise(E_PERM);
+    this:_require_builder_command(player);
+    set_task_perms(player);
+    try
+      const words = $builder_features:_author_words(argstr);
+      if (length(words) == 0 || words == {"help"})
+        player:inform_current($event:mk_info(player,
+          "Use @exit-provider ROOM to list custom exits, or @exit-provider ROOM add|remove|refresh OBJECT."));
+        return;
+      endif
+      const room = $builder_features:_author_object(words[1], player);
+      isa(room, $room) || raise(E_INVARG, "Choose a room.");
+      if (length(words) == 1)
+        let lines = {"Custom exit providers for " + room.name + ":"};
+        for provider in (mapkeys(room.exit_providers))
+          const label = valid(provider) ? provider.name + " (" + tostr(provider) + ")" | tostr(provider);
+          lines = {@lines, label + (length($room:_exit_registration(room, provider))
+            ? " — approved" | " — needs approval again")};
+        endfor
+        player:inform_current($event:mk_info(player, @$format:literal_inline(lines:join("\n"))));
+        return;
+      endif
+      (length(words) == 3 && words[2] in {"add", "remove", "refresh"})
+        || raise(E_INVARG, "Use @exit-provider ROOM add|remove|refresh OBJECT.");
+      const provider = $builder_features:_author_object(words[3], player);
+      const capability = player:find_capability_for(room, 'room);
+      const subject = typeof(capability) == TYPE_FLYWEIGHT ? capability | room;
+      if (words[2] == "add")
+        $room:register_exit_provider(subject, provider);
+      elseif (words[2] == "remove")
+        $room:unregister_exit_provider(subject, provider);
+      else
+        $room:exit_options_changed(subject, provider);
+      endif
+      player:inform_current($event:mk_info(player,
+        "Custom exit " + words[2] + ": " + provider.name + " in " + room.name + "."));
+    except problem (E_INVARG, E_TYPE, E_PERM, E_PROPNF)
+      player:inform_current($event:mk_error(player, problem[2]));
+    endtry
+  endverb
+
   method reaction_steps owner: HACKER
     "Supply the accepted step names and their command help from one catalog.";
     return [
-      'announce -> "announce \"MESSAGE\" — show a message in the event's room",
-      'tell -> "tell actor \"MESSAGE\" — send a private message to the participant",
-      'emote -> "emote \"MESSAGE\" — describe what this object does",
+      'announce -> "announce \"MESSAGE\" or announce message NAME — show a message in the event's room",
+      'tell -> "tell actor \"MESSAGE\" or tell actor message NAME — send a private message",
+      'emote -> "emote \"MESSAGE\" or emote message NAME — describe what this object does",
       'set -> "set STATE VALUE — change a declared state value",
       'add -> "add COUNTER AMOUNT — increase a declared counter",
       'subtract -> "subtract COUNTER AMOUNT — decrease a declared counter",
       'schedule -> "schedule NAME SECONDS STEP — replace a timer with this name",
       'cancel -> "cancel NAME — cancel a timer on this object",
+      'trigger -> "trigger OBJECT EVENT — send an event to an object you control",
       'record -> "record in RELATION FIELD=VALUE ... — store a fact once",
       'forget -> "forget in RELATION FIELD=VALUE ... — remove a fact if present",
       'do -> "do ACTION target=OBJECT actor=ACTOR ... — request a normal world action"
     ];
+  endmethod
+
+  method _author_message owner: ARCH_WIZARD
+    "Read inline text or a named message, validating every bag entry for this effect's bindings.";
+    set_task_perms(caller_perms());
+    const {words, host, kind} = args;
+    if (length(words) == 1)
+      return $builder_features:_author_text(words[1]);
+    endif
+    (length(words) == 2 && words[1] == "message")
+      || raise(E_INVARG, "Use a quoted message, or message PROPERTY_NAME.");
+    const name = $builder_features:_author_text(words[2]);
+    (name:ends_with("_msg") || name:ends_with("_msgs") || name:ends_with("_msg_bag"))
+      || raise(E_INVARG, "A message property ends with _msg, _msgs, or _msg_bag.");
+    for template in ($reaction:message_templates(tosym(name), host))
+      $sub_utils:compile($sub_utils:decompile(template), $reaction:message_bindings(kind));
+    endfor
+    return tosym(name);
   endmethod
 
   method _author_step owner: ARCH_WIZARD
@@ -2516,11 +2640,13 @@ object BUILDER_FEATURES [
     maphaskey($builder_features:reaction_steps(), kind)
       || raise(E_INVARG, "Unknown step: " + words[1] + ". Use @reaction steps.");
     if (kind in {'announce, 'emote})
-      length(words) == 2 || raise(E_INVARG, "Put the entire message in double quotes.");
-      return $reaction:parse_effect({kind, $builder_features:_author_text(words[2])});
+      return $reaction:parse_effect({kind,
+        $builder_features:_author_message(words[2..$], host, kind)});
     elseif (kind == 'tell)
-      (length(words) == 3 && words[2] == "actor") || raise(E_INVARG, "Use tell actor \"MESSAGE\".");
-      return $reaction:parse_effect({'tell, 'Actor, $builder_features:_author_text(words[3])});
+      (length(words) >= 3 && words[2] == "actor")
+        || raise(E_INVARG, "Use tell actor followed by a quoted message or message NAME.");
+      return $reaction:parse_effect({'tell, 'Actor,
+        $builder_features:_author_message(words[3..$], host, kind)});
     elseif (kind in {'set, 'add, 'subtract})
       length(words) == 3 || raise(E_INVARG, "Supply a state name and a value.");
       const field = tosym(words[2]);
@@ -2530,6 +2656,11 @@ object BUILDER_FEATURES [
       const value = $builder_features:_author_value(words[3], $rule_engine:scope(), who, expected)['value];
       kind == 'set && $reaction:_check_state_value(value, host.reaction_state_fields[field]);
       return $reaction:parse_effect({kind == 'set ? 'set | (kind == 'add ? 'increment | 'decrement), field, value});
+    elseif (kind == 'trigger)
+      length(words) == 3 || raise(E_INVARG, "Use trigger OBJECT EVENT, such as trigger Henri cupboard_open.");
+      $behavior_schema:_name(tosym(words[3]), "event name");
+      const target = $builder_features:_author_value(words[2], scope, who, 'object);
+      return $reaction:parse_effect({'trigger, target, tosym("on_" + words[3])});
     elseif (kind == 'schedule)
       length(words) >= 5 || raise(E_INVARG, "Use schedule NAME SECONDS STEP.");
       const seconds = $builder_features:_author_value(words[3], $rule_engine:scope(), who, 'integer)['value];
@@ -2635,7 +2766,7 @@ object BUILDER_FEATURES [
     const effect = typeof(raw) == TYPE_LIST ? $reaction:parse_effect(raw) | raw;
     const kind = effect.type;
     if (kind in {'announce, 'emote, 'tell})
-      const message = typeof(effect.msg) == TYPE_SYM ? "message named " + tostr(effect.msg)
+      const message = typeof(effect.msg) == TYPE_SYM ? "message " + tostr(effect.msg)
         | toliteral($sub_utils:decompile(effect.msg));
       return tostr(kind) + (kind == 'tell ? " " + tostr(effect.target) | "") + " " + message;
     elseif (kind in {'set, 'increment, 'decrement})
@@ -2666,7 +2797,14 @@ object BUILDER_FEATURES [
     elseif (kind == 'move)
       return "move to " + tostr(effect.destination);
     elseif (kind == 'trigger)
-      return "send event " + tostr(effect.event) + " to " + tostr(effect.target);
+      let target = typeof(effect.target) == TYPE_MAP ? effect.target
+        | ['kind -> 'literal, 'value -> effect.target];
+      if (typeof(environment) == TYPE_MAP)
+        target = ['kind -> 'literal, 'value -> $condition:resolve(target, environment)];
+      endif
+      const event = tostr(effect.event);
+      return "trigger " + $builder_features:_author_value_text(target) + " "
+        + (event:starts_with("on_") ? event[4..$] | event);
     endif
     raise(E_INVARG, "Unknown step: " + tostr(kind));
   endmethod
@@ -2737,6 +2875,8 @@ object BUILDER_FEATURES [
       "@reaction OBJECT NAME when COUNTER >= NUMBER — respond when a value crosses a threshold",
       "@reaction OBJECT NAME if CONDITION — replace its condition",
       "@reaction OBJECT NAME then STEP — append a step",
+      "Message steps accept quoted text or message NAME, such as then announce message greeting_msg.",
+      "Use then trigger OBJECT EVENT to send an event, such as then trigger Henri cupboard_open.",
       "@reaction OBJECT NAME step NUMBER STEP — replace a numbered step",
       "@reaction OBJECT NAME remove-step NUMBER — delete a step",
       "@reaction OBJECT NAME with SETTING TYPE VALUE — choose a reusable setting",
@@ -3150,4 +3290,171 @@ object BUILDER_FEATURES [
     $relation:change_fact(host, schema['types], values, words[1] == "add" ? 'record | 'forget);
     return {words[1] == "add" ? "Recorded fact. Repeating it does not create a duplicate." | "Removed fact if present."};
   endmethod
+  method author_schedule owner: ARCH_WIZARD
+    "Manage one recurring event per author, object, and event name through native schedules.";
+    const {text, who} = args;
+    (caller_perms() == who || caller_perms().wizard) || raise(E_PERM);
+    (who.is_builder || who.programmer) || raise(E_PERM, "Builder privileges are required.");
+    set_task_perms(who);
+    const words = $builder_features:_author_words(text);
+    if (length(words) == 0 || words == {"help"})
+      return {"Usage: @schedule OBJECT EVENT every SECONDS [jitter SECONDS], or @schedule ID.",
+        "Example: @schedule Henri idle every 300 jitter 60.",
+        "Inspect with @schedule Henri idle; stop with @schedule Henri idle stop.",
+        "The event is sent to this object. Its reactions supply the response.",
+        "Repeating the start command replaces your previous schedule for that event."};
+    endif
+    length(words) >= 2 || raise(E_INVARG, "Supply an object and event, or a schedule ID.");
+    const host = $builder_features:_author_object(words[1], who);
+    $behavior_schema:_name(tosym(words[2]), "event name");
+    const event = tosym("on_" + words[2]);
+    const ids = $reaction:event_schedules(host, event, who);
+    const label = host.name + " " + words[2];
+    if (length(words) == 2)
+      let lines = {};
+      for id in (ids)
+        const info = schedule_info(id);
+        lines = {@lines, label + ": every " + tostr(info["interval"]) + " seconds, jitter "
+          + tostr(info["jitter"]) + " seconds (schedule " + tostr(id) + ")."};
+      endfor
+      return length(lines) ? lines | {"No schedule for " + label + "."};
+    elseif (length(words) == 3 && words[3] == "stop")
+      for id in (ids)
+        schedule_stop(id);
+      endfor
+      return {"Stopped schedule for " + label + "."};
+    endif
+    (length(words) in {4, 6} && words[3] == "every")
+      || raise(E_INVARG, "Use every SECONDS [jitter SECONDS], or stop.");
+    const interval = $builder_features:_author_value(words[4], $rule_engine:scope(), who, 'float)['value];
+    let jitter = 0.0;
+    if (length(words) == 6)
+      words[5] == "jitter" || raise(E_INVARG, "Use jitter SECONDS to vary the wait.");
+      jitter = $builder_features:_author_value(words[6], $rule_engine:scope(), who, 'float)['value];
+    endif
+    interval > 0.0 || raise(E_INVARG, "The interval must be greater than zero.");
+    (jitter >= 0.0 && jitter < interval) || raise(E_INVARG, "Jitter must be zero or less than the interval.");
+    (who == host.owner || who.wizard) || raise(E_PERM, "You must own the object to schedule its events.");
+    "Validate and create before canceling the previous schedule. Both changes commit together.";
+    const id = schedule_every($reaction, "scheduled_event", interval, {host, event, host.owner, interval},
+      ['player -> host, 'pass_elapsed -> false, 'adaptive -> true, 'jitter -> jitter]);
+    for previous in (ids)
+      schedule_stop(previous);
+    endfor
+    return {"Scheduled " + label + " every " + tostr(interval) + " seconds (schedule " + tostr(id) + ")."};
+  endmethod
+
+  method _schedule_rows owner: ARCH_WIZARD
+    "Return live schedule rows visible to caller_perms(); wizard callers see all owners.";
+    set_task_perms(caller_perms());
+    let rows = {};
+    for id in (schedules())
+      try
+        const info = schedule_info(id);
+        if (!info["retired"])
+          const timing = info["kind"] == "at" ? "once" | (info["adaptive"] ? "adaptive, base " | "every ") + tostr(info["interval"]) + "s";
+          const event = info["target"] == $reaction && info["verb"] == "scheduled_event";
+          const target = event ? info["args"][1] | info["target"];
+          const label = valid(target) ? target.name | tostr(target);
+          const operation = event ? tostr(info["args"][2]) | info["verb"];
+          rows = {@rows, {tostr(id), tostr(info["owner"]), label + ":" + operation, timing, $builder_features:_schedule_next(info), info["running_task"] ? tostr(info["running_task"]) | "-"}};
+        endif
+      except (E_INVARG)
+        "A schedule can disappear between listing its ID and reading its diagnostics.";
+      endtry
+    endfor
+    return rows;
+  endmethod
+
+  method _schedule_table owner: ARCH_WIZARD
+    "Format schedule rows with schedule IDs distinct from running task IDs.";
+    const {rows} = args;
+    return $format.table:mk({"Schedule ID", "Owner", "Verb", "Timing", "Next", "Running task"}, rows);
+  endmethod
+
+  method _schedule_next owner: ARCH_WIZARD
+    "Format a schedule deadline; adaptive schedules can wait for a firing to finish.";
+    const {info} = args;
+    if (info["next_run"] == 0.0)
+      return info["running_task"] && !info["retired"] ? "after firing" | "-";
+    endif
+    const remaining = info["next_run"] - tofloat(time());
+    return remaining > 0.0 ? "in " + tostr(max(1, toint(remaining))) + "s" | "ready";
+  endmethod
+
+  method _schedule_id owner: ARCH_WIZARD
+    "Parse one positive decimal schedule ID; raise E_INVARG for malformed input.";
+    const {text} = args;
+    const trimmed = text:trim();
+    match(trimmed, "^[0-9]+$") || raise(E_INVARG, "Expected a positive schedule ID.");
+    const id = toint(trimmed);
+    id > 0 || raise(E_INVARG, "Expected a positive schedule ID.");
+    return id;
+  endmethod
+
+  verb "@schedules" (none none none) owner: ARCH_WIZARD flags: "rd"
+    "USAGE: @schedules -- List your live schedules; wizards see all owners.";
+    caller == player || raise(E_PERM);
+    (player.is_builder || player.programmer) || raise(E_PERM, "Builder privileges are required.");
+    set_task_perms(player);
+    const rows = $builder_features:_schedule_rows();
+    const output = $format.block:mk($format.title:mk("Schedules", 3), length(rows) ? $builder_features:_schedule_table(rows) | "(none)", tostr(length(rows)) + " scheduled", "Use @schedule <id> for details or @stop-schedule <id> to stop future firings.");
+    player:inform_current($event:mk_info(player, output));
+  endverb
+
+  verb "@schedule" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "Usage: @schedule OBJECT EVENT [every SECONDS [jitter SECONDS]|stop], or @schedule ID.";
+    caller == player || raise(E_PERM);
+    (player.is_builder || player.programmer) || raise(E_PERM, "Builder privileges are required.");
+    set_task_perms(player);
+    if (!match(argstr:trim(), "^[-+0-9]"))
+      try
+        const lines = $builder_features:author_schedule(argstr, player);
+        player:inform_current($event:mk_info(player, @$format:literal_inline(lines:join("\n"))));
+      except problem (E_INVARG, E_TYPE, E_PERM, E_PROPNF)
+        player:inform_current($event:mk_error(player, problem[2]));
+      endtry
+      return;
+    endif
+    let id = 0;
+    try
+      id = $builder_features:_schedule_id(argstr);
+    except (E_INVARG)
+      player:inform_current($event:mk_error(player, "Usage: @schedule <positive schedule-id>"));
+      return;
+    endtry
+    try
+      const info = schedule_info(id);
+      const rows = {{"Owner", tostr(info["owner"])}, {"Verb", tostr(info["target"]) + ":" + info["verb"]}, {"Arguments", toliteral(info["args"])}, {"Kind", info["kind"] == "at" ? "once" | "recurring"}, {"Base interval", tostr(info["interval"]) + "s"}, {"Adaptive", info["adaptive"] ? "yes" | "no"}, {"Next", $builder_features:_schedule_next(info)}, {"Running task", info["running_task"] ? tostr(info["running_task"]) | "-"}, {"Runs / faults", tostr(info["run_count"]) + " / " + tostr(info["fault_count"])}, {"Missed / overlap", tostr(info["missed_count"]) + " / " + tostr(info["overlap_count"])}, {"Catchup / overlap policy", info["catchup"] + " / " + info["overlap"]}, {"State", toliteral(info["state"])}, {"Last fault", toliteral(info["last_fault"])}, {"Status", info["retired"] ? "retired: " + info["retire_reason"] | "live"}};
+      player:inform_current($event:mk_info(player, $format.block:mk($format.title:mk("Schedule " + tostr(id), 3), $format.table:mk({"Field", "Value"}, rows))));
+    except (E_INVARG)
+      player:inform_current($event:mk_error(player, "No such schedule: " + tostr(id)));
+    except (E_PERM)
+      player:inform_current($event:mk_error(player, "Permission denied: you don't own schedule " + tostr(id) + "."));
+    endtry
+  endverb
+
+  verb "@stop-schedule @kill-schedule" (any none none) owner: ARCH_WIZARD flags: "rd"
+    "USAGE: @stop-schedule <id> -- Stop future firings of your schedule; wizards may stop any schedule.";
+    caller == player || raise(E_PERM);
+    (player.is_builder || player.programmer) || raise(E_PERM, "Builder privileges are required.");
+    set_task_perms(player);
+    let id = 0;
+    try
+      id = $builder_features:_schedule_id(argstr);
+    except (E_INVARG)
+      player:inform_current($event:mk_error(player, "Usage: @stop-schedule <positive schedule-id>"));
+      return;
+    endtry
+    try
+      if (schedule_stop(id))
+        player:inform_current($event:mk_info(player, "Stopped schedule " + tostr(id) + ". Running firings are unchanged; use @kill <task-id> to stop one."));
+      else
+        player:inform_current($event:mk_info(player, "No live schedule: " + tostr(id)));
+      endif
+    except (E_PERM)
+      player:inform_current($event:mk_error(player, "Permission denied: you don't own schedule " + tostr(id) + "."));
+    endtry
+  endverb
+
 endobject

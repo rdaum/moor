@@ -103,6 +103,58 @@ Stop the reaction:
 place. An edit to an enabled reaction takes effect immediately. For several edits that must take
 effect together, disable the reaction first.
 
+## Keep the wording in a named message
+
+A named message lets you edit wording without replacing the reaction step:
+
+```text
+@set-message cedarbox.welcome_msg A cedar scent escapes.
+@reaction cedarbox welcome step 1 announce message welcome_msg
+```
+
+Use `@get-message cedarbox.welcome_msg` to read it. You can also use a message bag:
+
+```text
+@add-message cedarbox.scents_msg_bag A cedar scent escapes.
+@add-message cedarbox.scents_msg_bag The box smells of old books.
+@reaction cedarbox welcome step 1 announce message scents_msg_bag
+```
+
+Each run chooses an entry. `tell actor message NAME` and `emote message NAME` work too, including
+inside a scheduled step. Previews show every bag entry without choosing or removing one.
+
+## Tell another object about an event
+
+For two objects you own, a reaction can send an event to the other object:
+
+```text
+@reaction cedarbox notify_cat after open
+@reaction cedarbox notify_cat then trigger Henri cupboard_open
+@reaction cedarbox notify_cat enable
+```
+
+Henri can respond with a reaction using `after cupboard_open`. The original person and room travel
+with the event. A target can also be a reaction setting, such as `with cat object Henri` followed by
+`then trigger cat cupboard_open`. Sending the event needs the recipient owner's authority.
+
+## Arrange recurring activity
+
+```text
+@reaction Henri idle after idle
+@reaction Henri idle then emote "grooms one paw."
+@reaction Henri idle enable
+@schedule Henri idle every 300 jitter 60
+```
+
+This sends the idle event roughly every five minutes, with up to one minute of variation. The
+reaction supplies the response. Inspect it with `@schedule Henri idle` and stop it with
+`@schedule Henri idle stop`. Repeating the start command replaces your previous schedule.
+
+A schedule survives a restart and stops if the object changes owner. See `help @schedule`. To
+request a single normal action instead, use `@act Henri sit target=couch`. This checks the same
+rules and reachability as sitting through a reaction. You can direct NPCs you own, or act as
+yourself.
+
 ## Respond when someone opens a passage door
 
 A passage connects two rooms. Its door is shared, but each room can have its own reactions. For this

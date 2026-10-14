@@ -1,0 +1,35 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; #90102.authoring_features = $builder_features; const portal = create($thing, #90102); portal.name = "portal"; move(portal, #90102); #90102.runtime_probe = portal; add_verb(portal, {#90102, "rxd", "travel_options"}, {"this", "none", "this"}); set_verb_code(portal, "travel_options", {"return {};"}); add_verb(portal, {#90102, "rxd", "use_exit"}, {"this", "none", "this"}); set_verb_code(portal, "use_exit", {"return false;"}); return #90103.owner != #90102;
+true
+@nonprogrammer
+% @exit-provider here add portal
+~~Permission
+@wizard
+; return length(#90103.exit_providers);
+0
+; $root:grant_capability(#90103, {'dig_from}, #90102, 'room); return true;
+true
+@nonprogrammer
+@text You have been granted Runtime Test Chamber (#90103).room(dig_from).
+% @exit-provider here add portal
+~~Custom exit add: portal
+% @exit-provider here
+~~Custom exit providers
+~~portal
+% @exit-provider here refresh portal
+~~Custom exit refresh: portal
+@wizard
+; return length(#90103.exit_providers);
+1
+@nonprogrammer
+% @exit-provider here remove portal
+~~Custom exit remove: portal
+@wizard
+; return length(#90103.exit_providers);
+0
+@nonprogrammer
+% @exit-provider here refresh portal
+~~needs the room owner's approval

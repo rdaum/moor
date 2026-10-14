@@ -199,13 +199,13 @@ help/help_utils.moo:command_usage
 types/str_proto.moo
 
 features/prog_features.moo:@ps
-features/prog_features.moo:_schedule_rows
-features/prog_features.moo:_schedule_table
-features/prog_features.moo:_schedule_next
-features/prog_features.moo:_schedule_id
-features/prog_features.moo:@schedules
-features/prog_features.moo:@schedule
-features/prog_features.moo:@stop-schedule
+features/builder_features.moo:_schedule_rows
+features/builder_features.moo:_schedule_table
+features/builder_features.moo:_schedule_next
+features/builder_features.moo:_schedule_id
+features/builder_features.moo:@schedules
+features/builder_features.moo:@schedule
+features/builder_features.moo:@stop-schedule
 change_manager.moo
 
 agentic/agentic_event_queue.moo
@@ -358,3 +358,12 @@ player.moo:@pronouns
 pronouns.moo:from_input
 pronouns.moo:prompt_custom
 features/builder_features.moo:@set-pronouns
+features/builder_features.moo:_author_message
+features/builder_features.moo:@act
+features/builder_features.moo:@exit-provider
+features/builder_features.moo:author_schedule
+rules/reaction.moo:message_templates
+rules/reaction.moo:event_schedules
+rules/reaction.moo:scheduled_event
+root.moo:message_bindings
+root.moo:message_event

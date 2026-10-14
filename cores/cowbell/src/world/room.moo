@@ -475,12 +475,13 @@ object ROOM [
 
   method exit_options_changed owner: ARCH_WIZARD
     "Refresh room panels after a provider changes. The registered provider or room author may call.";
-    const {room, provider} = args;
+    const {subject, provider} = args;
+    const room = typeof(subject) == TYPE_FLYWEIGHT ? subject.delegate | subject;
     const principal = caller_perms();
     const registration = $room:_exit_registration(room, provider);
     length(registration) || raise(E_INVARG, "This exit provider needs the room owner's approval.");
     if (caller != provider || principal != provider.owner)
-      $root:_check_permissions_as(room, principal, 'dig_from);
+      $root:_check_permissions_as(subject, principal, 'dig_from);
     endif
     $room:connections_changed({room});
   endmethod

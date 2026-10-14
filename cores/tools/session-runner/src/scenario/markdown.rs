@@ -47,7 +47,11 @@ pub(super) fn parse_markdown(source: &str) -> Result<Vec<(usize, Action<'_>)>> {
         if width < 3 {
             continue;
         }
-        let info: Vec<_> = line[width..].split_whitespace().collect();
+        let info: Vec<_> = line[width..]
+            .trim()
+            .splitn(2, char::is_whitespace)
+            .map(str::trim)
+            .collect();
         let body_start = offset;
         let mut body_end = None;
         for (_, raw) in lines.by_ref() {
@@ -136,6 +140,18 @@ mod tests {
             ]
         );
         assert_eq!(runner.calls[5].0, actors().programmer);
+    }
+
+    #[test]
+    fn quoted_object_name_reaches_the_program_command() {
+        let source = "```moo verb=\"pet rock\":pet\nreturn true;\n```\n";
+        let actions = parse_markdown(source).unwrap();
+        let mut runner = Runner::default();
+        execute_actions(&mut runner, &actors(), actions).unwrap();
+        assert_eq!(
+            runner.calls.last(),
+            Some(&(actors().wizard, "@program \"pet rock\":pet".into()))
+        );
     }
 
     #[test]

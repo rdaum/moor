@@ -1,0 +1,131 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.is_builder = true; #90102.is_builder = true; #90102.authoring_features = $builder_features; return true;
+true
+@nonprogrammer
+% @create $actor named Henri
+~~Created
+% @create $container named box
+~~Created
+% @create $sittable named couch
+~~Created
+% @set-message Henri.pet_msg {nc} {pet|pets} {d}.
+~~Set message template
+% @set-message Henri.bad_msg {unknown_participant}
+~~does not supply {unknown_participant}
+% @set-message #90101.stolen_msg Hello.
+~~must own
+@wizard
+; const cat = $match:match_object("Henri", #90102); #90102.runtime_probe = cat; move(cat, #90103); move($match:match_object("couch", #90102), #90103); return {$obj_utils:property_key(cat, "bad_msg") == E_PROPNF, $obj_utils:property_key(#90101, "stolen_msg") == E_PROPNF, !#90102.programmer};
+{true, true, true}
+; const event = #90102.runtime_probe:message_event(#90102, "pet_msg"); return {event.actor == #90102, event.dobj == #90102.runtime_probe};
+{true, true}
+@nonprogrammer
+% @act Henri sit target=couch
+~~Henri sits
+~~Done: Henri sit.
+% @act #90101 sit target=couch
+~~cannot act as that person
+@wizard
+; return $match:match_object("couch", #90102).sitting == {#90102.runtime_probe};
+true
+@nonprogrammer
+% @act Henri stand target=couch
+~~Henri stands
+~~Done: Henri stand.
+% @state Henri visits number 0
+~~Declared
+% @reaction Henri visit after visit
+~~Saved
+% @reaction Henri visit then add visits 1
+~~Saved
+% @reaction Henri visit enable
+~~Saved
+% @reaction box relay after open
+~~Saved
+% @reaction box relay with cat object Henri
+~~Saved
+% @reaction box relay then trigger cat visit
+~~Saved
+% @reaction box relay enable
+~~Saved
+% close box
+~~You close box.
+% open box
+~~You open box.
+@wizard
+; return #90102.runtime_probe.visits;
+1
+@nonprogrammer
+% @set-message box.greeting_msg Hello, {n}.
+~~Set message template
+% @reaction box welcome after open
+~~Saved
+% @reaction box welcome then tell actor message greeting_msg
+~~Saved
+% @reaction box welcome then announce message absent_msg
+~~Property
+@wizard
+; const host = $match:match_object("box", #90102); return {length(host.welcome_reaction.effects), host.welcome_reaction.effects[1].msg};
+{1, 'greeting_msg}
+@nonprogrammer
+% @reaction box welcome enable
+~~Saved
+% close box
+~~You close box.
+% open box
+=Hello, you.
+~~You open box.
+% @set-message box.greeting_msg Welcome back, {n}.
+~~Set message template
+% close box
+~~You close box.
+% open box
+=Welcome back, you.
+~~You open box.
+% @add-message box.choices_msg_bag First choice.
+~~Added message
+% @add-message box.choices_msg_bag Second choice.
+~~Added message
+@wizard
+; const host = $match:match_object("box", #90102); const step = $reaction:parse_effect({'announce, 'choices_msg_bag}); const before = host.choices_msg_bag:entries(); const preview = $reaction:preview_message(step, host):join(" "); return {index(preview, "First choice.") > 0, index(preview, "Second choice.") > 0, equal(before, host.choices_msg_bag:entries())};
+{true, true, true}
+@nonprogrammer
+% @schedule Henri visit every 300 jitter 60
+~~Scheduled Henri visit
+% @schedule Henri visit every 400
+~~Scheduled Henri visit
+@wizard
+; const ids = $reaction:event_schedules(#90102.runtime_probe, 'on_visit, #90102); const info = schedule_info(ids[1]); return {length(ids), info["owner"], info["interval"], info["player"] == #90102.runtime_probe};
+{1, #90102, 400.0, true}
+@nonprogrammer
+% @schedule Henri visit every 0
+~~greater than zero
+% @schedule Henri visit every 30 jitter 30
+~~less than the interval
+% @schedule #90101 visit every 300
+~~must own
+@wizard
+; return schedule_info($reaction:event_schedules(#90102.runtime_probe, 'on_visit, #90102)[1])["interval"];
+400.0
+@nonprogrammer
+% @schedule Henri visit stop
+~~Stopped schedule
+% @schedule Henri visit
+=No schedule for Henri visit.
+% @schedule Henri visit stop
+~~Stopped schedule
+% @reaction Henri awake after awake
+~~Saved
+% @reaction Henri awake then emote "wakes up."
+~~Saved
+% @reaction Henri awake enable
+~~Saved
+% @schedule Henri awake every 0.2
+~~Scheduled Henri awake
+@text-within 5 Henri wakes up.
+@wizard
+; const cat = #90102.runtime_probe; const id = $reaction:event_schedules(cat, 'on_awake, #90102)[1]; cat:set_owner(#90100); for attempt in [1..100] if (!schedule_valid(id)) return true; endif suspend(0.05); endfor return false;
+true

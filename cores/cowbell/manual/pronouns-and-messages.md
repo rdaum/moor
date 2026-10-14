@@ -75,6 +75,31 @@ is checked again when you save.
 `@pronouns` always refers to your own pronouns. For the builder command's reference, type
 `help @set-pronouns`.
 
+## Write a message for your own command
+
+Give the message a name ending in `_msg`:
+
+```text
+@set-message "pet rock".pet_msg {nc} {pet|pets} {d}.
+```
+
+The command creates the message if it is missing. You must own the object to add one. For an
+ordinary object message, `{nc}` is the person acting and `{d}` is the object. You do not need to
+write a `message_bindings` verb for these roles.
+
+A programmer can send this message from a command with:
+
+```moo
+player.location:announce(this:message_event(player, "pet_msg"));
+```
+
+`message_event` supplies the person and object, while `announce` chooses who receives it. Use
+`this:message_event(player, "pet_denied_msg", 'error)` to prepare an error message. Send it to one
+person with `player:inform_current(...)`.
+
+Custom participants, such as a named recipient or destination, need a declaration and a supplied
+value. Those are advanced extensions. The [reference](message-template-reference.md) describes them.
+
 ## Give an object a different pickup message
 
 You need builder privileges for this example. The pebble belongs to you, so you can change its

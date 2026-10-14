@@ -17,8 +17,8 @@ You'll need an account in a Cowbell world, with both builder and programmer priv
 person who runs your world if you need those privileges. Pick a room where you can experiment
 without interrupting other people.
 
-Follow the sections in order. They all work on the same rock. Keep the name `petrock` while you
-follow the lesson, so the later commands can find it.
+Follow the sections in order. They all work on the same rock. We will give it the short alias `rock`
+to keep the commands easy to type.
 
 In the examples, `%` marks a command to type. `=` marks the response you should see. Leave those
 markers out when you type. A line starting with `~~` shows only part of a response, such as
@@ -53,32 +53,57 @@ true
 Type this command:
 
 ```moot
-% @create $thing named petrock
+% @create $thing named "pet rock",rock
 ~~Created
 ```
 
-You now own an object called `petrock`. It starts in your inventory.
+You now own an object called `pet rock`. It starts in your inventory. The comma adds `rock` as an
+**alias**: another name you can use to refer to the same object. An object has one main name and can
+have several aliases.
+
+Object names can contain spaces. We will use the shorter alias `rock` in commands throughout this
+lesson. Messages will still call it `pet rock`.
+
+An object has **properties** and **verbs**. A property holds something the object remembers, such as
+its name or description. A verb holds instructions for something the object can do. Your rock
+already has properties and verbs, because it starts from an existing object.
 
 `@create` makes a new object. `$thing` is Cowbell's starting point for ordinary things: it already
 knows how to be picked up and dropped. Your rock gets that behavior from `$thing`. Later, we'll use
-your rock as the starting point for another one.
+your rock as the starting point for another one. Names such as `$thing` refer to objects supplied by
+Cowbell. Keep the `$` when you type them.
+
+That starting object is called a **prototype**, and the new object is its **child**. The rock can
+use verbs from its prototype without needing a separate copy of each program. We will return to that
+idea after your rock has some behavior worth sharing.
 
 Before we go further, try a handy tool:
 
 ```moot
-% #petrock.name
-==> "petrock"
+% #rock.name
+==> "pet rock"
+% #rock.aliases
+==> {"rock"}
 ```
 
-`#` is a builder's Swiss army knife for finding objects and doing things with them. `#petrock` finds
-your rock; `.name` reads its name property. Later, we'll use the same command to change values and
-call verbs. Type `help #` for help inside the world. The
-[object shortcuts tutorial](object-shortcuts.md) gives a fuller tour.
+`#` is a builder's Swiss army knife for finding objects and doing things with them. `#rock` finds
+your rock by its alias. The dot means “get this property from that object.”
+
+The `.name` property holds the main name, `"pet rock"`. This is a **string**: a piece of text. The
+`.aliases` property holds a **list** of other names, here `{"rock"}`. Braces mark a list; commas
+separate its entries when there is more than one. An object without aliases has an empty list, `{}`.
+
+An alias does not create another object or change its main name. Both `rock` and `pet rock` refer to
+this same stone. Later, `pet rock` will use the alias: `pet` is the command and `rock` is its
+object.
+
+Type `help #` for help inside the world. The [object shortcuts tutorial](object-shortcuts.md) gives
+a fuller tour.
 
 Give it a description:
 
 ```moot
-% @describe petrock as A smooth stone with an expression of patient indifference.
+% @describe rock as A smooth stone with an expression of patient indifference.
 ~~Set description
 ```
 
@@ -89,71 +114,15 @@ now, let's give it something to do.
 
 We need two things: a message to show people, and a command that shows it.
 
-An object keeps information in **properties**. Its name and description are properties. We'll add
-one called `pet_msg` for the message:
+First, write the message that people will see:
 
 ```moot
-% @property petrock.pet_msg {} rc
-~~Added
-```
-
-The dot in `petrock.pet_msg` means “the `pet_msg` property on petrock.” `{}` starts it as an empty
-list. The `rc` flags let people read the property and let future child objects own their copy. Keep
-those flags as shown for this lesson.
-
-Before we write the message, Cowbell needs to know who it can mention. Here, that is the person
-petting the rock and the rock itself. We tell the editor once so it can catch mistakes in later
-edits.
-
-MOO calls an object's pieces of code **verbs**. Add a verb that describes these participants:
-
-```moot
-% @verb petrock:message_bindings this none this rxd
-~~added
-```
-
-The editor calls this verb. You do not type its name as a command. The `x` flag lets other code call
-it.
-
-Type `@program petrock:message_bindings`, then enter this code. Finish with a line containing only a
-period (`.`).
-
-```moo verb=petrock:message_bindings
-"Describe the participants in the pet command's messages.";
-const {property} = args;
-if (!property:starts_with("pet_") || !property:ends_with("_msg"))
-  return pass(@args);
-endif
-let participants = $sub_utils:standard_bindings("The person petting the rock.");
-participants['dobj] = ['kind -> 'object, 'description -> "The rock being petted.",
-  'example -> 'host];
-return participants;
-```
-
-<details>
-<summary>Test check: the participant declaration compiled</summary>
-
-```moot
-~~Now programming
-~~lines programmed.
-```
-
-</details>
-
-`property` is the name of the message property being edited. Our petting messages start with `pet_`
-and end with `_msg`. They identify the person petting the rock as `actor`, and the rock as `dobj`.
-The `example` entry tells previews to use the rock for `dobj`.
-
-Other messages use `$thing`'s declarations through `pass(@args)`. This keeps inherited messages,
-such as the pickup message, working as before. The declaration describes the participants. The `pet`
-verb below will supply them when someone uses the command.
-
-Now write the message:
-
-```moot
-% @set-message petrock.pet_msg {nc} {pet|pets} {d}.
+% @set-message rock.pet_msg {nc} {pet|pets} {d}.
 ~~Set message template
 ```
+
+`pet_msg` is a name for this message. `@set-message` creates it on the rock. Keeping the wording
+separate from the command lets you change it later without changing the code.
 
 The text looks peculiar because it has blanks for Cowbell to fill in:
 
@@ -163,35 +132,113 @@ The text looks peculiar because it has blanks for Cowbell to fill in:
 | `{pet\|pets}` | The verb form that fits: “You pet” or “Ada pets.”                                 |
 | `{d}`         | The thing being petted.                                                           |
 
-One message can now read correctly to everyone in the room. We also keep it separate from the code,
-so changing the wording won't require reprogramming the command.
+One message can now read correctly to everyone in the room. This is a **message template**: it
+describes the sentence before we know who will pet the rock. The verb will supply that person when
+it uses the message. Cowbell already treats the rock as the object described by `{d}`.
 
 ### Add the pet command
 
-Some verbs implement commands that people type. Let's add `pet`:
+MOO calls an object's pieces of code **verbs**. A verb can implement a command that people type.
+Let's add `pet`:
 
 ```moot
-% @verb petrock:pet this none none rd
+% @verb rock:pet this none none rd
 ~~added
 ```
 
-The colon in `petrock:pet` means “the `pet` verb on petrock.” `this none none` tells the command
-parser to accept `pet petrock`, with no further arguments. `r` makes the code readable, and `d`
-makes programming errors visible.
+The colon in `rock:pet` means “the `pet` verb on the object called `rock`.” The three fields
+`this none none` describe the words after `pet`: this object, no preposition such as `with`, and no
+second object. That gives us `pet rock`. `r` makes the code readable, and `d` makes programming
+errors visible.
 
-The verb exists, but it needs instructions. Type `@program petrock:pet`, then enter this code.
-Finish with a line containing only a period (`.`).
+### Read a few instructions before entering the program
 
-```moo verb=petrock:pet
-"Pet a nearby rock and let its reactions respond.";
-caller == player || raise(E_PERM, "Use the pet command to pet this rock.");
+The verb exists, but its body is empty. The **body** is the sequence of instructions that runs when
+someone types `pet rock`. MOO runs those instructions from top to bottom.
+
+For this command, MOO gives us two useful names. `player` refers to the person who typed the
+command. `this` refers to the rock whose verb is running. These names refer to objects, not to text
+containing their names. If Bert pets your rock, `player` means Bert and `this` still means your
+rock.
+
+The next examples explain pieces of the program. You do not need to enter them separately. The
+complete body follows them.
+
+```moo example
+const who = player;
+const room = who.location;
+```
+
+A **variable** is a name for a value used by the running program. `const who = player;` creates one
+called `who` and gives it the value of `player`. The equals sign assigns the value on its right to
+the name on its left. `const` means this variable will keep that value during this run. The
+semicolon ends the instruction.
+
+The next line reads the person's `location` property and names that room `room`. Here, a property
+holds another object, rather than text. These variables last only during this run of the verb. The
+rock's properties remain after the command finishes.
+
+We want a person to pet a rock they carry or can reach in the room. A **condition** asks a question
+with a yes-or-no answer. MOO calls those answers `true` and `false`.
+
+```moo example
+if (!(this.location in {who, room}))
+  return false;
+endif
+```
+
+`{who, room}` is a **list** containing two objects: the person and their room. `in` asks whether the
+rock's location is in that list. `!` means “not,” so the condition is true when the rock is
+somewhere else. The parentheses group the question that `!` reverses.
+
+An `if` runs the indented instructions only when its condition is true. `endif` marks their end.
+`return false;` stops the verb and reports that it did not succeed. Returning a value does not print
+it. If the rock is within reach, this `if` does nothing and the program continues.
+
+Next, we need to prepare our message and send it:
+
+```moo example
+const message = this:message_event(who, "pet_msg");
+room:announce(message);
+```
+
+A colon means “call this verb on that object.” Calling a verb asks it to run its instructions. The
+values inside parentheses are its **arguments**: information we give it to do its job. Commas
+separate arguments.
+
+`this:message_event(who, "pet_msg")` asks the rock to prepare its `pet_msg` message for this person.
+That verb returns the prepared message, which we save in `message`. We then pass that message to the
+room's `announce` verb. The room delivers it to the people there.
+
+Notice the difference between `who` and `"pet_msg"`. `who` supplies the object saved in a variable.
+`"pet_msg"` supplies the literal name of the message property we want to use.
+
+### Enter the complete program
+
+There is one additional check at the start. `caller` identifies the object that called the verb.
+Cowbell sets it to `player` for a typed command. `caller != player` means “the caller is different
+from the player.” We reject that case because this verb expects to run as a typed command. This does
+not restrict petting to the rock's owner. Other players can type `pet rock` too.
+
+`raise` stops the program with an error. `E_PERM` is the name of a permission error, and the text
+explains the problem. It is useful when a programmer calls this command verb in the wrong way.
+
+Type `@program rock:pet`, then enter the complete body below. Finish with a line containing only a
+period (`.`). The first line is a description for people reading the code. It is a string on its
+own, so it does not send a message to anyone.
+
+```moo verb=rock:pet
+"Pet a nearby rock.";
+if (caller != player)
+  raise(E_PERM, "Use the pet command to pet this rock.");
+endif
 const who = player;
 const room = who.location;
 if (!(this.location in {who, room}))
   return false;
 endif
-room:announce($event:mk_info(who, @this.pet_msg):with_dobj(this));
-this:fire_trigger('on_pet, ['Actor -> who, 'Location -> room]);
+const message = this:message_event(who, "pet_msg");
+room:announce(message);
 return true;
 ```
 
@@ -206,14 +253,14 @@ return true;
 </details>
 
 Cowbell should report that it programmed the lines. If it reports an error, check the named line for
-a missing semicolon, quote, or bracket. You can enter `@program petrock:pet` again to replace the
-body. An error here usually means a small typing mistake.
+a missing semicolon, quote, or bracket. You can enter `@program rock:pet` again to replace the body.
+An error here usually means a small typing mistake.
 
 Now try your new command:
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 ```
 
 <details>
@@ -221,84 +268,128 @@ Now try your new command:
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @programmer
 ```
 
 </details>
 
-There: you have a pet rock. It hasn't moved, which seems appropriate. You see “You pet petrock.”
-Someone else in the room sees “Ada pets petrock,” with your name in place of Ada's.
+There: you have a pet rock. It hasn't moved, which seems appropriate. You see “You pet pet rock.”
+Someone else in the room sees “Ada pets pet rock,” with your name in place of Ada's.
 
-### What did that code do?
+Read the body again with that result in mind. It checks the caller, names the person and room,
+checks reach, and sends the message. The final `return true;` reports success and ends the verb.
 
-`player` is the person who typed the command. `this` is the object running the verb: your rock.
-`who` and `room` are names we give to that person and their current room. A `const` declaration
-saves a value under a name so later lines can use it.
-
-The `if` checks that the rock is in the person's inventory or room. If it isn't, `return false` ends
-the command. Otherwise, `room:announce(...)` sends the petting message to the room. The `@` before
-`this.pet_msg` supplies the message's pieces, and `with_dobj(this)` identifies the rock for the
-`{d}` substitution.
-
-`fire_trigger` tells the rock that someone petted it. We call this **event** `on_pet`. Other
-behavior can respond to that event. Nothing responds yet. Let's change that.
-
-`caller` is the object that called this verb. For a typed command, Cowbell sets it to `player`. The
-check `caller == player` rejects calls from another object. We wrote this version for use through
-the `pet` command. Other players can use that command too.
-
-`condition || raise(...)` stops with an error when the condition is false. `E_PERM` names a
-permission error, and the text after it explains what went wrong. Here, the error tells a programmer
-who called the verb from another object to use the command instead.
+If you lose track of what a name means, look for its declaration. For example, `message` gets its
+value from `message_event`, and the next line passes that value to `announce`. Following values
+through a few lines is often more useful than trying to memorize every verb name.
 
 ## 3. Give it a memory
 
 Let's have the rock count how often someone pets it, then make a remark.
 
-A **reaction** is a set of steps that runs after an event. Our event is `on_pet`. The steps will add
-one to a counter and announce a message.
+The pet command currently prints a message and finishes. To add other behavior, we need it to notify
+the rock that a pet happened. A **reaction** will then respond by increasing a counter and making a
+remark.
 
-First, make the counter and the message:
+### Tell the rock what happened
+
+We also want to let the rock respond to a pet. We will send it an **event**: a notification that
+something happened, together with information about who did it and where.
+
+```moo example
+this:fire_trigger('on_pet, ['Actor -> who, 'Location -> room]);
+```
+
+`fire_trigger` is the verb that delivers this notification to the rock. Its first argument names the
+event, `on_pet`. The leading apostrophe makes `'on_pet` a **symbol**, a fixed label used by code. A
+symbol has no closing apostrophe. It is not a variable and does not change from run to run.
+
+The second argument is a **map**. A map associates labels with values. Square brackets enclose it,
+and `->` separates each label from its value. Here, `'Actor` identifies the person who petted the
+rock, and `'Location` identifies the room. Together, these details are the event's **context**. Use
+the labels `Actor` and `Location` as shown. `fire_trigger` expects these names for those details.
+
+Sending the event does not itself print anything. We have not given the rock a response yet. Next,
+we will add a reaction that listens for this event.
+
+Add the event to the end of the pet verb, just before `return true;`. Enter `@program rock:pet` and
+replace the body with this version. Everything before `fire_trigger` is the same program you just
+tried.
+
+```moo verb=rock:pet
+"Pet a nearby rock and let its reactions respond.";
+if (caller != player)
+  raise(E_PERM, "Use the pet command to pet this rock.");
+endif
+const who = player;
+const room = who.location;
+if (!(this.location in {who, room}))
+  return false;
+endif
+const message = this:message_event(who, "pet_msg");
+room:announce(message);
+this:fire_trigger('on_pet, ['Actor -> who, 'Location -> room]);
+return true;
+```
+
+<details>
+<summary>Test check: the event version compiled</summary>
 
 ```moot
-% @state petrock pets number 0
+~~Now programming
+~~lines programmed.
+```
+
+</details>
+
+### Give the event a response
+
+A reaction is a saved set of steps that runs after an event. Ours will add one to a counter and
+announce a message. First, make the counter and the message:
+
+```moot
+% @state rock pets number 0
 ~~Declared
-% @property petrock.greeting_msg {} rc
-~~Added
-% @set-message petrock.greeting_msg The rock remains impressively still.
+% @set-message rock.greeting_msg The rock remains impressively still.
 ~~Set message template
 ```
 
 `@state` gives the rock a value that it remembers between commands. Here, `pets` is a number that
 starts at zero. The message property works just like `pet_msg`.
 
-Next, install the reaction. `#petrock` finds your rock by name. After `for`, you can run a MOO
-expression with `%#` standing for the object you found. Enter this command; it returns `true`:
+We will call the reaction `greeting`. That is its name on this rock, so we can find and edit it
+later. It is separate from the event name, `pet`. Several reactions can listen for the same event.
+
+Now choose the event and the two steps:
 
 ```moot
-% #petrock for $reaction:install(%#, "greeting_reaction", $reaction:mk('on_pet, 0, {{'increment, 'pets, 1}, {'announce, 'greeting_msg}}, $reaction:state_types(%#))).enabled
-==> true
+% @reaction rock greeting after pet
+~~Saved
+% @reaction rock greeting then add pets 1
+~~Saved
+% @reaction rock greeting then announce message greeting_msg
+~~Saved
+% @reaction rock greeting enable
+~~Saved
 ```
 
-The reaction command is longer, so let's take it apart:
+`after pet` responds to the `on_pet` event sent by our command. `add pets 1` increases the counter.
+`announce message greeting_msg` uses the message we just wrote. It reads the current wording each
+time, so later edits take effect without changing the reaction.
 
-- `#petrock` finds your rock. `%#` supplies that object to the expression.
-- `$reaction:mk(...)` makes a reaction for `on_pet`. The `0` means it has no extra condition.
-- `{'increment, 'pets, 1}` adds one to the counter.
-- `{'announce, 'greeting_msg}` announces the message stored in `greeting_msg`.
-- `$reaction:state_types(%#)` lets Cowbell check that the counter is a number.
-- `$reaction:install(...)` puts the reaction on your rock and authorizes it to run there.
+Each command edits the same reaction, `greeting`, on the same object, `pet rock`. Each `then` adds a
+step to the end. The counter therefore changes before the announcement runs.
 
-The leading apostrophe in `'pets` makes it a **symbol**: a name the code uses to identify something.
-Quoted text such as `"petrock"` is a **string**. A list uses braces, as in the two steps above. You
-don't need to memorize all this syntax at once.
+New reactions start disabled, so an unfinished reaction cannot respond halfway through editing.
+`enable` starts this one after we finish its steps. These steps become part of the rock's saved
+behavior. You do not need to type the setup commands each time someone pets it.
 
 Try the rock, then look at its counter:
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock remains impressively still.
 ```
 
@@ -307,7 +398,7 @@ Try the rock, then look at its counter:
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock remains impressively still.
 @programmer
 ```
@@ -315,7 +406,7 @@ Try the rock, then look at its counter:
 </details>
 
 ```moot
-% @state petrock
+% @state rock
 =pets: 1
 ```
 
@@ -327,10 +418,10 @@ counter. You have added a response without rewriting what petting means.
 Suppose the rock needs a different line. Change the message and pet it again:
 
 ```moot
-% @set-message petrock.greeting_msg The rock accepts the compliment in silence.
+% @set-message rock.greeting_msg The rock accepts the compliment in silence.
 ~~Set message template
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -339,7 +430,7 @@ Suppose the rock needs a different line. Change the message and pet it again:
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -348,6 +439,10 @@ Suppose the rock needs a different line. Change the message and pet it again:
 
 You changed the response without editing either the verb or the reaction. The reaction refers to the
 message by name, so it reads the new wording each time.
+
+Before you pet the rock a third time, predict which messages you will see and what `pets` will
+contain. Follow the command through the event and both reaction steps to explain your prediction.
+You can use `@state rock` to inspect the value whenever you need it.
 
 The counter belongs to this reaction too. If you disable the reaction, both the remark and its
 counting step stop. The `pet` command itself still works.
@@ -360,28 +455,34 @@ reminder three seconds after petting.
 Give the reminder its own message:
 
 ```moot
-% @property petrock.reminder_msg {} rc
-~~Added
-% @set-message petrock.reminder_msg Your rock still appreciates the attention.
+% @set-message rock.reminder_msg Your rock still appreciates the attention.
 ~~Set message template
 ```
+
+This time we will use `actor`, the reaction's name for the person who caused the event. It comes
+from the `'Actor` value that our pet verb put in the event's context. The reaction can use that
+person without knowing their name in advance.
 
 Install a second reaction:
 
 ```moot
-% #petrock for $reaction:install(%#, "reminder_reaction", $reaction:mk('on_pet, 0, {{'schedule, 'reminder, 3, {'tell, 'Actor, 'reminder_msg}}})).enabled
-==> true
+% @reaction rock reminder after pet
+~~Saved
+% @reaction rock reminder then schedule reminder 3 tell actor message reminder_msg
+~~Saved
+% @reaction rock reminder enable
+~~Saved
 ```
 
 The step `schedule` creates a **timer**. Its name is `reminder`, and `3` is the delay in seconds.
-When it runs, `tell` sends `reminder_msg` to `Actor`, the person who petted the rock. It does not
+When it runs, `tell` sends `reminder_msg` to `actor`, the person who petted the rock. It does not
 announce the reminder to everyone in the room.
 
 Pet the rock, then wait a few seconds:
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -390,7 +491,7 @@ Pet the rock, then wait a few seconds:
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 @text-within 5 Your rock still appreciates the attention.
@@ -409,7 +510,7 @@ reminder. It does not queue a separate reminder for every pet.
 Stop the reminder before continuing:
 
 ```moot
-% @reaction petrock reminder disable
+% @reaction rock reminder disable
 ~~disabled
 ```
 
@@ -424,57 +525,112 @@ Our command must ask the rule before it announces a successful pet.
 Give the rock a place for that rule and messages for refused attempts:
 
 ```moot
-% @property petrock.pet_rule 0 rc
+% @property rock.pet_rule 0 rc
 ~~Added
 ```
 
 ```moot
-% @property petrock.pet_denied_msg {} rc
-~~Added
-% @property petrock.pet_out_of_reach_msg {} rc
-~~Added
-% @property petrock.pet_changed_msg {} rc
-~~Added
-% @set-message petrock.pet_denied_msg {dc} declines your attention.
+% @set-message rock.pet_denied_msg {dc} declines your attention.
 ~~Set message template
-% @set-message petrock.pet_out_of_reach_msg {dc} is out of reach.
+% @set-message rock.pet_out_of_reach_msg {dc} is out of reach.
 ~~Set message template
-% @set-message petrock.pet_changed_msg The situation changed. Try again.
+% @set-message rock.pet_changed_msg The situation changed. Try again.
 ~~Set message template
 ```
+
+`@property` adds a named property to the rock. Its initial value is `0`. The `rc` flags let people
+read the property and give children their own ownership of inherited values. You own the rock, so
+you can change this property. The `@rule` command will store the chosen rule there.
 
 A `pet_rule` of zero means there is no special restriction. `{dc}` means the rock's name with a
 capital letter, for the start of a sentence.
 
-Now replace the pet verb with this version. Enter `@program petrock:pet` again, paste the complete
-body, and finish with a period on its own line. The existing reactions and counter will stay in
-place.
+### Ask a question before announcing success
 
-```moo verb=petrock:pet
+The earlier verb always permits a reachable pet. We will insert a decision before its message and
+event. The rest of the world can keep using `pet rock` while we change how that decision works.
+
+A rule and a reaction have different jobs. The rule asks, “May this person pet the rock?” A reaction
+says, “Someone petted the rock; now do these steps.” If the rule says no, there is no successful pet
+for our reactions to respond to.
+
+This is the decision we will add. Read this excerpt first; the complete replacement follows.
+
+```moo example
+const policy = this.pet_rule;
+let allowed = true;
+if (policy != 0)
+  const result = $rule_engine:evaluate(policy, ['This -> this, 'Accessor -> who]);
+  allowed = result['success];
+endif
+```
+
+`policy` saves the rule from the rock. `allowed` starts as `true`, because a zero rule means
+unrestricted access. We use `let` for `allowed`, instead of `const`, because we may change its
+value.
+
+`policy != 0` asks whether there is a rule to evaluate. `$rule_engine` is Cowbell's object for
+answering rule questions. Its `evaluate` verb takes the rule and a map of the objects involved.
+`'This` identifies the rock; `'Accessor` identifies the person requesting access.
+
+The result is another map. `result['success]` reads its yes-or-no answer, and the assignment puts
+that answer in `allowed`. These square brackets read one map entry. The brackets with arrows in the
+preceding line create a map.
+
+If `allowed` is false, the verb sends the refusal message to `who` and returns before reaching the
+successful message. `inform_current` sends a private message to that person's current connection.
+`message_event` accepts an optional third argument, `'error`, to mark a refusal.
+
+### Keep the decision about the current situation
+
+The complete version also records the rock's owner, both locations, and the rule in a list named
+`before`. After evaluating the rule, it compares those saved values with the current properties.
+`equal` compares the two lists. If they differ, the verb asks the person to try again.
+
+Why check twice? Rules can call other code, and that code can wait. During a wait, someone can move
+the rock or change its rule. A decision made before that change must not authorize a pet afterward.
+Our rule in this lesson does not wait, but the verb also needs to work with later rules.
+
+The ownership check at the start has a different purpose. A verb runs with its owner's permissions,
+even when a visitor types the command. `this.owner` is the rock's owner; `task_perms()[1]` reads the
+first item in the permission information, the person whose permissions this code uses. For this
+example, they must be the same person. This permits visitors to pet your rock while its code updates
+state that you own. It also catches a mismatch before announcing a successful pet.
+
+Enter `@program rock:pet` again, paste this complete body, and finish with a period on its own line.
+This replaces only the verb's instructions. Your messages, reactions, and counter stay in place.
+
+```moo verb=rock:pet
 "Pet a reachable rock, subject to its access rule.";
-caller == player || raise(E_PERM, "Use the pet command to pet this rock.");
-this.owner == task_perms()[1]
-  || raise(E_PERM, "This rock and its pet verb have different owners. Ask the rock's owner to check the verb.");
+if (caller != player)
+  raise(E_PERM, "Use the pet command to pet this rock.");
+endif
+if (this.owner != task_perms()[1])
+  raise(E_PERM, "This rock and its pet verb have different owners. Ask the rock's owner to check the verb.");
+endif
 const who = player;
 const room = who.location;
 if (!valid(room) || !isa(room, $room)
     || !(this.location in {who, room}))
-  who:inform_current($event:mk_error(who, @this.pet_out_of_reach_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_out_of_reach_msg", 'error));
   return false;
 endif
 const policy = this.pet_rule;
 const before = {this.owner, this.location, who.location, policy};
-const allowed = policy == 0 || $rule_engine:evaluate(policy,
-  ['This -> this, 'Accessor -> who])['success];
+let allowed = true;
+if (policy != 0)
+  const result = $rule_engine:evaluate(policy, ['This -> this, 'Accessor -> who]);
+  allowed = result['success];
+endif
 if (!equal(before, {this.owner, this.location, who.location, this.pet_rule}))
-  who:inform_current($event:mk_error(who, @this.pet_changed_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_changed_msg", 'error));
   return false;
 endif
 if (!allowed)
-  who:inform_current($event:mk_error(who, @this.pet_denied_msg):with_dobj(this));
+  who:inform_current(this:message_event(who, "pet_denied_msg", 'error));
   return false;
 endif
-room:announce($event:mk_info(who, @this.pet_msg):with_dobj(this));
+room:announce(this:message_event(who, "pet_msg"));
 this:fire_trigger('on_pet, ['Actor -> who, 'Location -> room]);
 return true;
 ```
@@ -489,6 +645,10 @@ return true;
 
 </details>
 
+The reach check now also uses `valid(room)` and `isa(room, $room)`. `valid` asks whether the object
+still exists. `isa` asks whether it comes from the room prototype. `||` means “or,” so any failed
+reach check is enough to send `pet_out_of_reach_msg` and stop.
+
 The new part asks `$rule_engine` to evaluate `pet_rule`. It supplies `This` (the rock) and
 `Accessor` (the person trying to pet it). If the rule refuses, the command shows `pet_denied_msg`
 and stops before firing `on_pet`.
@@ -499,15 +659,10 @@ MOO runs a verb with its verb owner's permissions. That owner can be different f
 typed the command. If Ada owns the rock and its `pet` verb, Bert can still pet it. During Bert's
 command, `player` is Bert, but the verb runs with Ada's permissions.
 
-The new ownership check compares `this.owner`, the rock's owner, with `task_perms()[1]`, the person
-whose permissions the code uses. For Ada's rock, both are Ada, even when Bert pets it. The access
-rule decides whether Bert is allowed to pet it.
-
 `fire_trigger` checks permissions because it can start reactions that change the rock's state or
-write to its visitor book. It requires the rock owner's permissions or wizard permissions. For this
-example, we require the verb and rock to have the same owner. This catches an ownership mismatch
-before the command announces a successful pet. It is a restriction of our example, not a general
-requirement for MOO verbs.
+write to its visitor book. It requires the rock owner's permissions or wizard permissions. That is
+why our command requires the rock and verb to have the same owner. The access rule still decides
+whether Bert may pet it.
 
 A child owned by someone else still inherits the original verb and its owner's permissions. That
 child fails our ownership check. The error asks its owner to check the verb. We'll use a child you
@@ -516,17 +671,14 @@ own later in this lesson.
 The `E_PERM` errors concern how the verb is called or who owns it. An ordinary refusal to let
 someone pet the rock gets the message in `pet_denied_msg`, with no programming error.
 
-The reach check makes sure the person can reach the rock. The `before` comparison catches changes to
-ownership, location, or the rule while the rule runs, and asks the person to try again.
-
 ### Try an owner-only rule
 
 Allow only yourself:
 
 ```moot
-% @rule petrock pet actor is me
+% @rule rock pet actor is me
 ~~Set pet rule
-% @rule petrock pet show
+% @rule rock pet show
 ~~pet: actor is
 ```
 
@@ -536,8 +688,8 @@ rule. It does not change to mean each new visitor.
 Put the rock in the room so Bert can reach it:
 
 ```moot
-% drop petrock
-=You dropped petrock.
+% drop rock
+=You dropped pet rock.
 ```
 
 <details>
@@ -545,7 +697,7 @@ Put the rock in the room so Bert can reach it:
 
 ```moot
 @nonprogrammer
-@text Ada dropped petrock.
+@text Ada dropped pet rock.
 ```
 
 </details>
@@ -553,8 +705,8 @@ Put the rock in the room so Bert can reach it:
 Ask Bert to type:
 
 ```moot
-% pet petrock
-=Petrock declines your attention.
+% pet rock
+=Pet rock declines your attention.
 ```
 
 <details>
@@ -562,7 +714,7 @@ Ask Bert to type:
 
 ```moot
 @programmer
-% @state petrock
+% @state rock
 =pets: 3
 ```
 
@@ -574,7 +726,7 @@ rule decides whether that action can happen at all.
 Let everyone pet the rock again:
 
 ```moot
-% @rule petrock pet clear
+% @rule rock pet clear
 ~~Restored default access
 ```
 
@@ -590,8 +742,8 @@ Ask Bert to try again:
 </details>
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -600,9 +752,9 @@ Ask Bert to try again:
 
 ```moot
 @programmer
-@text Bert pets petrock.
+@text Bert pets pet rock.
 @text The rock accepts the compliment in silence.
-% @state petrock
+% @state rock
 =pets: 4
 ```
 
@@ -620,23 +772,34 @@ We'll use a **relation**: an object that stores rows of related values. Our rows
 fields, `person` and `rock`. One row means “this person visited this rock.” A relation keeps each
 row only once, even if someone visits repeatedly.
 
+Think of the book as a table. After Ada and Bert each pet the same rock, it can contain:
+
+| person | rock     |
+| ------ | -------- |
+| Ada    | pet rock |
+| Bert   | pet rock |
+
+Each row records a relationship between two particular objects. Names help us read the table, but
+the stored values identify the objects themselves. Renaming Ada or the rock does not erase their
+visit. A second pet by Ada does not create a second copy of the first row.
+
 Create the book and tell a reaction to write in it:
 
 ```moot
-% @create $relation named rockvisitors
+% @create $relation named visitor book
 ~~Created
-% @facts rockvisitors define person:object rock:object
+% @facts "visitor book" define person:object rock:object
 ~~Defined fields
-% @reaction petrock remember after pet
+% @reaction rock remember after pet
 ~~disabled
-% @reaction petrock remember with visitors object rockvisitors
+% @reaction rock remember with visitors object "visitor book"
 ~~Saved
-% @reaction petrock remember then record in visitors person=actor rock=this
+% @reaction rock remember then record in visitors person=actor rock=this
 ~~Saved
-% @reaction petrock remember enable
+% @reaction rock remember enable
 ~~enabled
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -645,7 +808,7 @@ Create the book and tell a reaction to write in it:
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -653,8 +816,8 @@ Create the book and tell a reaction to write in it:
 </details>
 
 ```moot
-% @facts rockvisitors
-~~Facts in rockvisitors
+% @facts "visitor book"
+~~Facts in visitor book
 =Fields: person:object, rock:object
 ~~person=Ada
 ```
@@ -662,16 +825,16 @@ Create the book and tell a reaction to write in it:
 `@facts ... define` names the fields. Both have type `object`, because they hold references to
 things in the world rather than names typed as text.
 
-`@reaction petrock remember after pet` creates a disabled reaction. The
-`with visitors object rockvisitors` line gives it a setting called `visitors`, pointing to our book.
-The `record` step writes the current person (`actor`) and rock (`this`) into that book. `enable`
-lets the reaction start responding.
+`@reaction rock remember after pet` creates a disabled reaction. The
+`with visitors object "visitor book"` line gives it a setting called `visitors`, pointing to our
+book. The `record` step writes the current person (`actor`) and rock (`this`) into that book.
+`enable` lets the reaction start responding.
 
 Pet the rock again. It should remember one visit from you, rather than make a duplicate row:
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -680,7 +843,7 @@ Pet the rock again. It should remember one visit from you, rather than make a du
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -688,16 +851,18 @@ Pet the rock again. It should remember one visit from you, rather than make a du
 </details>
 
 ```moot
-; const rock = $match:match_object("petrock", player); const visitors = $match:match_object("rockvisitors", player); return $relation:tuples(visitors) == {{player, rock}};
-true
+% @facts "visitor book"
+~~Facts in visitor book
+~~Fields:
+~~person=Ada
 ```
 
-The check at the end compares the book's contents with one row containing you and your rock.
+The visitor book now shows one row for you and your rock. Petting it again does not add a duplicate.
 
 You can also tell the reaction to run only for a new visitor:
 
 ```moot
-% @reaction petrock remember if NOT fact in visitors person=actor rock=this
+% @reaction rock remember if NOT fact in visitors person=actor rock=this
 ~~Saved
 ```
 
@@ -716,9 +881,9 @@ chooses one when a reaction uses the bag.
 Add two possible remarks:
 
 ```moot
-% @add-message petrock.remarks_msg_bag The rock considers this a satisfactory encounter.
+% @add-message rock.remarks_msg_bag The rock considers this a satisfactory encounter.
 ~~Added
-% @add-message petrock.remarks_msg_bag The rock maintains its geological composure.
+% @add-message rock.remarks_msg_bag The rock maintains its geological composure.
 ~~Added
 ```
 
@@ -726,15 +891,19 @@ The `_msg_bag` suffix identifies the property as a message bag. Install a reacti
 it, just as the greeting referred to `greeting_msg`:
 
 ```moot
-% #petrock for $reaction:install(%#, "remark_reaction", $reaction:mk('on_pet, 0, {{'announce, 'remarks_msg_bag}})).enabled
-==> true
+% @reaction rock remark after pet
+~~Saved
+% @reaction rock remark then announce message remarks_msg_bag
+~~Saved
+% @reaction rock remark enable
+~~Saved
 ```
 
 Pet the rock. You should see one of the two new remarks, along with its usual greeting.
 
 ```moot
-% pet petrock
-=You pet petrock.
+% pet rock
+=You pet pet rock.
 =The rock accepts the compliment in silence.
 ~~The rock
 ```
@@ -744,7 +913,7 @@ Pet the rock. You should see one of the two new remarks, along with its usual gr
 
 ```moot
 @nonprogrammer
-@text Ada pets petrock.
+@text Ada pets pet rock.
 @text The rock accepts the compliment in silence.
 ~~The rock
 @programmer
@@ -753,18 +922,20 @@ Pet the rock. You should see one of the two new remarks, along with its usual gr
 </details>
 
 ```moot
-; const rock = $match:match_object("petrock", player); return length(rock.remarks_msg_bag:entries());
-2
-% @reaction petrock remark disable
+% @get-message rock.remarks_msg_bag
+~~2 entries
+~~Template
+~~The rock considers this a satisfactory encounter.
+~~The rock maintains its geological composure.
+% @reaction rock remark disable
 ~~disabled
 ```
 
 The last command disables this extra reaction so it won't distract us in the next section. A random
 choice can repeat, so hearing the same remark twice is normal.
 
-We've used a little MOO code to install reactions that read named message properties. Builders can
-then change those messages with `@set-message` and `@add-message`. They don't need to edit the code
-we wrote.
+You can change the wording with `@set-message` and add more choices with `@add-message`. The
+reaction keeps using the same named message bag.
 
 ## 8. A pebble of its own
 
@@ -774,9 +945,9 @@ is how your rock got ordinary item behavior from `$thing`. Let's make a child ca
 Reset the parent's counter first so it's easy to compare the two:
 
 ```moot
-% @state petrock pets set 0
+% @state rock pets set 0
 =Set pets to 0.
-% @create petrock named pebble
+% @create rock named pebble
 ~~Created
 ```
 
@@ -819,7 +990,7 @@ compare the counters:
 ```moot
 % @state pebble
 =pets: 1
-% @state petrock
+% @state rock
 =pets: 0
 ```
 
@@ -848,11 +1019,11 @@ Give the pebble a different greeting:
 </details>
 
 ```moot
-% #petrock.greeting_msg for $sub_utils:decompile(%#)
-==> "The rock accepts the compliment in silence."
+% @get-message rock.greeting_msg
+~~The rock accepts the compliment in silence.
 % @state pebble
 =pets: 2
-% @state petrock
+% @state rock
 =pets: 0
 ```
 

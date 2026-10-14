@@ -15,6 +15,10 @@ true
 ~~Use @schedule
 % @schedule
 ~~Usage: @schedule
+~~Example:
+~~Inspect with
+~~The event
+~~Repeating
 % @schedule 0
 ~~Usage: @schedule
 % @schedule 1.5

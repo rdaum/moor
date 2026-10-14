@@ -558,7 +558,10 @@ object SUB_UTILS [
     const child = $food:create(true);
     this:compile("{d}", child:message_bindings("get_msg"));
     this:compile("{d}", child:message_bindings("eat_msg"));
-    $test_utils:assert_eq(child:message_bindings("unknown_msg"), [], "unknown producer has no bindings");
+    const ordinary = child:message_bindings("pet_msg");
+    this:compile("{nc} {pet|pets} {d}.", ordinary);
+    $test_utils:assert_eq(ordinary['dobj]['example], 'host, "ordinary messages describe their object");
+    $test_utils:assert_eq(child:message_bindings("unknown_property"), [], "non-message properties have no bindings");
     return true;
   endmethod
 

@@ -4,13 +4,19 @@ A passage works well for two connected rooms. A lift, ferry, or portal can need 
 still needs to tell visitors what they can do. Otherwise a room can contain a working portal that
 nobody discovers.
 
-This lesson builds a portal with two methods. `travel_options(source, viewer)` describes the ways
-out. `use_exit(actor, source, option_id)` chooses the destination when someone uses an option. The
-room uses that description for room prose, `exits`, Meadow links, and route hints.
+We will build a blue arch that takes visitors to another room. A visitor will see it in the room
+description and in `exits`, then type `enter portal` to use it. Later, we will close it for travel
+while keeping it visible.
+
+This lesson follows the programming ideas in
+[Let's make a pet rock](../docs/programming-with-rules-and-reactions.md). It assumes you have met
+properties, arguments, return values, lists, and maps there. We will use them to answer two
+questions for the room: “What travel can you offer?” and “Where does this choice lead now?” Each
+question gets a method on the portal. The room will handle the actual movement.
 
 You need builder and programmer privileges. Start in a room you own, inside an area where you can
 build. The portal's owner does not need wizard privileges. `%` marks commands and `=` marks output.
-The code blocks with `verb=...` name the method to program. Finish each editor session with `.`.
+Enter each named `@program` command before its code. Finish each editor session with `.`.
 
 <details>
 <summary>Test setup</summary>
@@ -27,38 +33,71 @@ true
 ## Make the object and its destination
 
 ```moot
+% @rename here to Portal Workshop
+~~Renamed
 % @build Portal Landing
 ~~Created
 % @create $thing named portal
 ~~Created
-% @property portal.source_room #-1 rc
-~~Added
-% @property portal.destination_room #-1 rc
-~~Added
-% @property portal.in_service true rc
-~~Added
+% @state portal source_room object here
+~~Declared source_room
+% @state portal destination_room object "Portal Landing"
+~~Declared destination_room
+% @state portal in_service flag yes
+~~Declared in_service
 ```
 
-Set its source to your current room and its destination to Portal Landing:
-
-```moot
-; const portal = $match:match_object("portal", player); portal.source_room = player.location; portal.destination_room = $match:resolve_in_scope("Portal Landing", player.location.location.contents); return portal.destination_room.name;
-"Portal Landing"
-```
+The first setting remembers the room you are in. The second remembers Portal Landing, which the
+command finds in your current area. `in_service` controls whether visitors can use the portal.
 
 ## Describe the option
+
+First, the room needs a description of the available trip. The method `travel_options` supplies that
+description as data. It returns a list of options, and each option is a map with named fields. Our
+portal has one option, so the list will contain one map.
+
+This method does not send text to the visitor itself. The room uses the returned values to make its
+description, exit list, clickable links, and route hints. Keeping those values together lets all
+those views describe the same trip.
+
+Add the method:
 
 ```moot
 % @verb portal:travel_options this none this rxd
 ~~added
 ```
 
-Program `portal:travel_options`:
+The `x` in `rxd` lets other code call this verb as a method. This differs from the rock's `pet`
+command, which people call by typing it.
+
+The room supplies two arguments. `source` is the room whose exits it is describing, and `viewer` is
+the person asking. `const {source, viewer} = args;` gives those arguments names. If the source is
+not our saved `source_room`, the method returns `{}`, an empty list: no options here.
+
+The returned map describes the trip with these fields:
+
+| Field         | Value in this portal             | Purpose                                                    |
+| ------------- | -------------------------------- | ---------------------------------------------------------- |
+| `id`          | `"cross"`                        | Identifies this option when a visitor chooses it.          |
+| `label`       | `"portal"`                       | Gives the exit list a short name to show.                  |
+| `command`     | `"enter portal"`                 | Says what the visitor can type.                            |
+| `destination` | `this.destination_room`          | Supplies the destination object saved by `@state`.         |
+| `available`   | `this.in_service`                | Says whether the trip is currently offered.                |
+| `reason`      | `"The portal is resting."`       | Explains an unavailable trip.                              |
+| `description` | The sentence about the blue arch | Describes the exit in the room.                            |
+| `ambient`     | `true`                           | Includes that sentence among the room's descriptive prose. |
+
+The labels on the left of `->` are symbols; the values on the right can be text, objects, or
+booleans. The outer braces make the list. The square brackets inside them make its one map.
+
+Enter `@program portal:travel_options`, then this body:
 
 ```moo verb=portal:travel_options
 "Describe this portal from its approved source room. Do not move the viewer.";
 const {source, viewer} = args;
-source == this.source_room || return {};
+if (source != this.source_room)
+  return {};
+endif
 return {['id -> "cross", 'label -> "portal", 'command -> "enter portal",
   'destination -> this.destination_room, 'available -> this.in_service,
   'reason -> "The portal is resting.",
@@ -82,12 +121,24 @@ The default is literal text.
 
 The method runs during discovery, sometimes for a route through another room. It must not move
 anyone, charge a fare, or alter travel state. `viewer` tells you who will read the result. It does
-not grant control of that person. In `caller_perms()`, you can inspect the querying principal. Your
-method executes with its own verb owner's permissions, as usual.
+not grant control of that person. `caller_perms()` identifies whose permissions the caller uses.
+Your method executes with its own verb owner's permissions, as usual.
 
 ## Handle the chosen action
 
-Add and program `portal:use_exit`:
+When a visitor chooses `enter portal`, the room calls `use_exit` on our portal. It supplies the
+visitor, the source room, and the selected option's `id`. We name those arguments `who`, `source`,
+and `option`.
+
+The method must decide using the current state. Someone can read the exit list while the portal is
+open, then try to use it after we close it. The earlier description is not permission to travel
+forever.
+
+Our checks ask whether the source is correct, the visitor is still there, the chosen option is
+`"cross"`, and the portal is in service. If any check fails, the method returns `false`. Otherwise,
+it returns `this.destination_room`. The returned object tells the room where to take the visitor.
+
+Add the method, then enter `@program portal:use_exit`:
 
 ```moot
 % @verb portal:use_exit this none this rxd
@@ -96,7 +147,9 @@ Add and program `portal:use_exit`:
 
 ```moo verb=portal:use_exit
 "Choose a destination for the room's checked exit action.";
-caller == $room || raise(E_PERM, "Use the portal through the room's exit action.");
+if (caller != $room)
+  raise(E_PERM, "Use the portal through the room's exit action.");
+endif
 const {who, source, option} = args;
 if (source != this.source_room || who.location != source || option != "cross" || !this.in_service)
   return false;
@@ -130,11 +183,15 @@ Use a completed room-entry reaction for effects that require successful movement
 
 ## Approve it as a room exit
 
-The room's author registers the portal:
+The room needs its author's approval before treating the portal as an exit. This stops someone from
+adding a new exit merely by dropping an object in your room. An approved object with these two
+methods is called an **exit provider**: it provides the room's custom travel options.
+
+You own the source room in this lesson, so approve the portal there:
 
 ```moot
-; const portal = $match:match_object("portal", player); $room:register_exit_provider(portal.source_room, portal); return true;
-true
+% @exit-provider here add portal
+~~Custom exit add:
 % exits
 ~~Ways out
 =
@@ -148,7 +205,7 @@ can also remain in its author's inventory: registration, rather than its locatio
 approval.
 
 The room itself can be a provider. This works for commands such as `press up` inside a lift. It uses
-the same two methods and registers itself with `$room:register_exit_provider(room, room)`.
+the same two methods. Its author approves it with `@exit-provider here add here`.
 
 <details>
 <summary>Test checks: travel and normal movement events</summary>
@@ -184,8 +241,8 @@ An unavailable exit stays visible with its `reason`. The room offers no link and
 route planning. Change your portal's state and ask the room to refresh its panel:
 
 ```moot
-; const portal = $match:match_object("portal", player); portal.in_service = false; $room:exit_options_changed(portal.source_room, portal); return true;
-true
+% @state portal in_service set no
+% @exit-provider "Portal Workshop" refresh portal
 ```
 
 The portal's own code can make that call after changing state. A registered provider can refresh its
@@ -217,9 +274,9 @@ ordinary passages only. When a route needs this portal, the hint names the room 
 
 ## Remove or replace a provider
 
-Call `$room:unregister_exit_provider(room, provider)` with the room author's authority to remove
-approval. Registration requires `dig_from` authority on the room. A capability can be supplied as
-the first argument instead of the raw room object.
+Use `@exit-provider ROOM remove portal` to remove approval. `@exit-provider ROOM` lists the
+providers and shows which need approval again. Replace ROOM with the room's name or identifier. You
+must own the room or have its building permission to change its providers.
 
 Re-registering creates a new approval. Saved links from the previous approval stop working. A change
 to either object's ownership also requires approval again. Changing an option's destination rejects

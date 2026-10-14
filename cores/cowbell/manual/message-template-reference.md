@@ -121,6 +121,20 @@ does not force an article onto a proper name, plural noun, or uncountable noun.
 The MOO constructors are `$sub:a('d)`, `$sub:ac('d)`, `$sub:the('d)`, and `$sub:thec('d)`. They
 insert the name with its article, exactly like the template tokens.
 
+## Default participants for object messages
+
+An ordinary custom message supplies `actor`, `location`, and `dobj`. `dobj` refers to the object
+that owns the message. `$root:message_event(actor, property[, kind])` creates that event. The
+optional kind is `info` or `error`. The caller chooses where to deliver it.
+
+Inherited operations and reaction steps keep their own participant meanings. For example, an emote
+step uses its reacting object as actor. Use `@message-bindings OBJECT.PROPERTY` to inspect an object
+message, or `@reaction ... preview-message` to preview a reaction message.
+
+Override `message_bindings(property)` only when a custom producer supplies different or additional
+values. The declaration supports validation and previews; it does not supply runtime values. The
+producer must put those values on the event. Call `pass(@args)` for other message properties.
+
 ## Named bindings and literal text
 
 `{direction}` reads a binding called `direction`. The event producer must supply it. `@set-message`,

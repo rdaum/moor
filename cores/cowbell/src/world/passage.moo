@@ -114,7 +114,7 @@ object PASSAGE [
     "Sentence descriptions retain their spelling and punctuation. @set-passage east style fragment joins a short phrase into a You see sentence.",
     "The complete ambient phrase links to its exit. Explicit document references can link a selected phrase instead. Direction names remain listed separately.",
     "@set-passage east departure through the brass door controls departure wording. The arrival setting describes arrival on this side.",
-    "@set-passage east access key is brasskey sets a readable access condition. The door must be locked for access to restrict passage travel.",
+    "@set-passage east access key is \"brass key\" sets a readable access condition. The door must be locked for access to restrict passage travel.",
     "@set-passage east access clear removes the condition and unlocks the passage. Shared changes require authority at both ends.",
     "Use @set-passage east open_msg TEMPLATE (or close_msg, lock_msg, unlock_msg) for door messages; clear restores the standard message.",
     "Ambient descriptions do not supply movement wording. Use the dedicated phrases or side_a_leave_msg, side_b_leave_msg, side_a_arrive_msg, and side_b_arrive_msg.",

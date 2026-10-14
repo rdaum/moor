@@ -48,10 +48,10 @@ its initial values on a new host. Existing compatible state on the destination i
 The grouped definition and instance records below remain a proposal, not runtime storage. The
 current commands reuse individual reactions and require no corresponding object hierarchy.
 
-The [Henri tutorial](../docs/henri-and-the-cupboard.md) uses these commands and the MOO installation
-interface to build a scene. Petting supplies separate attempt and completion events. Food arrives
-through the inherited give operation. Reactions choose responses and change the cat's state. Custom
-event names belong to their receiving objects and require no global registration.
+The [Henri tutorial](../docs/henri-and-the-cupboard.md) uses these commands to build a scene.
+Petting supplies separate attempt and completion events. Food arrives through the inherited give
+operation. Reactions choose responses and change the cat's state. Custom event names belong to their
+receiving objects and require no global registration.
 
 ## Definition, instance, and authorization
 

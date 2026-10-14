@@ -47,11 +47,27 @@ object ROOT [
   endmethod
 
   method message_bindings owner: HACKER
-    "Declare the bindings supplied to a message property. Unknown properties have none.";
-    "Override on the producer and call pass(@args) for inherited messages.";
-    "Each entry has kind (object/text/content), description, and an example for previews.";
+    "Ordinary object messages describe an actor and this object. Override for additional participants.";
     const {property} = args;
-    return [];
+    const name = tostr(property);
+    if (!(name:ends_with("_msg") || name:ends_with("_msgs") || name:ends_with("_msg_bag")))
+      return [];
+    endif
+    let bindings = $sub_utils:standard_bindings("The person performing the action.");
+    bindings['dobj] = ['kind -> 'object, 'description -> "The object the message belongs to.",
+      'example -> 'host];
+    return bindings;
+  endmethod
+
+  method message_event owner: ARCH_WIZARD
+    "Create an object's named message with actor and object roles; the caller chooses where to send it.";
+    "Args: actor, message property, optional info/error kind. Reads with the caller's permissions.";
+    set_task_perms(caller_perms());
+    const {actor, property, ?kind = 'info} = args;
+    kind in {'info, 'error} || raise(E_INVARG, "Choose an info or error message.");
+    const content = $reaction:_resolve_msg(tosym(property), this);
+    const event = kind == 'error ? $event:mk_error(actor, @content) | $event:mk_info(actor, @content);
+    return event:with_dobj(this);
   endmethod
 
   method create owner: ARCH_WIZARD

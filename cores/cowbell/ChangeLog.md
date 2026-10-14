@@ -8,6 +8,13 @@ Cowbell entries.
 
 ### Added
 
+- Builders can send events between objects, use named messages and message bags in reaction steps,
+  and direct owned NPCs with `@act`. `@schedule` can send recurring events with optional timing
+  variation. `@exit-provider` lists, approves, refreshes, and removes custom room exits.
+- `@set-message` creates named messages on owned objects. Ordinary object messages have default
+  actor and object roles; custom `message_bindings` code is only needed for additional participants.
+  The Pet Rock, Henri, and portal tutorials use these commands for their setup and connections.
+
 - Builders can use `@set-pronouns ACTOR to PRESET|custom` to set pronouns for actors they own.
   Custom entry previews the words and checks editing permission again before saving. Players and
   NPCs share the validated setter; `@pronouns` remains the personal-settings command.
@@ -175,6 +182,9 @@ Cowbell entries.
   structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
 ### Fixed
+
+- Quoted object names work with `#` and `@verb`. Message commands and `@property` preserve the text
+  after a quoted object reference, including quotes within message text.
 
 - `#` preserves numbered object references and rejects ambiguous names instead of choosing an
   arbitrary match. Invalid expressions, denied operations, and failed lookups report command errors.

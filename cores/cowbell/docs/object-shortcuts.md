@@ -66,9 +66,9 @@ longer UUID identifier. You can use that identifier instead of the name in later
 
 </details>
 
-Keep the name attached to `#`, with no space between them. Names containing spaces need a short
-alias or an identifier here. For example, a lamp called “small brass lamp” could have the alias
-`lamp`.
+Keep the name attached to `#`, with no space between them. If a name contains spaces, put quotes
+around it: `#"small brass lamp"`. Property access goes after the quote, as in
+`#"small brass lamp".name`. A short alias is optional.
 
 Ordinary lookup searches your inventory and room first, then players, then passages. A name must
 identify one object. If you have two lamps, use an identifier or a more specific name.
