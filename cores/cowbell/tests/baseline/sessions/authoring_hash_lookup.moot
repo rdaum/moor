@@ -1,0 +1,156 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.name = "Ada"; #90102.name = "Bert"; #90101.is_builder = true; #90102.is_builder = true; #90101.authoring_features = $prog_features; #90102.authoring_features = $builder_features; move(#90103, #90108); #90108:set_passage(#90103, #90110, $passage:mk(#90103, "east", {"e"}, "", true, #90110, "west", {"w"}, "", true)); add_property(#90100, "hash_secret", "private", {#90100, ""}); return true;
+true
+@programmer
+% @create $actor named Henri
+~~Created
+% @property Henri.counter 0 rc
+~~Added
+% @property Henri.words 0 rc
+~~Added
+% @property Henri.food_kind #-1 rc
+~~Added
+% #Henri.counter = 7
+~~.counter = 7
+% #Henri.counter
+==> 7
+% #Henri.owner.name
+==> "Ada"
+% #Henri.parent.name
+==> "Generic Actor"
+% #90101.name
+==> "Ada"
+% #$actor.name
+==> "Generic Actor"
+% #Henri.counter = 3 * 4
+~~.counter = 12
+% #Henri.counter
+==> 12
+% #Henri.words = "%# stays literal"
+~~.words = "%# stays literal"
+% #Henri.pronouns = $pronouns:lookup("he/him")
+~~.pronouns = <
+% #Henri for %#:pronouns_display()
+==> "he/him"
+% #me for {task_perms()[1], player}
+==> {#90101, #90101}
+% @create $thing named kibble
+~~Created
+% #Henri.food_kind = $match:match_object("kibble", player)
+~~.food_kind = #
+% #Henri.food_kind.name
+==> "kibble"
+% #Henri.counter for %# + 1
+==> 13
+% #Henri.name inventory
+==> "Henri"
+% #Ada.name player
+==> "Ada"
+% #east.side_a_label exit
+==> "east"
+% #e.side_a_label exit
+==> "east"
+% #east.side_a_label
+==> "east"
+% #east exit for %#:other_room(player.location) == #90110
+==> true
+
+// Malformed input stays an ordinary command error and preserves properties.
+% #Henri.counter =
+~~Missing value after =
+% #Henri.counter = 1 +
+~~Invalid expression
+% #Henri = 1
+~~Assignment needs a property
+% #Henri.parent = #1
+~~Use @parent
+% #Henri..name
+~~A dot must be followed
+% #Henri.unknown_property
+~~Property .unknown_property not found
+% #Henri.unknown_property = 3
+~~Property .unknown_property not found
+% #Henri.counter.name
+~~Cannot access .name on 12
+% #Henri.name inventory rubbish
+~~Use exit, player, inventory
+% #Henri for
+~~Missing expression after for
+% #Henri for raise(E_INVARG, "An expected expression failure.")
+=An expected expression failure.
+% #zzzzmissingobject
+~~No match found
+% #Henri.counter
+==> 12
+
+// Ambiguity must not select an arbitrary object or fall through to exits.
+% @create $thing named twin
+~~Created
+% @create $thing named twin
+~~Created
+% #twin.name
+~~More than one match
+% #twin.name inventory
+~~More than one match
+% #twin.name = "wrong"
+~~More than one match
+
+// Neither assignment nor evaluation gains the command owner's permissions.
+% #90100.hash_secret
+~~denied
+% #90100.runtime_probe = 17
+~~denied
+% #90100 for %#.runtime_probe = 17
+~~denied
+% #me.runtime_probe = #90100.hash_secret
+~~denied
+@wizard
+; return {#90100.runtime_probe, #90101.runtime_probe};
+{0, 0}
+// The utility must also enforce permissions when called without the command.
+; add_verb(#90102, {#90102, "rxd", "hash_eval_probe"}, {"this", "none", "this"}); return set_verb_code(#90102, "hash_eval_probe", {"return $prog_utils:eval_expression(args[1]);"});
+0
+@programmer
+; return `#90102:hash_eval_probe("#90100.runtime_probe = 17") ! E_PERM => E_PERM';
+E_PERM
+; return `$prog_utils:eval_expression("#90100.runtime_probe = 17") ! E_PERM => E_PERM';
+E_PERM
+@nonprogrammer
+% #Ada.name player
+==> "Ada"
+% #me.runtime_probe = 17
+=Assignment requires programmer privileges.
+% #me for 1 + 2
+=The for clause requires programmer privileges.
+@wizard
+; return #90102.runtime_probe;
+0
+
+// A missing object in an orphan room is a normal failed lookup.
+; move(#90101, create($room, #90100, 2)); return true;
+true
+@programmer
+% #zzzzmissingobject
+~~No match found
+% #north exit
+~~No match found
+
+// Resolve and render both help names through the actual help command.
+@wizard
+; add_property(#90101, "hash_help", false, {#90101, "r"}); add_verb(#90101, {#90101, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90101, "inform_current", {"this.hash_help = args[1];"});
+0
+@programmer
+% help #
+@quiet
+@wizard
+; const text = $document:render(#90101.hash_help:resolve(#90101), 'text_plain)['body]; return {index(text, "Swiss army knife") != 0, index(text, "#Henri for %#:pronouns_display()") != 0, index(text, "Geust") != 0};
+{true, true, true}
+@programmer
+% help hash
+@quiet
+@wizard
+; const html = $document:render(#90101.hash_help:resolve(#90101), 'text_html)['body]; return {index(html, "#lamp.owner.name") != 0, index(html, "programmer privileges") != 0};
+{true, true}

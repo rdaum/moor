@@ -1940,219 +1940,166 @@ object BUILDER_FEATURES [
   endverb
 
   verb "#*" (any any any) owner: ARCH_WIZARD flags: "rxd"
-    "HINT: #<string>[.<property>...] [= <value>] [exit|player|inventory] [for <code>]";
-    "Quick object lookup with optional property chain, assignment, and code evaluation.";
-    caller != player && raise(E_PERM);
-    player.is_builder || raise(E_PERM, "Builder features required.");
+    "Look up #NAME[.PROPERTY...] [SCOPE] [for EXPRESSION], or assign with = EXPRESSION.";
+    caller == player || raise(E_PERM);
+    const is_builder = player.is_builder;
     set_task_perms(player);
-    "Parse the verb name to extract object string and property chain";
-    verb_part = verb[2..$];
-    if (!verb_part)
-      player:inform_current($event:mk_info(player, "Usage: #<name>[.<property>...] [= <value>] [exit|player|inventory] [for <code>]\nType 'help #' for details."));
-      return;
-    endif
-    "Split by dots to get object name and property chain";
-    parts = verb_part:split(".");
-    obj_string = parts[1];
-    prop_chain = length(parts) > 1 ? parts[2..$] | {};
-    "Check for assignment (argstr starts with =)";
-    rest = argstr:trim();
-    assignment_value = 0;
-    is_assignment = false;
-    if (rest && rest[1] == "=")
-      is_assignment = true;
-      !player.programmer && raise(E_PERM, "Assignment requires programmer privileges.");
-      !length(prop_chain) && raise(E_INVARG, "Assignment requires a property (e.g., #obj.prop = value)");
-      value_str = rest[2..$]:trim();
-      !value_str && raise(E_INVARG, "Missing value after =");
-      try
-        assignment_value = fromliteral(value_str);
-      except e (E_INVARG, E_TYPE)
-        raise(E_INVARG, "Invalid value: " + (length(e) >= 2 ? e[2] | toliteral(e)));
-      endtry
-      rest = "";
-    endif
-    "Parse remaining argstr for scope and for-clause";
-    scope = "";
-    for_code = "";
-    if (rest)
-      words = rest:split(" ");
-      first_word = words[1]:lowercase();
-      if (first_word in {"exit", "player", "inventory"})
-        scope = first_word;
-        rest = length(words) > 1 ? words[2..$]:join(" ") | "";
-      endif
-      rest = rest:trim();
-      if (index(rest:lowercase(), "for ") == 1)
-        for_code = rest[5..$]:trim();
-      elseif (rest && !(first_word in {"exit", "player", "inventory"}))
-        raise(E_INVARG, "Unknown argument: " + rest + ". Expected: exit, player, inventory, or 'for <code>'");
-      endif
-    endif
-    "Helper to match exits - returns {passage, side} where side is 'a or 'b";
-    fn match_exit(name)
-      room = player.location;
-      !valid(room) && return $failed_match;
-      area = room.location;
-      !valid(area) || !respond_to(area, 'passages_from) && return $failed_match;
-      passages = area:passages_from(room);
-      !length(passages) && return $failed_match;
-      search_objects = {};
-      keys = {};
-      sides = {};
-      for passage in (passages)
-        if (passage.side_a_room == room)
-          search_objects = {@search_objects, passage};
-          keys = {@keys, passage.side_a_aliases};
-          sides = {@sides, 'a};
-        else
-          search_objects = {@search_objects, passage};
-          keys = {@keys, passage.side_b_aliases};
-          sides = {@sides, 'b};
-        endif
-      endfor
-      match = complex_match(name, search_objects, keys);
-      match == $failed_match && return $failed_match;
-      idx = match in search_objects;
-      return {match, sides[idx]};
-    endfn
-    "Match the object based on scope";
-    passage_side = 0;
     try
-      if (scope == "player")
-        thing = $match:match_player(obj_string, player);
-      elseif (scope == "inventory")
-        search_objects = player.contents;
-        !length(search_objects) && raise(E_INVARG, "Your inventory is empty");
-        keys = { {item.name, @item.aliases} for item in (search_objects) };
-        thing = complex_match(obj_string, search_objects, keys);
-        thing == $failed_match && raise(E_INVARG, "No object found matching '" + obj_string + "' in inventory");
-      elseif (scope == "exit")
-        match_result = match_exit(obj_string);
-        match_result == $failed_match && raise(E_INVARG, "No exit found matching '" + obj_string + "'");
-        {thing, passage_side} = match_result;
-      else
-        "Default: try room objects, then players, then exits";
-        try
-          thing = $match:match_object(obj_string, player);
-        except e (E_INVARG)
-          thing = $failed_match;
-        endtry
-        if (thing == $failed_match)
-          try
-            thing = $match:match_player(obj_string, player);
-          except e (E_INVARG)
-            thing = $failed_match;
-          endtry
+      is_builder || raise(E_PERM, "Builder features required.");
+      const parts = verb[2..$]:split(".");
+      let reference = parts[1];
+      const properties = length(parts) > 1 ? parts[2..$] | {};
+      if (!length(reference))
+        return player:inform_current($event:mk_info(player,
+          "Use #NAME[.PROPERTY...] [exit|player|inventory] [for EXPRESSION], or #NAME.PROPERTY = EXPRESSION. See help #."));
+      endif
+      for property in (properties)
+        length(property) || raise(E_INVARG, "A dot must be followed by a property name.");
+      endfor
+      let rest = argstr:trim();
+      const assignment = length(rest) > 0 && rest[1] == "=";
+      let expression = "";
+      let scope = "";
+      if (assignment)
+        player.programmer || raise(E_PERM, "Assignment requires programmer privileges.");
+        length(properties) || raise(E_INVARG, "Assignment needs a property: #NAME.PROPERTY = VALUE.");
+        expression = rest[2..$]:trim();
+        length(expression) || raise(E_INVARG, "Missing value after =.");
+      elseif (length(rest))
+        const words = rest:split(" ");
+        if (words[1] in {"exit", "player", "inventory"})
+          scope = words[1];
+          rest = rest[length(scope) + 1..$]:trim();
         endif
-        if (thing == $failed_match)
-          match_result = match_exit(obj_string);
-          if (match_result != $failed_match)
-            {thing, passage_side} = match_result;
+        if (length(rest))
+          rest == "for" && raise(E_INVARG, "Missing expression after for.");
+          index(rest, "for ") == 1 || raise(E_INVARG,
+            "Use exit, player, inventory, or for EXPRESSION after the object name.");
+          expression = rest[5..$]:trim();
+          length(expression) || raise(E_INVARG, "Missing expression after for.");
+          player.programmer || raise(E_PERM, "The for clause requires programmer privileges.");
+        endif
+      endif
+      fn match_player(name)
+        if (name[1] == "#" || name in {"me", "myself"})
+          return $match:match_player(name, player);
+        endif
+        return $builder_features:_hash_match(name, players());
+      endfn
+      fn match_exit(name)
+        const room = player.location;
+        valid(room) || return {$failed_match, 0};
+        const area = room.location;
+        (valid(area) && respond_to(area, 'passages_from)) || return {$failed_match, 0};
+        const passages = area:passages_from(room);
+        length(passages) || return {$failed_match, 0};
+        const aliases = {$passage:command_names(passage, room) for passage in (passages)};
+        const matched = $builder_features:_hash_match(name, passages, aliases);
+        if (typeof(matched) != TYPE_FLYWEIGHT)
+          return {matched, 0};
+        endif
+        return {matched, matched.side_a_room == room ? 'a | 'b};
+      endfn
+      let target = $failed_match;
+      let passage_side = 0;
+      "Keep the leading # on numbered and UUID references; named lookup uses it as the command prefix.";
+      if ($str_proto:match_objid("#" + reference, true))
+        reference = "#" + reference;
+      endif
+      if (scope == "player")
+        target = match_player(reference);
+      elseif (scope == "inventory")
+        target = $builder_features:_hash_match(reference, player.contents);
+      elseif (scope == "exit")
+        {target, passage_side} = match_exit(reference);
+      else
+        if (reference[1] == "@")
+          length(reference) > 1 || raise(E_INVARG, "Missing player name after @.");
+          target = match_player(reference[2..$]);
+        elseif (reference[1] in {"#", "$"} || reference in {"me", "player", "here"})
+          target = $match:match_object(reference, player);
+        else
+          const nearby = valid(player.location) ? player.location.contents | {};
+          target = $builder_features:_hash_match(reference, {@player.contents, @nearby});
+          if (target == $failed_match)
+            target = match_player(reference);
+          endif
+          if (target == $failed_match)
+            {target, passage_side} = match_exit(reference);
           endif
         endif
-        thing == $failed_match && raise(E_INVARG, "No match found for '" + obj_string + "'");
       endif
-    except e (ANY)
-      msg = typeof(e) == TYPE_LIST && length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, msg));
-      return;
-    endtry
-    "Walk the property chain (for assignment, stop one short)";
-    result = thing;
-    current_prop = "";
-    walk_to = is_assignment ? length(prop_chain) - 1 | length(prop_chain);
-    try
-      for i in [1..walk_to]
-        current_prop = prop_chain[i];
-        if (current_prop == "parent")
-          result = parent(result);
-        else
-          result = result.(current_prop);
-        endif
+      target == $failed_match && raise(E_INVARG, "No match found for '" + reference + "'.");
+      let result = target;
+      const walk_to = assignment ? length(properties) - 1 | length(properties);
+      for property in (properties[1..walk_to])
+        try
+          result = property == "parent" ? parent(result) | result.(property);
+        except problem (E_PROPNF)
+          raise(E_PROPNF, "Property ." + property + " not found on " + toliteral(result));
+        except problem (E_INVIND)
+          raise(E_INVIND, "Cannot access ." + property + " on " + toliteral(result));
+        endtry
       endfor
-    except e (E_PROPNF)
-      player:inform_current($event:mk_error(player, "Property ." + current_prop + " not found on " + toliteral(result)));
-      return;
-    except e (E_INVIND)
-      player:inform_current($event:mk_error(player, "Cannot access ." + current_prop + " on " + toliteral(result) + " (not an object)"));
-      return;
-    except e (ANY)
-      msg = typeof(e) == TYPE_LIST && length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-      player:inform_current($event:mk_error(player, msg));
-      return;
-    endtry
-    "Handle assignment";
-    if (is_assignment)
-      target_prop = prop_chain[$];
-      target_prop == "parent" && raise(E_INVARG, "Cannot assign to .parent (use @parent command)");
-      try
-        result.(target_prop) = assignment_value;
-        player:inform_current($event:mk_info(player, toliteral(thing) + "." + prop_chain:join(".") + " = " + toliteral(assignment_value)));
-        return assignment_value;
-      except e (E_PROPNF)
-        player:inform_current($event:mk_error(player, "Property ." + target_prop + " not found on " + toliteral(result)));
-        return;
-      except e (E_PERM)
-        player:inform_current($event:mk_error(player, "Permission denied setting ." + target_prop + " on " + toliteral(result)));
-        return;
-      except e (ANY)
-        msg = typeof(e) == TYPE_LIST && length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-        player:inform_current($event:mk_error(player, msg));
-        return;
-      endtry
-    endif
-    "If for-code given, evaluate it with %# substituted (programmers only)";
-    if (for_code)
-      !player.programmer && raise(E_PERM, "The 'for' clause requires programmer privileges.");
-      code = strsub(for_code, "%#", toliteral(result));
-      try
-        final_result = eval("return " + code + ";");
-        if (typeof(final_result) == TYPE_LIST && final_result[1])
-          result = final_result[2];
-        else
-          player:inform_current($event:mk_error(player, "Eval error: " + toliteral(final_result)));
-          return;
-        endif
-      except e (ANY)
-        msg = typeof(e) == TYPE_LIST && length(e) >= 2 && typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e);
-        player:inform_current($event:mk_error(player, "Eval error: " + msg));
-        return;
-      endtry
-    endif
-    "Display the result";
-    if (passage_side && typeof(result) == TYPE_FLYWEIGHT && !prop_chain)
-      "Passage result with no property chain - show passage info";
-      passage = result;
-      if (passage_side == 'a)
-        from_room = passage.side_a_room;
-        to_room = passage.side_b_room;
-        label = passage.side_a_label;
-        aliases = passage.side_a_aliases;
-        desc = passage.side_a_description;
-      else
-        from_room = passage.side_b_room;
-        to_room = passage.side_a_room;
-        label = passage.side_b_label;
-        aliases = passage.side_b_aliases;
-        desc = passage.side_b_description;
+      if (assignment)
+        const property = properties[$];
+        property == "parent" && raise(E_INVARG, "Use @parent to change an object's parent.");
+        const value = $prog_utils:eval_expression(expression);
+        try
+          result.(property) = value;
+        except problem (E_PROPNF)
+          raise(E_PROPNF, "Property ." + property + " not found on " + toliteral(result));
+        endtry
+        player:inform_current($event:mk_info(player,
+          toliteral(target) + "." + properties:join(".") + " = " + toliteral(value)));
+        return value;
       endif
-      items = {{"Passage", label + " (" + aliases:join(", ") + ")"}, {"From", from_room.name + " (" + tostr(from_room) + ")"}, {"To", to_room.name + " (" + tostr(to_room) + ")"}, {"Open", passage.is_open ? "yes" | "no"}};
-      desc && (items = {@items, {"Description", desc}});
-      player:inform_current($event:mk_info(player, $format.deflist:mk(items)):with_presentation_hint('inset));
-    elseif (typeof(result) == TYPE_OBJ && valid(result))
-      owner = `result.owner ! ANY => #-1';
-      loc = `result.location ! ANY => #-1';
-      items = {{"Object", tostr(result)}, {"Name", `result.name ! ANY => "(no name)"'}, {"Owner", valid(owner) ? owner.name + " (" + tostr(owner) + ")" | "???"}, {"Location", valid(loc) ? loc.name + " (" + tostr(loc) + ")" | "nowhere"}};
-      player:inform_current($event:mk_info(player, $format.deflist:mk(items)):with_presentation_hint('inset));
-    elseif (typeof(result) == TYPE_OBJ)
-      player:inform_current($event:mk_info(player, "=> " + tostr(result) + " (invalid)"));
-    else
-      player:inform_current($event:mk_info(player, "=> " + toliteral(result)));
-    endif
-    return result;
+      if (length(expression))
+        result = $prog_utils:eval_expression(expression, result);
+      endif
+      if (passage_side && typeof(result) == TYPE_FLYWEIGHT && !length(properties))
+        const room = player.location;
+        const destination = result:other_room(room);
+        const label = passage_side == 'a ? result.side_a_label | result.side_b_label;
+        let items = {{"Passage", label + " (" + result:aliases_for(room):join(", ") + ")"},
+          {"From", room.name + " (" + tostr(room) + ")"},
+          {"To", destination.name + " (" + tostr(destination) + ")"},
+          {"Open", result.is_open ? "yes" | "no"}};
+        const description = result:description_for(room);
+        if (description)
+          items = {@items, {"Description", description}};
+        endif
+        player:inform_current($event:mk_info(player, $format.deflist:mk(items))
+          :with_presentation_hint('inset));
+      elseif (typeof(result) == TYPE_OBJ && valid(result))
+        const owner = `result.owner ! E_PERM => #-1';
+        const location = `result.location ! E_PERM => #-1';
+        const items = {{"Object", tostr(result)}, {"Name", result.name},
+          {"Owner", valid(owner) ? owner.name + " (" + tostr(owner) + ")" | "???"},
+          {"Location", valid(location) ? location.name + " (" + tostr(location) + ")" | "nowhere"}};
+        player:inform_current($event:mk_info(player, $format.deflist:mk(items))
+          :with_presentation_hint('inset));
+      else
+        player:inform_current($event:mk_info(player, "=> " + toliteral(result)));
+      endif
+      return result;
+    except problem (ANY)
+      "User expressions may raise any error; report it at the command boundary.";
+      player:inform_current($event:mk_error(player, problem[2]));
+      return false;
+    endtry
   endverb
 
+  method _hash_match owner: ARCH_WIZARD
+    "Return a unique best match for # lookup; reject ambiguity before reading or writing properties.";
+    set_task_perms(caller_perms());
+    const {name, objects, ?keys = {}} = args;
+    const names = length(keys) ? keys | {{object.name, @object.aliases} for object in (objects)};
+    const matches = complex_matches(name, objects, names);
+    length(matches) <= 1 || raise(E_INVARG,
+      "More than one match for '" + name + "'. Use a more specific name or object number.");
+    return length(matches) ? matches[1] | $failed_match;
+  endmethod
 
   verb _matching_candidates (this none none) owner: ARCH_WIZARD flags: "rxd"
     "Internal helper: list likely candidate objects for a plain-name token in context.";

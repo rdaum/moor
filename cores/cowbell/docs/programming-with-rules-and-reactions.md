@@ -63,6 +63,18 @@ You now own an object called `petrock`. It starts in your inventory.
 knows how to be picked up and dropped. Your rock gets that behavior from `$thing`. Later, we'll use
 your rock as the starting point for another one.
 
+Before we go further, try a handy tool:
+
+```moot
+% #petrock.name
+==> "petrock"
+```
+
+`#` is a builder's Swiss army knife for finding objects and doing things with them. `#petrock` finds
+your rock; `.name` reads its name property. Later, we'll use the same command to change values and
+call verbs. Type `help #` for help inside the world. The
+[object shortcuts tutorial](object-shortcuts.md) gives a fuller tour.
+
 Give it a description:
 
 ```moot
@@ -261,21 +273,21 @@ First, make the counter and the message:
 `@state` gives the rock a value that it remembers between commands. Here, `pets` is a number that
 starts at zero. The message property works just like `pet_msg`.
 
-Next, install the reaction. A line beginning with `;` runs MOO code immediately. Type the whole
-line, including the initial semicolon. The `true` below it is the expected result:
+Next, install the reaction. `#petrock` finds your rock by name. After `for`, you can run a MOO
+expression with `%#` standing for the object you found. Enter this command; it returns `true`:
 
 ```moot
-; const rock = $match:match_object("petrock", player); return $reaction:install(rock, "greeting_reaction", $reaction:mk('on_pet, 0, {{'increment, 'pets, 1}, {'announce, 'greeting_msg}}, $reaction:state_types(rock))).enabled;
-true
+% #petrock for $reaction:install(%#, "greeting_reaction", $reaction:mk('on_pet, 0, {{'increment, 'pets, 1}, {'announce, 'greeting_msg}}, $reaction:state_types(%#))).enabled
+==> true
 ```
 
-This line is longer, so let's take it apart:
+The reaction command is longer, so let's take it apart:
 
-- `$match:match_object("petrock", player)` finds your rock and saves it as `rock`.
+- `#petrock` finds your rock. `%#` supplies that object to the expression.
 - `$reaction:mk(...)` makes a reaction for `on_pet`. The `0` means it has no extra condition.
 - `{'increment, 'pets, 1}` adds one to the counter.
 - `{'announce, 'greeting_msg}` announces the message stored in `greeting_msg`.
-- `$reaction:state_types(rock)` lets Cowbell check that the counter is a number.
+- `$reaction:state_types(%#)` lets Cowbell check that the counter is a number.
 - `$reaction:install(...)` puts the reaction on your rock and authorizes it to run there.
 
 The leading apostrophe in `'pets` makes it a **symbol**: a name the code uses to identify something.
@@ -357,8 +369,8 @@ Give the reminder its own message:
 Install a second reaction:
 
 ```moot
-; const rock = $match:match_object("petrock", player); return $reaction:install(rock, "reminder_reaction", $reaction:mk('on_pet, 0, {{'schedule, 'reminder, 3, {'tell, 'Actor, 'reminder_msg}}})).enabled;
-true
+% #petrock for $reaction:install(%#, "reminder_reaction", $reaction:mk('on_pet, 0, {{'schedule, 'reminder, 3, {'tell, 'Actor, 'reminder_msg}}})).enabled
+==> true
 ```
 
 The step `schedule` creates a **timer**. Its name is `reminder`, and `3` is the delay in seconds.
@@ -714,8 +726,8 @@ The `_msg_bag` suffix identifies the property as a message bag. Install a reacti
 it, just as the greeting referred to `greeting_msg`:
 
 ```moot
-; const rock = $match:match_object("petrock", player); return $reaction:install(rock, "remark_reaction", $reaction:mk('on_pet, 0, {{'announce, 'remarks_msg_bag}})).enabled;
-true
+% #petrock for $reaction:install(%#, "remark_reaction", $reaction:mk('on_pet, 0, {{'announce, 'remarks_msg_bag}})).enabled
+==> true
 ```
 
 Pet the rock. You should see one of the two new remarks, along with its usual greeting.
@@ -836,8 +848,8 @@ Give the pebble a different greeting:
 </details>
 
 ```moot
-; const rock = $match:match_object("petrock", player); return $sub_utils:decompile(rock.greeting_msg);
-"The rock accepts the compliment in silence."
+% #petrock.greeting_msg for $sub_utils:decompile(%#)
+==> "The rock accepts the compliment in silence."
 % @state pebble
 =pets: 2
 % @state petrock

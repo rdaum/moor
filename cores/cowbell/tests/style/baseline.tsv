@@ -564,45 +564,6 @@ count	file	verb	kind	detail
 1	features/admin_features.moo	is_elevated owner: ARCH_WIZARD	implicit-local	subject
 1	features/admin_features.moo	is_elevated owner: ARCH_WIZARD	implicit-local	tid
 1	features/admin_features.moo	test_format_audit_entry_reports_malformed_entries owner: ARCH_WIZARD	implicit-local	row
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	aliases
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	area
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	assignment_value
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	code
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	current_prop
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	desc
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	final_result
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	first_word
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	for_code
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	from_room
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	idx
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	is_assignment
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	items
-2	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	keys
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	label
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	loc
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	match
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	match_result
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	msg
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	obj_string
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	owner
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	parts
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	passage
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	passage_side
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	passages
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	prop_chain
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	rest
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	result
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	room
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	scope
-2	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	search_objects
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	sides
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	target_prop
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	thing
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	to_room
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	value_str
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	verb_part
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	walk_to
-1	features/builder_features.moo	"#*" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	words
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	compiled
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	grants
 1	features/builder_features.moo	"@add-message" (any any any) owner: HACKER flags: "rd"	implicit-local	offset

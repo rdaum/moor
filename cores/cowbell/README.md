@@ -51,7 +51,9 @@ no MOO programming.
 For a first programming project, try
 [Let's make a pet rock](docs/programming-with-rules-and-reactions.md). Then
 [make room for Henri](docs/henri-and-the-cupboard.md), a cat with moods, a food cupboard, and a
-favourite couch. Both tutorials create their own objects and run in the test suite.
+favourite couch. Both tutorials create their own objects and run in the test suite. The
+[object shortcuts tutorial](docs/object-shortcuts.md) introduces `#`, a handy command for finding
+objects, inspecting properties, and calling verbs.
 
 The [rooms and passages guide](manual/rooms-and-passages.md) walks through building a workshop,
 connecting its rooms, and adding a keyed door. The [portal tutorial](manual/custom-exits.md) shows

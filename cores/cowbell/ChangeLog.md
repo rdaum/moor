@@ -8,6 +8,11 @@ Cowbell entries.
 
 ### Added
 
+- `#` accepts expressions in property assignments, such as
+  `#Henri.pronouns = $pronouns:lookup("he/him")`. The
+  [object shortcuts tutorial](docs/object-shortcuts.md) and `help #` explain lookup, properties,
+  scopes, and verb calls.
+
 - Add an executable [Henri tutorial](docs/henri-and-the-cupboard.md) after Pet Rock. An ordinary
   programmer builds a cat, food cupboard, key, and couch, then connects their reactions.
 - Builders can use custom event names in `@reaction OBJECT NAME after EVENT`. The names belong to
@@ -166,6 +171,9 @@ Cowbell entries.
   structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
 ### Fixed
+
+- `#` preserves numbered object references and rejects ambiguous names instead of choosing an
+  arbitrary match. Invalid expressions, denied operations, and failed lookups report command errors.
 
 - `@move` works for ordinary objects and NPCs instead of failing on a missing player property.
 - Item entry and exit reactions on characters use the surrounding room, so their messages are

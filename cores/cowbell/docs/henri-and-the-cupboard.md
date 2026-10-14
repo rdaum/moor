@@ -55,15 +55,27 @@ The rock started from `$thing`. Henri starts from `$actor`, the prototype for pe
 characters. An actor can receive things and take a seat. Henri has no person connected to him. The
 commands and reactions you write will supply his behaviour.
 
-Give him his pronouns:
+We'll use `#` to give him his pronouns. Think of it as a builder's Swiss army knife for finding
+objects and doing things with them. It can inspect properties, assign values, and call verbs. Type
+`help #` inside the world for the reference, or follow the
+[object shortcuts tutorial](object-shortcuts.md) for a guided tour.
+
+Give Henri his pronouns:
 
 ```moot
-; const cat = $match:match_object("Henri", player); cat.pronouns = $pronouns:lookup("he/him"); return cat:pronouns_display();
-"he/him"
+% #Henri.pronouns = $pronouns:lookup("he/him")
+~~.pronouns =
+% #Henri for %#:pronouns_display()
+==> "he/him"
 ```
 
-`$match:match_object` finds an object by name. We save the result in `cat`, then set its `pronouns`
-property. `return` shows the result of the last expression.
+`#Henri` finds your cat by name. `.pronouns` selects his pronoun property, and `=` assigns a value
+to it. `$pronouns:lookup("he/him")` supplies that value.
+
+The second command calls a method on the cat. After `for`, `%#` stands for the object you found.
+Here, `pronouns_display()` returns the short label `"he/him"`. You can also read a property with
+`#Henri.name`, or follow several properties with `#Henri.location.name`. Type `help #` for more
+examples. Assignments and `for` require programmer privileges.
 
 New objects start in your inventory. Move Henri into the room:
 
@@ -391,14 +403,17 @@ First, tell Henri which kind of food he accepts:
 ```moot
 % @property Henri.food_kind #-1 rc
 ~~Added
-; const cat = $match:match_object("Henri", player); cat.food_kind = $match:match_object("kibble", player); return cat.food_kind.name;
-"kibble"
+% #Henri.food_kind = $match:match_object("kibble", player)
+~~.food_kind =
+% #Henri.food_kind.name
+==> "kibble"
 % @verb Henri:acceptable this none this rxd
 ~~added
 ```
 
-`food_kind` stores an object reference, not a name. You can rename the kibble prototype later
-without breaking the connection.
+`$match:match_object("kibble", player)` finds your kibble prototype. `food_kind` stores the object
+reference, so you can rename the prototype later without breaking the connection. The next command
+follows that reference and reads the food's name.
 
 Before moving an item, `give` asks the recipient's `acceptable` method whether it can accept it.
 Enter `@program Henri:acceptable` and give that method a more particular opinion:
@@ -508,16 +523,17 @@ The cupboard needs a reaction that sends this event to Henri. The MOO interface 
 step. Enter this whole line as one command:
 
 ```moot
-; const box = $match:match_object("cupboard", player); const cat = $match:match_object("Henri", player); return $reaction:install(box, "notify_cat_reaction", $reaction:mk('on_open, 0, {{'trigger, cat, 'on_cupboard_open}})).enabled;
-true
+% #cupboard for $reaction:install(%#, "notify_cat_reaction", $reaction:mk('on_open, 0, {{'trigger, $match:match_object("Henri", player), 'on_cupboard_open}})).enabled
+==> true
 ```
 
 Here is what the line does:
 
-- `box` and `cat` hold references to the two objects.
+- `#cupboard` finds the cupboard; `%#` stands for it in the expression.
+- `$match:match_object("Henri", player)` finds the cat.
 - `$reaction:mk` makes a reaction for `on_open`. The `0` means it has no extra condition.
-- `{'trigger, cat, 'on_cupboard_open}` sends the event to Henri. The original participants and room
-  travel with it.
+- The `trigger` step sends `on_cupboard_open` to Henri. The original participants and room travel
+  with it.
 - `$reaction:install` saves and enables the reaction on the cupboard you own.
 
 You own both ends of this connection. Sending a trigger can change its recipient's state, so the
@@ -642,8 +658,8 @@ The cupboard can send this notification whenever someone takes something from it
 from this cupboard. He can be disappointed if you keep something else there.
 
 ```moot
-; const box = $match:match_object("cupboard", player); const cat = $match:match_object("Henri", player); return $reaction:install(box, "dinner_bell_reaction", $reaction:mk('on_take, 0, {{'trigger, cat, 'on_food_taken}})).enabled;
-true
+% #cupboard for $reaction:install(%#, "dinner_bell_reaction", $reaction:mk('on_take, 0, {{'trigger, $match:match_object("Henri", player), 'on_food_taken}})).enabled
+==> true
 % take breakfast from cupboard
 =Henri stands up from the couch.
 =Henri perks up, suddenly interested in dinner.
