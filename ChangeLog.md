@@ -351,6 +351,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Meadow keeps showing new output after confirming an exit or command from the transcript.
+  Successful submission no longer restores focus to an old link and pins the transcript there.
+
 - History requests after an event ID no longer repeat that event when the UUID ends in `ff`.
 
 - Assigning an object's `.owner` preserves ownership of its inherited `c` properties, as in

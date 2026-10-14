@@ -12,10 +12,12 @@
 //
 
 import { virtual } from "@guidepup/virtual-screen-reader";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { AnnotationContext } from "../context/AnnotationContext";
 import { createTranscript } from "../lib/transcript";
+import { AnnotationCommandReview } from "./AnnotationCommandReview";
 import { OutputWindow } from "./OutputWindow";
 import { ToastProvider } from "./Toast";
 
@@ -99,6 +101,50 @@ it("activates an object on its first click without showing Jump to Now", () => {
     fireEvent.mouseUp(key);
     fireEvent.click(key);
     expect(activate).toHaveBeenCalledTimes(1);
+    expect(queryByText("Jump to Now")).toBeNull();
+});
+
+it("keeps displaying live output after confirming an exit from the transcript", async () => {
+    const transcript = createTranscript();
+    const annotation = {
+        kind: "command" as const,
+        command: "go examples",
+        exit: { source: "oid:49", destination: "oid:50", passage: "examples" },
+    };
+    transcript.append({
+        ...createMessage("room", "You can go [to the gallery]{annotation=exit}.", { contentType: "text/djot" }),
+        eventMetadata: { annotations: { exit: annotation } },
+    });
+    function Harness() {
+        const [open, setOpen] = useState(false);
+        return (
+            <AnnotationContext.Provider value={() => setOpen(true)}>
+                <OutputWindow transcript={transcript} />
+                {open && (
+                    <AnnotationCommandReview
+                        annotation={annotation}
+                        position={{ x: 0, y: 0 }}
+                        onSubmit={() => {
+                            transcript.append(createMessage("command", "go examples", { type: "input_echo" }));
+                            return true;
+                        }}
+                        onClose={() => setOpen(false)}
+                    />
+                )}
+            </AnnotationContext.Provider>
+        );
+    }
+    const { container, getByText, getByRole, queryByRole, queryByText } = render(<Harness />, {
+        wrapper: ToastProvider,
+    });
+    const exit = getByText("to the gallery");
+    act(() => exit.focus());
+    fireEvent.click(exit);
+    fireEvent.click(getByRole("button", { name: "Go" }));
+    await waitFor(() => expect(queryByRole("dialog")).toBeNull());
+    act(() => transcript.append(createMessage("arrival", "You arrive in the gallery.")));
+    expect(container.querySelector("[data-message-id=\"arrival\"]")?.textContent)
+        .toContain("You arrive in the gallery.");
     expect(queryByText("Jump to Now")).toBeNull();
 });
 

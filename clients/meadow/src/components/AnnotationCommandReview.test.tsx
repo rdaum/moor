@@ -13,11 +13,40 @@
 // Copyright (C) 2026 The mooR Authors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { AnnotationCommandReview } from "./AnnotationCommandReview";
 
 describe("annotation command review", () => {
+    it("returns focus to the exit link when cancelled", async () => {
+        const submit = vi.fn(() => true);
+        function Harness() {
+            const [open, setOpen] = useState(false);
+            return (
+                <>
+                    <button onClick={() => setOpen(true)}>examples</button>
+                    {open && (
+                        <AnnotationCommandReview
+                            annotation={{ kind: "command", command: "go examples" }}
+                            position={{ x: 0, y: 0 }}
+                            onSubmit={submit}
+                            onClose={() => setOpen(false)}
+                        />
+                    )}
+                </>
+            );
+        }
+        render(<Harness />);
+        const exit = screen.getByRole("button", { name: "examples" });
+        act(() => exit.focus());
+        fireEvent.click(exit);
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(document.activeElement).toBe(exit);
+        expect(submit).not.toHaveBeenCalled();
+    });
+
     it("retains the captured exit identity when submitting a command", async () => {
         const submit = vi.fn(() => true);
         const annotation = {

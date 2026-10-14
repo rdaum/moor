@@ -57,11 +57,14 @@ export function AnnotationCommandReview(
     const actionTitle = annotation.action?.title ?? actionLabel;
     const actionIcon = annotation.action?.icon;
     const { cardRef, isDragging, dragHandlers } = useFloatingCard(position, true, true);
+    const submitted = useRef(false);
     useEffect(() => {
         const previous = document.activeElement as HTMLElement | null;
         cardRef.current?.focus({ preventScroll: true });
         return () => {
-            if (previous?.isConnected) previous.focus({ preventScroll: true });
+            // Returning focus to an old transcript link after submission pins new output.
+            // Cancellation still returns to the control that opened this card.
+            if (!submitted.current && previous?.isConnected) previous.focus({ preventScroll: true });
         };
     }, [cardRef]);
     const fields = useMemo(() => Object.entries(annotation.arguments ?? {}), [annotation]);
@@ -146,6 +149,7 @@ export function AnnotationCommandReview(
                 setError("Not connected. Reconnect before running this command.");
                 return;
             }
+            submitted.current = true;
             onClose();
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "Could not send this command.");
