@@ -178,7 +178,7 @@ object HELP_TOPICS [
   property topic_movement (owner: ARCH_WIZARD, flags: "rc") = {
     "movement",
     "Moving around",
-    "Move using compass directions: `north`, `south`, `east`, `west` (or `n`, `s`, `e`, `w`).\n\nSome places have other exits like `up`, `down`, `in`, `out`.\n\nUse `exits` to see available directions.\n\n## Auto-walk\n\nYou can walk automatically to a destination:\n\n- `walk to <place>` - walk to a room by name\n- `join <player>` - walk to where another player is\n- `walk stop` - stop walking\n\nAuto-walk uses fuzzy matching, so `walk lobby` or `walk dorm` will work.",
+    "Move using compass directions: `north`, `south`, `east`, `west` (or `n`, `s`, `e`, `w`).\n\nSome places have other exits like `up`, `down`, `in`, `out`.\n\nUse `exits` to see the ways out.\n\nUse `go` with an exit name or an adjacent room's name: `go examples`, `go brass door`, or `go to the travel gallery`. Shortened names work when they identify one route. If several routes match, choose one of the exit names shown. Closed doors must be opened before you can go through them.\n\n## Auto-walk\n\nYou can walk automatically to a destination:\n\n- `walk to <place>` - walk to a room by name\n- `join <player>` - walk to where another player is\n- `walk stop` - stop walking\n\nAuto-walk uses fuzzy matching, so `walk lobby` or `walk dorm` will work.",
     {"go", "move", "travel"},
     "basics",
     {"exits", "look", "walk", "join"}

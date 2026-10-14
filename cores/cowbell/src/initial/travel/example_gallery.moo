@@ -10,7 +10,7 @@ object EXAMPLE_GALLERY [
 
   property lift_ready (owner: ARCH_WIZARD, flags: "r") = false;
 
-  override description (owner: ARCH_WIZARD, flags: "rc") = "Try the exits here, then type 'exits' to see all the ways out. East and stairs are separate passages to the same courtyard. The chute goes only one way; return by the ramp and then west. For the brass door, get the example key and try 'open door with example key', then 'go door'. Call the lift with 'call lift', then use 'ride lift' when it arrives. A blue portal reaches another area. A misty arch chooses its destination when you use it. The ferry is visible but unavailable. Type out to return to the First Room.";
+  override description (owner: ARCH_WIZARD, flags: "rc") = "Try the exits here, then type 'exits' to see all the ways out. East and stairs are separate passages to the same courtyard. The chute goes only one way; return by the ramp and then west. For the brass door, get the example key and try 'open door with example key', then 'go door'. Push the button (or type 'call lift'), then use 'ride lift' when it arrives. A blue portal reaches another area. A misty arch chooses its destination when you use it. The ferry is visible but unavailable. Type out to return to the First Room.";
 
   method travel_options owner: ARCH_WIZARD
     "Describe the gallery's custom travel without moving or authorizing the viewer.";

@@ -54,6 +54,56 @@ object ROOM [
     return {};
   endmethod
 
+  method match_exit owner: ARCH_WIZARD
+    "Match visible exit names first, then adjacent destinations. Return an option or an empty map.";
+    "Ambiguous routes raise E_INVARG with their command names. Matching grants no travel permission.";
+    set_task_perms(caller_perms());
+    const {room, viewer, text} = args;
+    const query = text:reference_text();
+    length(query) || return [];
+    const options = {offered for offered in ($room:exit_options(room, viewer))
+      if !maphaskey(offered, 'error)};
+    const keys = {maphaskey(option, 'passage)
+      ? $passage:expand_direction_aliases($passage:command_names(option['passage], room))
+      | {option['label]} for option in (options)};
+    let matches = complex_matches(query, options, keys, 0.0, false);
+    const first = query:first_word();
+    if (!length(matches) && first[1] in {"the", "a", "an", "some"} && length(first[2]))
+      matches = complex_matches(first[2], options, keys, 0.0, false);
+    endif
+    if (!length(matches))
+      const destinations = {option['destination] for option in (options)
+        if valid(option['destination])};
+      const rooms = $match:candidates_in_scope(query, destinations,
+        ['context -> viewer, 'fuzzy_threshold -> 0.0]);
+      matches = {candidate for candidate in (options) if candidate['destination] in rooms};
+    endif
+    if (length(matches) > 1)
+      const names = {"go " + found['label] for found in (matches)};
+      raise(E_INVARG, "Several ways match '" + query + "'. Choose " + names:join(" or ") + ".");
+    endif
+    return length(matches) ? matches[1] | [];
+  endmethod
+
+  method go owner: ARCH_WIZARD
+    "Use one visible route for an authenticated actor, preserving passage and provider checks.";
+    const {who, query, ?context = []} = args;
+    const principal = caller_perms();
+    $root:check_actor(who, principal);
+    set_task_perms(principal);
+    who.location == this || raise(E_INVARG, "You are no longer in that room.");
+    const option = $room:match_exit(this, who, query);
+    length(option) || raise(E_INVARG,
+      "No way out matches '" + query + "'. Type 'exits' to see the ways out.");
+    if (maphaskey(option, 'passage))
+      return option['passage]:travel_from(who, this, context);
+    elseif (option['state] == 'unavailable)
+      who:inform_current($event:mk_info(who, option['reason]));
+      return false;
+    endif
+    return $room:use_exit_action(who, option['descriptor]["command"], option['descriptor]["exit"]);
+  endmethod
+
   method find_passage owner: ARCH_WIZARD
     "Match a direction against all of a room's passages, rejecting ambiguous names.";
     set_task_perms(caller_perms());

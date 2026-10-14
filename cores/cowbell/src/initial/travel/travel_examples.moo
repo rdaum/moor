@@ -38,8 +38,8 @@ object TRAVEL_EXAMPLES [
       this:create_passage(source, destination,
         $passage:mk(source, outward, {}, "", true, destination, inward, {}, "", true), true);
     endfor
-    let door = $passage:mk(this.gallery, "door", {}, "A brass door leads to the workshop.",
-      true, this.workshop, "gallery", {}, "A brass door leads to the gallery.", true, false);
+    let door = $passage:mk(this.gallery, "door", {"brass door"}, "A brass door leads to the workshop.",
+      true, this.workshop, "gallery", {"door", "brass door"}, "A brass door leads to the gallery.", true, false);
     door.is_door = true;
     door = door:with_locked(true):with_unlock_rule($rule_engine:parse_expression(
       "input.Key == " + toliteral(this.key), 'example_key, $rule_engine:passage_scope()));

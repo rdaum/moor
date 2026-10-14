@@ -1027,6 +1027,38 @@ mod tests {
     }
 
     #[test]
+    fn authored_paragraphs_keep_blank_lines() {
+        let input = "# Welcome\n\nFirst paragraph.\n\nSecond paragraph.";
+        let ansi = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+        let output = djot_to_terminal(input, false);
+        assert_eq!(
+            ansi.replace_all(&output, ""),
+            "Welcome\n\nFirst paragraph.\n\nSecond paragraph.\n"
+        );
+    }
+
+    #[test]
+    fn hard_breaks_are_compact_within_paragraphs() {
+        let input =
+            "A room description.\n\nYou can go east.\\\nYou see a key here.\\\nHenri is here.";
+        let ansi = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+        let output = djot_to_terminal(input, false);
+        assert_eq!(
+            ansi.replace_all(&output, ""),
+            "A room description.\n\nYou can go east.\nYou see a key here.\nHenri is here.\n"
+        );
+    }
+
+    #[test]
+    fn code_blocks_keep_internal_blank_lines() {
+        let input = "```\nfirst line\n\nthird line\n```";
+        let ansi = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+        let output = djot_to_terminal(input, false);
+        let visible = ansi.replace_all(&output, "");
+        assert!(visible.contains("first line\n\nthird line"), "{visible:?}");
+    }
+
+    #[test]
     fn test_strong_emphasis() {
         colored::control::set_override(true);
         let output = djot_to_terminal("This is *strong* text", true);

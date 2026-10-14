@@ -36,6 +36,28 @@ object PLAYER [
 
   override description (owner: ARCH_WIZARD, flags: "rc") = "You see a player who should get around to describing themself.";
 
+  verb "go" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "Go through a local exit by name or to its destination. Usage: go [to] NAME.";
+    caller == this || raise(E_PERM);
+    set_task_perms(this);
+    let target = argstr:trim();
+    const words = target:raw_words();
+    if (length(words) && words[1] == "to")
+      target = target:first_word()[2];
+    endif
+    if (!length(target))
+      return this:inform_current($event:mk_info(this,
+        "Go where? Type 'exits' to see the ways out."));
+    endif
+    try
+      valid(this.location) && isa(this.location, $room)
+        || raise(E_INVARG, "There are no ways out here.");
+      return this.location:go(this, target);
+    except error (E_INVARG)
+      return this:inform_current($event:mk_info(this, error[2]));
+    endtry
+  endverb
+
   verb "l*ook" (any none none) owner: ARCH_WIZARD flags: "rd" [
     ui -> ["arguments" -> ["dobj" -> "Object"], "prefix" -> "Look at"]
   ]
@@ -95,6 +117,8 @@ object PLAYER [
         "Object match failed - try as passage direction";
         try
           passage_desc = this:_look_passage(dobjstr);
+        except e (E_INVARG)
+          return this:inform_current($event:mk_error(player, e[2]):with_audience('utility));
         except e (ANY)
           return this:inform_current($event:mk_error(player, "Passage lookup failed: " + toliteral(e)):with_audience('utility));
         endtry
@@ -116,60 +140,20 @@ object PLAYER [
   endverb
 
   method _look_passage owner: ARCH_WIZARD
-    "Look at a passage direction. Returns description string or false if not found.";
+    "Look at a visible passage or provider exit. Return description content or false.";
     caller == this || raise(E_PERM);
     set_task_perms(this);
-    {direction} = args;
-    current_room = this.location;
-    if (!valid(current_room))
-      return false;
-    endif
-    area = current_room.location;
-    if (!valid(area))
-      return false;
-    endif
-    passages = area:passages_from(current_room);
-    if (!passages || length(passages) == 0)
-      return false;
-    endif
-    "Search for passage matching the direction";
-    for p in (passages)
-      try
-        side_a_room = p.side_a_room;
-        side_b_room = p.side_b_room;
-      except e (ANY)
-        raise(E_INVARG, "Malformed passage in " + tostr(area) + ": " + toliteral(p) + " (" + toliteral(e) + ")");
-      endtry
-      if (current_room == side_a_room)
-        try
-          label = p.side_a_label;
-          aliases = p.side_a_aliases;
-          description = p.side_a_description;
-        except e (ANY)
-          raise(E_INVARG, "Malformed passage side for " + tostr(p) + ": " + toliteral(e));
-        endtry
-      elseif (current_room == side_b_room)
-        try
-          label = p.side_b_label;
-          aliases = p.side_b_aliases;
-          description = p.side_b_description;
-        except e (ANY)
-          raise(E_INVARG, "Malformed passage side for " + tostr(p) + ": " + toliteral(e));
-        endtry
-      else
-        continue;
-      endif
-      "Check if direction matches label or any alias";
-      if (label == direction)
-        return description ? description | "You see a passage leading " + label + ".";
-      endif
-      for alias in (aliases)
-        if (typeof(alias) == TYPE_STR && alias == direction)
-          return description ? description | "You see a passage leading " + label + ".";
-        endif
-      endfor
-    endfor
-    return false;
+    const {direction} = args;
+    const room = this.location;
+    valid(room) && isa(room, $room) || return false;
+    try
+      const option = $room:match_exit(room, this, direction);
+      length(option) || return false;
+      const description = option['description];
+      return length(description) ? description | "You see a way out: " + option['caption] + ".";
+    except error (E_PROPNF, E_TYPE, E_INVIND)
+      raise(E_INVARG, "Malformed exit in " + tostr(room) + ": " + toliteral(error[1..2]));
+    endtry
   endmethod
 
   verb "i*nventory" (none none none) owner: ARCH_WIZARD flags: "rd"

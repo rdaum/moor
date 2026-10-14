@@ -49,6 +49,43 @@ object HEADLESS_PASSAGE_SCENARIOS
     return true;
   endmethod
 
+  method test_go_keeps_actor_checks_and_local_scope owner: ARCH_WIZARD
+    "Destination lookup uses only local approved exits and cannot authorize another actor.";
+    const source = create($room, #90101, 2);
+    const destination = create($room, #90101, 2);
+    const remote = create($room, #90101, 2);
+    const provider = this:_make_exit_provider(destination);
+    const previous = #90102.location;
+    try
+      destination.name = "The Garden";
+      remote.name = "Distant Room";
+      this:_as_programmer($room, "register_exit_provider", source, provider);
+      move(#90102, source);
+      $test_utils:assert_eq(`this:_as_programmer(source, "go", #90102, "garden")
+        ! E_PERM => E_PERM', E_PERM, "The room's owner cannot move another player");
+      $test_utils:assert_eq(this:_as_visitor($room, "match_exit", source, #90102, tostr(remote)),
+        [], "An explicit object ID must be a local exit destination");
+      $test_utils:assert_eq(this:_as_visitor($room, "match_exit", source, #90102, "distant"),
+        [], "Name matching cannot select a remote room");
+      $test_utils:assert_true(this:_as_visitor(source, "go", #90102, "garden"),
+        "A visitor can use the local provider by destination name");
+      $test_utils:assert_eq(#90102.location, destination, "Checked travel reaches the destination");
+      $test_utils:assert_eq(provider.query_principal, #90102,
+        "Matching and action discovery retain the initiating principal");
+      move(#90102, source);
+      this:_as_programmer($room, "unregister_exit_provider", source, provider);
+      $test_utils:assert_eq(this:_as_visitor($room, "match_exit", source, #90102, "garden"),
+        [], "Unapproved providers cannot be selected by destination");
+    finally
+      move(#90102, previous);
+      recycle(provider);
+      recycle(source);
+      recycle(destination);
+      recycle(remote);
+    endtry
+    return true;
+  endmethod
+
   method _make_exit_provider owner: ARCH_WIZARD
     "Create a programmer-owned portal fixture with the public provider interface.";
     caller == this || raise(E_PERM);

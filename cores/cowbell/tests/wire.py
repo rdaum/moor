@@ -166,11 +166,22 @@ services:
                 except ConnectionRefusedError:
                     assert time.monotonic() < deadline, "Test server startup timed out"
                     time.sleep(0.05)
+            banner = client.command("", "$login.welcome_message property.")
+            banner = re.sub(r"\x1b\[[0-9;]*m", "", banner)
+            assert "core.\r\n\r\nconnect with" in banner, repr(banner)
+            assert "to log in.\r\n\r\nServer version:" in banner, repr(banner)
             client.command("connect ArchWizard cowbell-wire-test", "*** Connected ***")
             return client
 
         try:
             first = start(True)
+            first.eval_marker('notify(connection(), "ROOM_LOOK_READY"); return true;', "ROOM_LOOK_READY")
+            room = first.command("look", "Test_Player is deeply asleep.")
+            room = re.sub(r"\x1b\[[0-9;]*m", "", room)
+            assert "The First Room\r\n\r\nWelcome to Cowbell." in room, repr(room)
+            assert "The Travel Gallery.\r\nYou see " in room, repr(room)
+            assert "here.\r\nMr. Welcome is here.\r\nTest_Player" in room, repr(room)
+            print("PASS welcome paragraphs and compact generated room lines over telnet", flush=True)
             second = Client(port)
             clients.append(second)
             second.command("connect ArchWizard cowbell-wire-test", "*** Connected ***")

@@ -79,6 +79,39 @@ object LOOK_SCENARIOS
     return true;
   endmethod
 
+  method test_narrative_keeps_authored_paragraphs_and_groups_room_details owner: ARCH_WIZARD
+    "Room summaries use single line breaks without collapsing the author's paragraphs.";
+    const room = create($room);
+    const item = create($thing);
+    const actor = create($actor);
+    try
+      room.name = "Atrium";
+      room.description = {$format.paragraph:mk("First paragraph."),
+        $format.paragraph:mk("Second paragraph.")};
+      item.name = "brass key";
+      actor.name = "Henri";
+      move(item, room);
+      move(actor, room);
+      let input = room:look_self();
+      input.exit_options = {['label -> "east", 'caption -> "east", 'descriptor -> [],
+        'state -> 'open, 'destination -> #-1, 'ambient -> false]};
+      const view = input:capture(#90102);
+      const document = $look:narrative(view):resolve(#90102);
+      const expected = "Atrium\n\nFirst paragraph.\n\nSecond paragraph.\n\n"
+        + "You can go east.\nYou see a brass key here.\nHenri is here.";
+      $test_utils:assert_eq($document:render(document, 'text_plain)['body], expected,
+        "Description paragraphs stay separate; generated room details share a paragraph");
+      const html = $document:render(document, 'text_html)['body];
+      $test_utils:assert_true(index(html, "<p>First paragraph.</p>\n<p>Second paragraph.</p>") > 0,
+        "The author's paragraph structure is preserved for web clients too");
+    finally
+      recycle(item);
+      recycle(actor);
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
   method test_capture_preserves_authority owner: ARCH_WIZARD
     "Public capture cannot elevate the caller through private description producers.";
     const room = create($room);

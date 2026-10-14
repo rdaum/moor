@@ -208,35 +208,47 @@ object LOOK [
   method narrative owner: HACKER
     "Assemble a narrative event from an inert LookView. No object labels or content are reread.";
     const {view} = args;
+    fn lines_block(lines)
+      let content = {};
+      for line in (lines)
+        if (length(content))
+          content = {@content, $document_node:mk('hard_break)};
+        endif
+        content = {@content, @line};
+      endfor
+      return length(content) ? {$document_node:mk('paragraph, content)} | {};
+    endfn
+    let lines = {};
     let blocks = {$document_node:mk('heading, view['title], ['level -> 3]),
       @flycontents(view['description])};
     const exits = {exit for exit in (view['exits]) if (!exit['ambient])};
     const available = {option['travel] for option in (exits) if (option['state] == 'open)};
     if (length(available))
-      blocks = {@blocks, $document_node:mk('paragraph, {
+      lines = {@lines, {
         @$format:literal_inline("You can go "), @$look:_join(available, "or"),
-        @$format:literal_inline(".")})};
+        @$format:literal_inline(".")}};
     endif
     for blocked in (exits)
       if (blocked['state] == 'open)
         continue;
       endif
       if (blocked['state] == 'unavailable)
-        blocks = {@blocks, $document_node:mk('paragraph, $format:literal_inline(blocked['reason]))};
+        lines = {@lines, $format:literal_inline(blocked['reason])};
       else
-        blocks = {@blocks, $document_node:mk('paragraph, {
+        lines = {@lines, {
           @$format:literal_inline("The way "), @blocked['travel]['content],
-          @$format:literal_inline(" is " + tostr(blocked['state]) + ".")})};
+          @$format:literal_inline(" is " + tostr(blocked['state]) + ".")}};
       endif
     endfor
     if (length(view['actions]))
-      blocks = {@blocks, $look:_list(view['actions])};
+      blocks = {@blocks, @lines_block(lines), $look:_list(view['actions])};
+      lines = {};
     endif
     const things = {thing for thing in (view['things]) if (!thing['integrated])};
     if (length(things))
-      blocks = {@blocks, $document_node:mk('paragraph, {
+      lines = {@lines, {
         @$format:literal_inline("You see "), @$look:_join(things),
-        @$format:literal_inline(" here.")})};
+        @$format:literal_inline(" here.")}};
     endif
     for sleeping in ({false, true})
       const actors = {actor for actor in (view['actors]) if (
@@ -246,12 +258,12 @@ object LOOK [
           + (sleeping ? " deeply asleep." | " here.");
         "Sleeping is already expressed by the sentence, so omit the status suffix.";
         const labels = sleeping ? {sleeping_actor['bare] for sleeping_actor in (actors)} | actors;
-        blocks = {@blocks, $document_node:mk('paragraph, {
+        lines = {@lines, {
           @$document_resolver:_capitalize($look:_join(labels))[1],
-          @$format:literal_inline(ending)})};
+          @$format:literal_inline(ending)}};
       endif
     endfor
-    let event = toflyweight($event, flyslots(view['event]), blocks);
+    let event = toflyweight($event, flyslots(view['event]), {@blocks, @lines_block(lines)});
     if (typeof(view['thumbnail]) == TYPE_LIST && length(view['thumbnail]) == 2)
       event = event:with_metadata('thumbnail, view['thumbnail]);
     endif

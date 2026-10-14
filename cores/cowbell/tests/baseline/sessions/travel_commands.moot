@@ -1,0 +1,116 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// These are the names and actions advertised in the shipped room descriptions.
+@wizard
+; $first_room:initialize(); $travel_examples:initialize(); move(#90102, $first_room); add_verb(#90102, {#90102, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90102, "inform_current", {"this.runtime_probe = $document:render(args[1]:resolve(this), 'text_plain)['body];", "return pass(@args);"});
+0
+@nonprogrammer
+% go travel
+@wizard
+; return #90102.location == #3101;
+true
+@nonprogrammer
+% go out
+% go to travel
+@wizard
+; return #90102.location == #3101;
+true
+@nonprogrammer
+% out
+% go to the travel gallery
+@wizard
+; return #90102.location == #3101;
+true
+@nonprogrammer
+% go to the workshop
+@wizard
+; return {#90102.location == #3101, index(#90102.runtime_probe, "closed") > 0};
+{true, true}
+@nonprogrammer
+% go brass door
+@wizard
+; return {#90102.location == #3101, index(#90102.runtime_probe, "closed") > 0};
+{true, true}
+@nonprogrammer
+% go to the example courtyard
+@wizard
+; return {#90102.location == #3101, index(#90102.runtime_probe, "go east") > 0, index(#90102.runtime_probe, "go stairs") > 0};
+{true, true, true}
+@nonprogrammer
+% go nowhere
+@wizard
+; return #90102.runtime_probe;
+"No way out matches 'nowhere'. Type 'exits' to see the ways out."
+@nonprogrammer
+% go
+@wizard
+; return #90102.runtime_probe;
+"Go where? Type 'exits' to see the ways out."
+@nonprogrammer
+% go to
+@wizard
+; return #90102.runtime_probe;
+"Go where? Type 'exits' to see the ways out."
+@nonprogrammer
+% go ferry
+@wizard
+; return {#90102.location == #3101, #90102.runtime_probe};
+{true, "The ferry is out of service."}
+@nonprogrammer
+% l button
+@wizard
+; return index(#90102.runtime_probe, "Push this button to call the hillside lift.") > 0;
+true
+@nonprogrammer
+% get button
+@wizard
+; return #3108.location == #3101;
+true
+@nonprogrammer
+% push button
+@wizard
+; return {#90102.location == #3101, #3101.lift_ready, index(#90102.runtime_probe, "ride lift") > 0};
+{true, true, true}
+@nonprogrammer
+% press the lift button
+@wizard
+; return {#90102.location == #3101, #3101.lift_ready, index(#90102.runtime_probe, "already here") > 0};
+{true, true, true}
+@nonprogrammer
+% ride lift
+@wizard
+; return {#90102.location == #3106, #3101.lift_ready};
+{true, false}
+; move(#90102, #3101); return true;
+true
+@nonprogrammer
+% look blue portal
+@wizard
+; return #90102.runtime_probe;
+"A blue arch opens onto a distant hillside."
+@nonprogrammer
+% go the blue portal
+@wizard
+; return #90102.location == #3106;
+true
+; move(#90102, #3101); return true;
+true
+@nonprogrammer
+% look brass door
+@wizard
+; return #90102.runtime_probe;
+"A brass door leads to the workshop."
+@nonprogrammer
+% get example key
+% open brass door with example key
+% go to workshop
+@wizard
+; return #90102.location == #3104;
+true
+@nonprogrammer
+% go to "The Travel Gallery"
+@wizard
+; return #90102.location == #3101;
+true
+; delete_verb(#90102, "inform_current"); return true;
+true

@@ -194,6 +194,16 @@ Cowbell entries.
 
 ### Fixed
 
+- Room narratives group generated exit, contents, and occupant lines without blank lines between
+  each sentence. Authored paragraphs retain their spacing, including welcome messages and room
+  prose.
+
+- `go` accepts local exit names and adjacent destination names, including
+  `go to the travel gallery`. Missing and ambiguous routes give useful messages. Door locks and
+  travel permissions still apply. `look` uses the same exit lookup for passages and custom exits.
+- The travel gallery has an inspectable lift button that responds to `push` and `press`. Its brass
+  door also accepts `brass door` as a name.
+
 - Clicked exit actions use the authenticated player when invoked directly by the web host.
   Previously, they failed while checking the absent MOO caller's permissions.
 - Room narratives describe travel with “You can go …”, using directions, authored phrases, or
