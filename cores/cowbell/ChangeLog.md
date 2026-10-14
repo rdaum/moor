@@ -8,6 +8,10 @@ Cowbell entries.
 
 ### Added
 
+- Builders can use `@set-pronouns ACTOR to PRESET|custom` to set pronouns for actors they own.
+  Custom entry previews the words and checks editing permission again before saving. Players and
+  NPCs share the validated setter; `@pronouns` remains the personal-settings command.
+
 - `#` accepts expressions in property assignments, such as
   `#Henri.pronouns = $pronouns:lookup("he/him")`. The
   [object shortcuts tutorial](docs/object-shortcuts.md) and `help #` explain lookup, properties,

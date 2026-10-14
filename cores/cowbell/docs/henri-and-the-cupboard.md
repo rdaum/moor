@@ -55,27 +55,32 @@ The rock started from `$thing`. Henri starts from `$actor`, the prototype for pe
 characters. An actor can receive things and take a seat. Henri has no person connected to him. The
 commands and reactions you write will supply his behaviour.
 
-We'll use `#` to give him his pronouns. Think of it as a builder's Swiss army knife for finding
-objects and doing things with them. It can inspect properties, assign values, and call verbs. Type
-`help #` inside the world for the reference, or follow the
-[object shortcuts tutorial](object-shortcuts.md) for a guided tour.
-
-Give Henri his pronouns:
+Give Henri his pronouns with the builder command:
 
 ```moot
-% #Henri.pronouns = $pronouns:lookup("he/him")
-~~.pronouns =
+% @set-pronouns Henri to he/him
+=Pronouns for Henri set to: he/him
+```
+
+This command works on actors you own and needs no programmer privileges. For custom words, use
+`@set-pronouns Henri to custom`. It asks you to fill in sentences, then shows a preview before
+saving. Type `help @set-pronouns` for details. `@pronouns` sets your own pronouns.
+
+We can also ask Henri to show us his pronouns:
+
+```moot
 % #Henri for %#:pronouns_display()
 ==> "he/him"
 ```
 
-`#Henri` finds your cat by name. `.pronouns` selects his pronoun property, and `=` assigns a value
-to it. `$pronouns:lookup("he/him")` supplies that value.
+`#` is a builder's Swiss army knife for finding objects and doing things with them. It can inspect
+properties, assign values, and call verbs. `#Henri` finds your cat by name. After `for`, `%#` stands
+for the object you found. Here, `pronouns_display()` returns the short label `"he/him"`.
 
-The second command calls a method on the cat. After `for`, `%#` stands for the object you found.
-Here, `pronouns_display()` returns the short label `"he/him"`. You can also read a property with
-`#Henri.name`, or follow several properties with `#Henri.location.name`. Type `help #` for more
-examples. Assignments and `for` require programmer privileges.
+You can also read a property with `#Henri.name`, or follow several properties with
+`#Henri.location.name`. Type `help #` for the reference, or follow the
+[object shortcuts tutorial](object-shortcuts.md) for a guided tour. Assignments and `for` require
+programmer privileges.
 
 New objects start in your inventory. Move Henri into the room:
 

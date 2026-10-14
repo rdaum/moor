@@ -1,0 +1,173 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.name = "Ada"; #90102.name = "Bert"; #90101.is_builder = true; #90102.is_builder = true; #90101.authoring_features = $prog_features; #90102.authoring_features = $builder_features; return true;
+true
+@nonprogrammer
+% @create $actor named Henri
+~~Created
+% @set-pronouns Henri to he/him
+=Pronouns for Henri set to: he/him
+@wizard
+; const cat = $match:match_object("Henri", #90102); #90102.runtime_probe = cat; return {cat.owner, cat:pronouns_display(), !#90102.programmer};
+{#90102, "he/him", true}
+; return #90102.runtime_probe:pronouns_settings()["subject"];
+"he"
+@nonprogrammer
+% @set-pronouns Henri to SHE/HER
+=Pronouns for Henri set to: she/her
+% @set-pronouns Henri to imaginary
+~~Unknown pronoun preset
+% @set-pronouns Henri
+~~Usage: @set-pronouns
+% @set-pronouns missingcat to he/him
+~~No actor found
+% @create $thing named stone
+~~Created
+% @set-pronouns stone to he/him
+=Choose an actor, such as an NPC or player.
+@wizard
+; return #90102.runtime_probe:pronouns_display();
+"she/her"
+
+// Personal settings still work without any builder or programmer role.
+@nonprogrammer
+% @pronouns they/them
+=Pronouns set to: they/them
+% @set-pronouns Ada to he/him
+=You need builder privileges and permission to set that actor's pronouns.
+@programmer
+% @set-pronouns #90102 to he/him
+=You need builder privileges and permission to set that actor's pronouns.
+; return `#90102.runtime_probe:set_pronouns("he/him") ! E_PERM => E_PERM';
+E_PERM
+; return `$pronouns:prompt_custom(#90102) ! E_PERM => E_PERM';
+E_PERM
+
+// Custom entry supports refusal, abort, and a confirmed save.
+@nonprogrammer
+>> ze
+>> zir
+>> zir
+>> zirs
+>> zirself
+>> is
+>> no
+% @set-pronouns Henri to custom
+=Ze is ready.
+=
+=I met zir.
+=
+=This is zir coat.
+=
+=The coat is zirs.
+=
+=Ze did it zirself.
+=
+=Ze has a map.
+@text Cancelled.
+>> @abort
+% @set-pronouns Henri to custom
+@text Cancelled.
+@wizard
+; return #90102.runtime_probe:pronouns_display();
+"she/her"
+@nonprogrammer
+>> ze
+>> zir
+>> zir
+>> zirs
+>> zirself
+>> are
+>> yes
+% @set-pronouns Henri to custom
+=Ze are ready.
+=
+=I met zir.
+=
+=This is zir coat.
+=
+=The coat is zirs.
+=
+=Ze did it zirself.
+=
+=Ze have a map.
+@text Confirmed.
+@text Pronouns for Henri set to: ze/zir
+@wizard
+; return {#90102.runtime_probe:pronouns_display(), #90102.runtime_probe.pronouns.is_plural, #90102:pronouns_display()};
+{"ze/zir", true, "they/them"}
+
+// Match complete names and aliases, and reject ambiguous names before changing either actor.
+@nonprogrammer
+% @create $actor named Sir Marmalade:marmalade
+~~Created
+% @set-pronouns Sir Marmalade to he/him
+=Pronouns for Sir Marmalade set to: he/him
+% @set-pronouns marmalade to it/its
+=Pronouns for Sir Marmalade set to: it/its
+% @create $actor named Henri
+~~Created
+% @set-pronouns Henri to he/him
+~~More than one match
+@wizard
+; return sort({cat:pronouns_display() for cat in (#90102.contents) if cat.name == "Henri"});
+{"they/them", "ze/zir"}
+; const twins = {cat for cat in (#90102.contents) if cat.name == "Henri" && cat != #90102.runtime_probe}; twins[1]:destroy(); return true;
+true
+
+// Simulate an ownership transfer while the user is answering the confirmation prompt.
+; add_verb(#90102, {#90100, "rxd", "confirm"}, {"this", "none", "this"}); return set_verb_code(#90102, "confirm", {"const answer = pass(@args); this.runtime_probe:set_owner(#90100); return answer;"});
+0
+@nonprogrammer
+>> xe
+>> xem
+>> xyr
+>> xyrs
+>> xemself
+>> is
+>> yes
+% @set-pronouns Henri to custom
+=Xe is ready.
+=
+=I met xem.
+=
+=This is xyr coat.
+=
+=The coat is xyrs.
+=
+=Xe did it xemself.
+=
+=Xe has a map.
+@text Confirmed.
+@text You need builder privileges and permission to set that actor's pronouns.
+@wizard
+; return {#90102.runtime_probe.owner, #90102.runtime_probe:pronouns_display()};
+{#90100, "ze/zir"}
+; delete_verb(#90102, "confirm"); #90102.runtime_probe:set_owner(#90102); #90102.is_builder = false; return true;
+true
+@nonprogrammer
+% @set-pronouns Henri to he/him
+=You need builder privileges and permission to set that actor's pronouns.
+% @pronouns she/her
+=Pronouns set to: she/her
+@wizard
+; return #90102.runtime_probe:pronouns_display();
+"ze/zir"
+
+// Both help entries explain which command edits an NPC.
+; #90102.is_builder = true; add_property(#90102, "captured_help", false, {#90102, "r"}); add_verb(#90102, {#90102, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90102, "inform_current", {"this.captured_help = args[1];"});
+0
+@nonprogrammer
+% help @set-pronouns
+@quiet
+@wizard
+; const text = $document:render(#90102.captured_help:resolve(#90102), 'text_plain)['body]; return {index(text, "@set-pronouns Henri to he/him") != 0, index(text, "@abort") != 0, index(text, "Programmer privileges are not required") != 0};
+{true, true, true}
+@nonprogrammer
+% help pronouns
+@quiet
+@wizard
+; return index($document:render(#90102.captured_help:resolve(#90102), 'text_html)['body], "@set-pronouns Henri to custom") != 0;
+true

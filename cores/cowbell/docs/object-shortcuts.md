@@ -217,15 +217,14 @@ borrow a cat for this example:
 ```moot
 % @create $actor named Mabel
 ~~Created
-% #Mabel.pronouns = $pronouns:lookup("she/her")
-~~.pronouns =
+% @set-pronouns Mabel to she/her
+=Pronouns for Mabel set to: she/her
 % #Mabel for %#:pronouns_display()
 ==> "she/her"
 ```
 
-The assignment asks `$pronouns` for the pronoun set called `she/her`, then stores it on Mabel. The
-final command finds Mabel and calls her `pronouns_display` verb. The empty parentheses mean that
-this call takes no arguments.
+The builder command sets Mabel's pronouns to `she/her`. The final command finds Mabel and calls her
+`pronouns_display` verb. The empty parentheses mean that this call takes no arguments.
 
 `#Mabel:pronouns_display()` is not a command shortcut in Cowbell. Use the `for` form above.
 
@@ -237,6 +236,7 @@ provide a more convenient way to perform a larger operation:
 - `@describe` edits descriptions and supports formatted text.
 - `@move` moves an object; assigning its `location` property does not.
 - `@parent` changes an object's prototype.
+- `@set-pronouns` chooses pronouns for an actor you own, with a custom-entry option.
 - `@passage` and `@set-passage` inspect and edit passages.
 
 Passages are stored values rather than independent objects. `#north exit` can inspect one, but

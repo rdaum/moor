@@ -50,6 +50,31 @@ choose the verb form, then select **Preview sentences**. If the sentences look r
 these pronouns**. In profile setup, finish the profile to save the choice. If you change a word,
 preview the sentences again before applying it.
 
+## Choose pronouns for an NPC
+
+If you have builder privileges, you can set pronouns for an actor you own. An actor is an object
+that represents a character, such as Henri the cat. Programmer privileges are not required.
+
+```text
+@set-pronouns Henri to he/him
+```
+
+Use the actor's name, alias, or object identifier. The command confirms which actor changed and
+shows the new pronouns. It also works on actor prototypes, so their children can inherit a choice.
+
+For custom words, use:
+
+```text
+@set-pronouns Henri to custom
+```
+
+This uses the same five blanks, verb agreement, and preview as your personal pronoun editor. Enter
+`@abort` at a word prompt, or answer `no` at confirmation, to keep the current pronouns. Permission
+is checked again when you save.
+
+`@pronouns` always refers to your own pronouns. For the builder command's reference, type
+`help @set-pronouns`.
+
 ## Give an object a different pickup message
 
 You need builder privileges for this example. The pebble belongs to you, so you can change its

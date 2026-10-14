@@ -2689,13 +2689,6 @@ count	file	verb	kind	detail
 1	player.moo	"@listgag listgag" (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	parts
 1	player.moo	"@listgag listgag" (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	player_names
 1	player.moo	"@password" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	new_password
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	available
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	content
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	current
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	display
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	event
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	pronoun_set
-1	player.moo	"@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"	implicit-local	query
 1	player.moo	"@sethome" (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	current_room
 1	player.moo	"@sethome" (none none none) owner: ARCH_WIZARD flags: "rxd"	implicit-local	old_home
 1	player.moo	"@ungag" (any any any) owner: ARCH_WIZARD flags: "rxd"	implicit-local	event

@@ -25,7 +25,7 @@ player.moo:set_programmer
 player.moo:set_email_address
 player.moo:make_player
 player.moo:_make_player_setup_cap
-player.moo:set_pronouns
+actor.moo:set_pronouns
 player.moo:set_home
 sysobj.moo:user_reconnected
 events/event_receiver.moo:_notify
@@ -352,3 +352,9 @@ features/builder_features.moo:#*
 features/builder_features.moo:_hash_match
 utils/prog_utils.moo:eval_expression
 utils/prog_utils.moo:test_eval_expression
+actor.moo:pronouns_display
+actor.moo:pronouns_settings
+player.moo:@pronouns
+pronouns.moo:from_input
+pronouns.moo:prompt_custom
+features/builder_features.moo:@set-pronouns

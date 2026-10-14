@@ -18,6 +18,53 @@ object BUILDER_FEATURES [
     who.is_builder || raise(E_PERM, "Builder features required.");
   endmethod
 
+  verb "@set-pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "Set an actor's pronouns. Usage: @set-pronouns ACTOR to PRESET|custom.";
+    "Requires builder privileges and ownership of the actor, or wizard authority.";
+    caller == player || raise(E_PERM);
+    try
+      this:_require_builder_command(player);
+      set_task_perms(player);
+      (length(dobjstr) && prepstr == "to" && length(iobjstr)) || raise(E_INVARG,
+        "Usage: @set-pronouns ACTOR to PRESET|custom. See help @set-pronouns.");
+      const reference = dobjstr:trim();
+      let target;
+      if (reference[1] in {"#", "$"} || reference in {"me", "player", "here"})
+        target = $match:match_object(reference, player);
+      else
+        const nearby = valid(player.location) ? player.location.contents | {};
+        const candidates = {@player.contents, @nearby};
+        const names = {{object.name, @object.aliases} for object in (candidates)};
+        const matches = complex_matches(reference, candidates, names);
+        length(matches) || raise(E_INVARG, "No actor found matching '" + reference + "'.");
+        length(matches) == 1 || raise(E_INVARG,
+          "More than one match for '" + reference + "'. Use an object identifier.");
+        target = matches[1];
+      endif
+      isa(target, $actor) || raise(E_INVARG, "Choose an actor, such as an NPC or player.");
+      $root:_check_permissions_as(target, player, 'set_pronouns);
+      let input = iobjstr:trim();
+      if (input == "custom")
+        input = $pronouns:prompt_custom(player, "Use these pronouns for " + target.name + "?");
+        typeof(input) == TYPE_MAP || return;
+      endif
+      "Prompts commit. Recheck the builder role, actor type, and editing authority before saving.";
+      this:_require_builder_command(player);
+      (valid(target) && isa(target, $actor)) || raise(E_INVARG, "That actor no longer exists.");
+      $root:_check_permissions_as(target, player, 'set_pronouns);
+      target:set_pronouns(input);
+      player:inform_current($event:mk_info(player,
+        "Pronouns for " + target.name + " set to: " + target:pronouns_display())
+        :with_audience('utility));
+    except problem (E_PERM)
+      player:inform_current($event:mk_error(player,
+        "You need builder privileges and permission to set that actor's pronouns.")
+        :with_audience('utility));
+    except problem (E_INVARG, E_TYPE, E_PROPNF, E_INVIND)
+      player:inform_current($event:mk_error(player, problem[2]):with_audience('utility));
+    endtry
+  endverb
+
   verb "@add-message" (any any any) owner: ARCH_WIZARD flags: "rd"
     "HINT: <object>.<property> <template> -- Add an entry to a message bag.";
     "Add a compiled message template entry to a message bag property. Usage: @add-message <object>.<prop> <template>";

@@ -20,7 +20,9 @@ object PRONOUNS [
     const {input} = args;
     if (typeof(input) == TYPE_STR)
       const preset = this:lookup(input);
-      typeof(preset) == TYPE_FLYWEIGHT || raise(E_INVARG, "Unknown preset. Use @pronouns custom to enter your own words.");
+      typeof(preset) == TYPE_FLYWEIGHT || raise(E_INVARG,
+        "Unknown pronoun preset. Choose " + this:list_presets():join(", ")
+        + ", or enter custom pronouns.");
       return this:validate(preset);
     endif
     typeof(input) == TYPE_MAP || raise(E_TYPE, "Use a preset name or custom pronoun fields.");
@@ -56,6 +58,34 @@ object PRONOUNS [
     return {subject + " " + pronouns.verb_be + " ready.", "I met " + pronouns.po + ".",
       "This is " + pronouns.pp + " coat.", "The coat is " + pronouns.pq + ".",
       subject + " did it " + pronouns.pr + ".", subject + " " + pronouns.verb_have + " a map."};
+  endmethod
+
+  method prompt_custom owner: ARCH_WIZARD
+    "Collect custom fields and preview them. Return confirmed input, or false on cancellation.";
+    "Args: {editor[, confirmation]}. Each prompt commits; the caller must recheck permission on save.";
+    set_task_perms(caller_perms());
+    const {editor, ?confirmation = "Use these pronouns?"} = args;
+    editor == caller_perms() || raise(E_PERM);
+    let input = [];
+    for field in ({{"subject", "___ is ready.", "ze"}, {"object", "I met ___.", "zir"},
+      {"possessive_adjective", "This is ___ coat.", "zir"},
+      {"possessive_pronoun", "The coat is ___.", "zirs"}, {"reflexive", "Ze did it ___.", "zirself"}})
+      const answer = editor:prompt("Fill the blank: " + field[2] + " Enter @abort to cancel.", field[3]);
+      typeof(answer) == TYPE_STR || return false;
+      input[field[1]] = answer;
+    endfor
+    let agreement = "";
+    while (!(agreement in {"is", "are"}))
+      const answer = editor:prompt("Choose: " + input["subject"] + " is ready, or "
+        + input["subject"] + " are ready. Enter is or are, or @abort to cancel.", "is or are");
+      typeof(answer) == TYPE_STR || return false;
+      agreement = answer:trim();
+    endwhile
+    input["agreement"] = agreement;
+    const examples = this:examples(input);
+    editor:inform_current($event:mk_info(editor,
+      @{$format.paragraph:mk(line) for line in (examples)}):with_audience('utility));
+    return equal(editor:confirm(confirmation), true) ? input | false;
   endmethod
 
   method test_custom_input owner: HACKER

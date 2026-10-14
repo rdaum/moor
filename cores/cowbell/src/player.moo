@@ -304,32 +304,11 @@ object PLAYER [
         :with_audience('utility));
       return;
     endif
-    let input = query;
-    if (query == "custom")
-      input = [];
-      for field in ({{"subject", "___ is ready.", "ze"}, {"object", "I met ___.", "zir"},
-        {"possessive_adjective", "This is ___ coat.", "zir"},
-        {"possessive_pronoun", "The coat is ___.", "zirs"}, {"reflexive", "Ze did it ___.", "zirself"}})
-        const answer = this:prompt("Fill the blank: " + field[2] + " Enter @abort to cancel.", field[3]);
-        typeof(answer) == TYPE_STR || return;
-        input[field[1]] = answer;
-      endfor
-      let agreement = "";
-      while (!(agreement in {"is", "are"}))
-        const answer = this:prompt("Choose: " + input["subject"] + " is ready, or "
-          + input["subject"] + " are ready. Enter is or are, or @abort to cancel.", "is or are");
-        typeof(answer) == TYPE_STR || return;
-        agreement = answer:trim();
-      endwhile
-      input["agreement"] = agreement;
-    endif
     try
-      const examples = $pronouns:examples(input);
+      let input = query;
       if (query == "custom")
-        this:inform_current($event:mk_info(this, @{$format.paragraph:mk(line) for line in (examples)})
-          :with_audience('utility));
-        const confirmed = this:confirm("Use these pronouns?");
-        equal(confirmed, true) || return;
+        input = $pronouns:prompt_custom(this);
+        typeof(input) == TYPE_MAP || return;
       endif
       this:set_pronouns(input);
       this:inform_current($event:mk_info(this, "Pronouns set to: " + this:pronouns_display())
@@ -2040,29 +2019,6 @@ object PLAYER [
     this:inform_current($event:mk_error(this, message):with_audience('utility));
     return true;
   endverb
-
-  method pronouns_display owner: ARCH_WIZARD
-    "Return the display string for the player's pronouns (e.g. 'they/them').";
-    return $pronouns:display(this.pronouns);
-  endmethod
-
-  method set_pronouns owner: ARCH_WIZARD
-    "Set a preset or validated custom fields. Commands and clients use this same permission check.";
-    let actor = caller_perms();
-    "Direct client calls have no MOO caller; nested and scheduled calls retain their own authority.";
-    if (actor == #-1 && !callers() && caller == player)
-      actor = player;
-    endif
-    const {target, perms} = $root:_check_permissions_as(this, actor, 'set_pronouns);
-    set_task_perms(perms);
-    const {input} = args;
-    target.pronouns = $pronouns:from_input(input);
-  endmethod
-
-  method pronouns_settings owner: ARCH_WIZARD
-    "Return the current words for the client's pronoun editor.";
-    return $pronouns:to_input(this.pronouns);
-  endmethod
 
   method set_home owner: ARCH_WIZARD
     "Set this player's home room. Permission: wizard, owner, or 'set_home capability.";

@@ -308,8 +308,26 @@ object ACTOR [
   endmethod
 
   method pronouns_display owner: ARCH_WIZARD
-    "Return the display string for the player's pronouns (e.g. 'they/them').";
+    "Return this actor's pronoun label, such as he/him or they/them.";
     return $pronouns:display(this.pronouns);
+  endmethod
+
+  method set_pronouns owner: ARCH_WIZARD
+    "Set a preset or validated custom fields. Commands and clients use this same permission check.";
+    let actor = caller_perms();
+    "Direct client calls have no MOO caller; nested and scheduled calls retain their own authority.";
+    if (actor == #-1 && !callers() && caller == player)
+      actor = player;
+    endif
+    const {target, perms} = $root:_check_permissions_as(this, actor, 'set_pronouns);
+    set_task_perms(perms);
+    const {input} = args;
+    target.pronouns = $pronouns:from_input(input);
+  endmethod
+
+  method pronouns_settings owner: ARCH_WIZARD
+    "Return the current words for the client's pronoun editor.";
+    return $pronouns:to_input(this.pronouns);
   endmethod
 
   method mk_shout_event owner: ARCH_WIZARD

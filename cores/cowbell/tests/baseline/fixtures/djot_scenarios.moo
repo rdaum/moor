@@ -142,7 +142,7 @@ object DJOT_SCENARIOS
 
   method test_shipped_builder_help owner: ARCH_WIZARD
     "Check every builder help article.";
-    return this:_check_help_provider(this.providers[3], 6);
+    return this:_check_help_provider(this.providers[3], 7);
   endmethod
 
   method test_shipped_admin_help owner: ARCH_WIZARD
