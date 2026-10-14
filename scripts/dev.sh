@@ -12,7 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Native development stack: daemon, web host, Vite, and optional workers.
+# Native development stack: daemon, web host, Vite, optional telnet and workers.
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
@@ -24,6 +24,7 @@ Starts the split-process daemon, web host, and Meadow's Vite dev server.
 Ctrl-C stops the whole stack. If a service exits, the other services stop too.
 
 Options:
+  --telnet                   Start the telnet host on 0.0.0.0:8888
   --curl-worker              Start the HTTP worker
   --git-worker               Start the Git worker
   --core PATH                Objdef core directory (default: cores/cowbell/src)
@@ -43,6 +44,7 @@ Environment:
   CARGO_TARGET_DIR  Cargo build directory
 
 Examples:
+  scripts/dev.sh --telnet
   scripts/dev.sh --curl-worker --git-worker
   scripts/dev.sh --clean --curl-worker --git-worker
   MOOR_CORE=cores/snore/src scripts/dev.sh --curl-worker
@@ -62,6 +64,7 @@ EOF
 core=${MOOR_CORE:-cores/cowbell/src}
 data_dir=${MOOR_DATA_DIR:-moor-data}
 profile=debug
+telnet=false
 curl_worker=false
 git_worker=false
 clean=false
@@ -71,6 +74,7 @@ baseline_objdef_dir=
 while (($#)); do
     case "$1" in
         --help|-h) usage; exit 0 ;;
+        --telnet) telnet=true; shift ;;
         --curl-worker) curl_worker=true; shift ;;
         --git-worker) git_worker=true; shift ;;
         --clean) clean=true; shift ;;
@@ -113,6 +117,7 @@ if [[ ! -x node_modules/.bin/concurrently ]]; then
 fi
 
 packages=(-p moor-daemon -p moor-web-host)
+if [[ $telnet == true ]]; then packages+=(-p moor-telnet-host); fi
 if [[ $curl_worker == true ]]; then packages+=(-p moor-curl-worker); fi
 if [[ $git_worker == true ]]; then packages+=(-p moor-git-worker); fi
 build_flags=()
@@ -188,6 +193,11 @@ add_command "$bin_dir/moor-daemon" "${daemon_args[@]}"
 add_command "$bin_dir/moor-web-host" "${client_args[@]}" \
     --data-dir "$data_dir/web-host" --listen-address 0.0.0.0:8080 --enable-webhooks
 add_command npm run dev --workspace meadow -- --host 0.0.0.0 --strictPort
+if [[ $telnet == true ]]; then
+    names+=(telnet)
+    add_command "$bin_dir/moor-telnet-host" "${client_args[@]}" \
+        --data-dir "$data_dir/telnet-host" --telnet-address 0.0.0.0 --telnet-port 8888
+fi
 if [[ $curl_worker == true ]]; then
     names+=(curl)
     add_command "$bin_dir/moor-curl-worker" "${client_args[@]}" --data-dir "$data_dir/curl-worker"
@@ -201,6 +211,9 @@ fi
 export RUST_BACKTRACE=${RUST_BACKTRACE:-1}
 printf 'Core: %s\nData: %s\nMeadow: http://localhost:3000\nWeb host: http://localhost:8080\n' "$core" "$data_dir"
 printf 'Both web servers listen on all IPv4 interfaces; remote access: http://<this-machine-IP>:3000\n'
+if [[ $telnet == true ]]; then
+    printf 'Telnet: telnet localhost 8888 (listening on all IPv4 interfaces)\n'
+fi
 printf 'Worker IPC:\n  RPC: %s\n  Requests: %s\n  Responses: %s\n' "$rpc_address" "$requests_address" "$responses_address"
 service_names=$(IFS=,; echo "${names[*]}")
 exec node_modules/.bin/concurrently --shell "$(command -v bash)" \
