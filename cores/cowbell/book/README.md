@@ -64,22 +64,38 @@ test paths are relative to `cores/cowbell/`.
 
 ### Running and maintaining a world
 
-This is the largest gap and a priority in its own right. The
-[operator introduction](src/running/index.md) describes the full lifecycle. Each procedure needs its
-starting state, required access, expected results, and recovery instructions.
+Seven operator chapters now follow the [operator introduction](src/running/index.md). They explain
+current procedures rather than promise a complete deployment guide for every backend.
 
-| Planned chapter                                    | Questions and worked example                                                                                                                                                                                                                   | Existing material to verify                                                                                                                                                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Create a world and start it                        | What is imported? Where is persistent data? How does the first operator connect and secure the initial accounts? Start, stop, and restart one world without losing an authored object.                                                         | [Cowbell launcher](../../../scripts/start-moor-cowbell.sh), [server guide](../../../book/src/the-system/running-the-server.md), [object loading](../../../book/src/the-system/object-loading.md), `src/initial/`, `src/auth/`. |
-| Configure connections, clients, and workers        | Which process does what? What changes between local and public use? Show Meadow and telnet access, configuration ownership, worker enrollment, and feature dependencies.                                                                       | [Server configuration](../../../book/src/the-system/server-configuration.md), [web deployment](../../../book/src/web-client/deployment.md), Cowbell launcher, `src/git/`, `src/llm/llm_client.moo`.                            |
-| Accounts, roles, and community administration      | How are accounts created and repaired? Who can build, program, grant access, or use administrative commands? Review the supplied community-specific help and policy before using it in another world.                                          | `src/auth/`, `src/player.moo`, `src/features/admin_features.moo`, `src/features/wiz_features.moo`, `src/help/`, [capabilities](../CAPABILITIES.md).                                                                            |
-| Back up a world and restore it                     | What do database backups, history, configuration, keys, and source exports preserve? What needs a stopped server? Restore into a separate instance and verify objects, accounts, and required external state.                                  | Server storage and backup documentation; `src/features/admin_features.moo` (`@dump-database`), `tests/wire.py`. The complete Cowbell procedure still needs investigation and a recovery test.                                  |
-| Keep local work and review updates with `@changes` | Configure an upstream, make a local edit, fetch incoming work, inspect differences, handle groups and conflicts, apply, and check results. Explain already-applied local work, permissions, interrupted work, and available recovery.          | `src/change_manager.moo`, `src/git/`, `tests/baseline/sessions/change_manager*.moot`, `change_terminal.moot`, `tests/changes/telnet.ts`, `tests/mcp/changes.ts`; Meadow's review editors.                                      |
-| Upgrade the server and the core                    | Which version constraints apply? Separate executable upgrades from object updates. Rehearse an upgrade with local customizations, backup, client/worker compatibility checks, and post-upgrade verification. Establish actual rollback limits. | [Cowbell README](../README.md), [Cowbell changelog](../ChangeLog.md), [server changelog](../../../ChangeLog.md), the `@changes` implementation and tests.                                                                      |
-| Monitor, diagnose, and recover                     | Find logs, tasks, schedules, worker failures, permissions failures, and stalled agents. Distinguish a core problem from a host, client, or worker problem. Show recovery and verification for a few common failures.                           | `src/features/prog_features.moo`, `src/features/builder_features.moo`, `tests/wire.py`, `tests/baseline/sessions/schedule_commands.moot`, server and worker guides.                                                            |
+| Chapter                                                 | Coverage now                                                                                                   | Remaining work                                                                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [Start a world](src/running/starting.md)                | Local Compose setup, initial import and baselines, login, authored object, stop/restart, storage paths.        | Run the complete Docker build and browser walkthrough in an automated disposable deployment.                   |
+| [Connections and workers](src/running/configuration.md) | Component roles, configuration precedence, local ports, worker dependencies, and limits of changing `RUN_DIR`. | Public TLS deployment walkthrough and a separate multi-instance recipe.                                        |
+| [Accounts and authority](src/running/accounts.md)       | Registration, roles, builder/programmer grants, login settings, and community policy.                          | Account recovery, full privilege revocation, and a tested two-account delegation tutorial.                     |
+| [Backup and restore](src/running/backups.md)            | Stopped-directory archive, configuration and keys, separate restore directory, object exports.                 | Full Compose/Meadow history restore, external storage inventory, and backend-specific backup procedures.       |
+| [Review updates](src/running/updates.md)                | Baseline/live/incoming versions, fetch, choices, drafts, groups, preview/apply, partial results, recovery.     | A self-contained executable tutorial that fetches controlled source, introduces a local edit, and resolves it. |
+| [Upgrade](src/running/upgrades.md)                      | Rehearsal, compatibility, separate server/core updates, local work, post-upgrade checks, recovery limits.      | A recorded version-to-version upgrade and rollback rehearsal with a populated world.                           |
+| [Operate and diagnose](src/running/operations.md)       | Logs, client/backend distinction, permissions, tasks versus schedules, and review recovery.                    | Worked incidents for failed workers and model requests, plus deployment-specific monitoring.                   |
 
-Tests for this part need disposable deployments as well as in-process tutorial sessions. In
-particular, a session test cannot establish that a database backup restores after a server upgrade.
+Validation for this expansion:
+
+- All four launcher contract tests pass. These inspect actual Compose configuration without building
+  or starting containers.
+- The local port override resolves to exactly three loopback bindings. It uses Compose's `!override`
+  support to replace the original published ports.
+- Existing command scenarios for change-review shortcuts, decision preservation, background
+  responses, and schedule commands pass: `change_terminal.moot`, `change_manager_preservation.moot`,
+  `change_manager_commands.moot`, and `schedule_commands.moot`.
+- A temporary server experiment stops Cowbell, archives its runtime directory, restores it under a
+  different directory, and starts the copy. Login, an authored object, a stored property, and a
+  signed token survive. This is a checked experiment, not a new committed regression test.
+- The full Compose deployment, Meadow history recovery, and cross-version upgrade are not claimed as
+  verified by those checks.
+
+The main implementation references remain `scripts/start-moor-cowbell.sh` at the repository root,
+`src/change_manager.moo`, `src/features/`, `src/auth/`, `tests/wire.py`, and the relevant sections
+of the mooR Book. A session test cannot establish that a deployment backup restores after an
+upgrade.
 
 ### Visiting and authoring
 
@@ -132,8 +148,8 @@ the missing topic instead of retaining the broken link.
 
 ## Suggested writing order
 
-1. Write the operator's start/restart and backup/restore procedures. Establish a reproducible test
-   world and use it for the `@changes` walkthrough and upgrade rehearsal.
+1. Complete the operator verification gaps above. Turn the `@changes` walkthrough into an executable
+   lesson, add the full deployment restore check, and rehearse a versioned upgrade.
 2. Complete the visitor and client tours, then the basic object and shared-building lessons. These
    supply prerequisites currently scattered through longer tutorials.
 3. Reduce overlap in the behaviour chapters. Make the builder path continuous and add executable

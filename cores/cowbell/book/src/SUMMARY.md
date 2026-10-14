@@ -49,13 +49,13 @@
 # Running your own world
 
 - [From a starting core to a maintained world](running/index.md)
-- [Create a world and start it — planned]()
-- [Configure connections, clients, and workers — planned]()
-- [Accounts, roles, and community administration — planned]()
-- [Back up a world and restore it — planned]()
-- [Keep local work and review updates with @changes — planned]()
-- [Upgrade the server and the core — planned]()
-- [Monitor, diagnose, and recover — planned]()
+- [Create a world and start it](running/starting.md)
+- [Configure connections, clients, and workers](running/configuration.md)
+- [Accounts, roles, and community administration](running/accounts.md)
+- [Back up a world and restore it](running/backups.md)
+- [Keep local work and review updates with @changes](running/updates.md)
+- [Upgrade the server and the core](running/upgrades.md)
+- [Monitor, diagnose, and recover](running/operations.md)
 
 # Reference
 

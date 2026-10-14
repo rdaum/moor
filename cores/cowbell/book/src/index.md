@@ -20,8 +20,8 @@ programming before you can build. The programming tutorials introduce code when 
   as you go.
 - **Making characters:** meet [Henri](actors/henri-and-the-cupboard.md), a cat whose reactions you
   can author yourself.
-- **Running a world:** start with [the operator's guide](running/index.md). This includes the
-  planned chapters on installation, maintenance, and updates through `@changes`.
+- **Running a world:** start with [the operator's guide](running/index.md), from first startup
+  through backups, maintenance, and updates with `@changes`.
 
 You can follow these paths separately. A world operator does not have to complete the programming
 tutorials before learning how to back up a database. A builder does not have to operate a server.
@@ -41,8 +41,9 @@ different kinds of access. Ask your world's operator if a command is unavailable
 ## The book is taking shape
 
 The existing tutorials and reference pages are collected here. Entries marked **planned** in the
-contents identify chapters that still need to be written. They are not links to finished guides. In
-particular, the operator's guide currently provides an outline and pointers to the server manual.
+contents identify chapters that still need to be written. They are not links to finished guides. The
+operator chapters describe their verification limits and point to the server manual for other
+deployment arrangements.
 
 For command help inside a world, type `help`, followed by a topic or command when needed. Each world
 can change its objects and commands, so its help may describe additions that are not in this book.

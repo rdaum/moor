@@ -17,9 +17,10 @@ this starting database is a **core**. [Meadow](../../clients/meadow/README.md) i
 through which people interact with the world. Cowbell supports plain text terminal clients too.
 
 The [Cowbell Book](book/src/index.md) collects the building and programming tutorials in one place.
-Its [contents](book/src/SUMMARY.md) also outline the guides for visitors, NPC authors, and world
-operators. Chapters marked planned still need to be written. The
-[book coverage notes](book/README.md) identify those gaps and the existing source material.
+The [operator's guide](book/src/running/index.md) covers starting a world, accounts, backups,
+updates through `@changes`, and ongoing maintenance. Its [contents](book/src/SUMMARY.md) also
+outline the guides for visitors and NPC authors. Chapters marked planned still need to be written.
+The [book coverage notes](book/README.md) identify those gaps and the existing source material.
 
 To build or preview the book locally, use `make -C cores/cowbell book` or
 `make -C cores/cowbell book-serve` from the repository root. Both require mdBook.
