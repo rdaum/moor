@@ -474,4 +474,96 @@ object OBJ_UTILS [
     endfor
     return result;
   endmethod
+
+  method capture_legacy_naming owner: ARCH_WIZARD
+    "Capture old naming data before upgrading. Return records and review notes; never change objects.";
+    caller_perms().wizard || raise(E_PERM);
+    const {objects} = args;
+    let records = {};
+    let review = {};
+    for target in (objects)
+      valid(target) || raise(E_INVARG, "A conversion target no longer exists.");
+      const old_fields = {"is_proper_noun_name", "is_countable_noun", "is_plural_noun"};
+      let old = [];
+      let local = [];
+      for field in (old_fields)
+        const value = `target.(field) ! E_PROPNF => E_PROPNF';
+        if (value != E_PROPNF)
+          old[field] = value;
+          local[field] = !is_clear_property(target, field);
+        endif
+      endfor
+      let changes = [];
+      if ((`local[old_fields[1]] ! E_RANGE => false') || (`local[old_fields[2]] ! E_RANGE => false'))
+        changes['kind] = (`old[old_fields[1]] ! E_RANGE => false') ? 'name
+          | ((`old[old_fields[2]] ! E_RANGE => true') ? 'count | 'mass);
+      endif
+      if (`local[old_fields[3]] ! E_RANGE => false')
+        changes['number] = old[old_fields[3]] ? 'plural | 'singular;
+      endif
+      const article = `target.indefinite_article ! E_PROPNF => E_PROPNF';
+      if (article != E_PROPNF && !is_clear_property(target, "indefinite_article"))
+        changes['article] = article;
+      endif
+      isa(target, $mailbox) && (changes['kind] = 'name);
+      let custom = {};
+      for name in (verbs(target))
+        const aliases = verb_info(target, name)[3]:words();
+        if (length({alias for alias in (aliases) if alias in {"is_plural", "is_countable", "is_proper_noun", "display_name"}})
+          && !(target in {$root, $thing, $wearable, $sub}))
+          custom = {@custom, name};
+        endif
+      endfor
+      const first = target.name:first_word();
+      if (custom || (first && first[1] in {"a", "an", "the", "some"}))
+        review = {@review, ['object -> target, 'name -> target.name, 'verbs -> custom,
+          'reason -> custom ? "Convert custom naming verbs before applying this record."
+            | "Review the article in this name. No automatic rename will occur."]};
+      endif
+      const letter = target != $letter && isa(target, $letter);
+      if (length(changes) || letter)
+        records = {@records, ['object -> target, 'name -> target.name, 'parent -> parent(target),
+          'owner -> target.owner, 'settings -> changes, 'custom -> custom, 'letter -> letter,
+          'subject -> letter && target.name != "letter" ? target.name | ""]};
+      endif
+    endfor
+    return ['records -> records, 'review -> review];
+  endmethod
+
+  method apply_legacy_naming owner: ARCH_WIZARD
+    "Apply saved records after the new naming API is installed. Caller retains the conversion data.";
+    caller_perms().wizard || raise(E_PERM);
+    const {records} = args;
+    "Validate the whole batch before writing; custom overrides require an explicitly reviewed record.";
+    for record in (records)
+      const target = record['object];
+      valid(target) && target.owner == record['owner] && parent(target) == record['parent]
+        || raise(E_INVARG, "Conversion target changed owner, parent, or validity.");
+      !record['custom] || raise(E_INVARG, "Convert custom naming verbs and clear this record's custom list after review.");
+      strcmp(target.name, record['name]) == 0 || (record['letter] && target.name == "letter" && target.subject == record['subject])
+        || raise(E_INVARG, "Conversion target was renamed: " + tostr(target));
+      if (record['letter])
+        typeof(target.subject) == TYPE_STR || raise(E_TYPE, "Install the letter subject property before conversion.");
+      endif
+      const settings = record['settings];
+      for field in (mapkeys(settings))
+        field in {'kind, 'number, 'article} || raise(E_INVARG, "Unknown converted naming field.");
+      endfor
+      $root:_validate_noun_grammar(['kind -> `settings['kind] ! E_RANGE => target.noun_kind',
+        'number -> `settings['number] ! E_RANGE => target.noun_number',
+        'article -> `settings['article] ! E_RANGE => target.indefinite_article']);
+    endfor
+    for record in (records)
+      const target = record['object];
+      const fields = ['kind -> "noun_kind", 'number -> "noun_number", 'article -> "indefinite_article"];
+      for field in (mapkeys(record['settings]))
+        target.(fields[field]) = record['settings][field];
+      endfor
+      if (record['letter])
+        target.subject = record['subject];
+        target.name = "letter";
+      endif
+    endfor
+    return length(records);
+  endmethod
 endobject

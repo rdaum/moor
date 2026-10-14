@@ -1,0 +1,105 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90102.is_builder = true; #90102.authoring_features = $builder_features; #90102.name = "Bert"; #90101.is_builder = true; #90101.name = "Ada"; return true;
+true
+; add_property(#90102, "naming_output", "", {#90102, ""}); add_verb(#90102, {#90102, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90102, "inform_current", {"this.naming_output = $document:render(args[1]:resolve(this), 'text_plain)['body];", "if (!index(this.naming_output, \"\\n\")) return pass(@args); endif"});
+0
+; add_property(#90101, "naming_output", "", {#90101, ""}); add_verb(#90101, {#90101, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90101, "inform_current", {"this.naming_output = $document:render(args[1]:resolve(this), 'text_plain)['body];", "if (!index(this.naming_output, \"\\n\")) return pass(@args); endif"});
+0
+@nonprogrammer
+% @create $thing named "test boots",boots
+~~Created
+% @grammar test boots number plural
+=Grammar updated for test boots.
+% @grammar boots
+@wizard
+; return index(#90102.naming_output, "Number: plural (local)") > 0;
+true
+@nonprogrammer
+@wizard
+; return index(#90102.naming_output, "Subject: The test boots are here.") > 0;
+true
+@nonprogrammer
+% @grammar boots number twelve
+~~Noun number must be singular or plural.
+% @grammar boots number inherit
+=Grammar updated for test boots.
+% @grammar boots
+@wizard
+; return index(#90102.naming_output, "Number: singular (inherited from") > 0;
+true
+@nonprogrammer
+% @grammar boots listing definite
+=Grammar updated for test boots.
+% @grammar boots
+@wizard
+; return index(#90102.naming_output, "Room: You see the test boots here.") > 0;
+true
+@nonprogrammer
+% @grammar Ada number plural
+=You need builder privileges and permission to edit that object's grammar.
+% @grant boots.object(set_grammar) to Ada
+~~Granted
+% drop boots
+=You dropped the test boots.
+@programmer
+~~You have been granted test boots
+=Bert dropped the test boots.
+% @grammar the test boots number plural
+=Grammar updated for test boots.
+% @grammar boots
+@wizard
+; return index(#90101.naming_output, "Subject: The test boots are here.") > 0;
+true
+@programmer
+@wizard
+; const boots = $match:match_object("boots", #90101); return {boots.owner, boots.noun_number, #90102.noun_number};
+{#90102, 'plural, 'singular}
+; $root:revoke_capability(boots = $match:match_object("boots", #90101), #90101, 'object); return true;
+true
+@programmer
+% @grammar boots kind mass
+=You need builder privileges and permission to edit that object's grammar.
+% help @grammar
+@wizard
+; return index(#90101.naming_output, "@grammar boots number plural") > 0;
+true
+@programmer
+
+// A prototype's matching names work in ordinary commands and the # utility.
+@wizard
+; const item = create(#90128, #90102); item.name = "plain box"; item.extra_match_name = "brass coffer"; move(item, #90102.location); return true;
+true
+@nonprogrammer
+% get the brass coffer
+=You picked up the plain box.
+% #"the brass coffer".name
+==> "plain box"
+
+// Command errors agree with the named object as well as the actor.
+% @create $container named chests
+~~Created
+% @grammar chests number plural
+=Grammar updated for chests.
+% get missing-token from chests
+=The chests don't have that.
+% get boots from chests
+=The chests don't have that.
+% @create $actor named guards
+~~Created
+% @grammar guards kind count
+=Grammar updated for guards.
+% @grammar guards number plural
+=Grammar updated for guards.
+% get missing-token from guards
+=The guards don't have that.
+% get boots from guards
+=The guards don't have that.
+@wizard
+; const chests = $match:match_object("chests", #90102); chests.unlock_rule = true; return true;
+true
+@nonprogrammer
+% unlock chests with brass coffer
+=The chests are already unlocked.

@@ -71,7 +71,7 @@ object MATCH [
       !is_player(obj) && raise(E_INVARG, tostr(obj) + " is not a player.");
       return obj;
     endif
-    return this:require_unique(player_name, this:candidates_in_scope(player_name, players()), "player");
+    return this:require_unique(player_name, this:candidates_in_scope(player_name, players(), ['context -> context]), "player");
   endmethod
 
   method match_by_name owner: ARCH_WIZARD
@@ -85,14 +85,14 @@ object MATCH [
       valid(context) && return context;
       raise(E_INVARG, "No context to match '" + name_string + "'");
     endif
-    return this:require_unique(name_string, this:candidates_in_scope(name_string, this:environment(context)));
+    return this:require_unique(name_string, this:candidates_in_scope(name_string, this:environment(context), ['context -> context]));
   endmethod
 
   method normalize_scope owner: ARCH_WIZARD
     "Return {objects, keys} for objects or {object, names...} scope entries.";
     "Preserve first occurrence order. Explicit scope names replace default name/aliases.";
     set_task_perms(caller_perms());
-    const {scope} = args;
+    const {scope, ?context = player} = args;
     let objects = {};
     let keys = {};
     let positions = [];
@@ -121,19 +121,30 @@ object MATCH [
     endfor
     for object in (objects)
       if (!maphaskey(explicit, object))
-        const aliases = `object.aliases ! E_PROPNF, E_PERM => {}';
-        keys[positions[object]] = {object.name, @{name for name in (aliases) if typeof(name) == TYPE_STR && length(name) > 0}};
+        const names = object:match_names(context);
+        typeof(names) == TYPE_LIST || raise(E_TYPE, "match_names must return a list of strings.");
+        for name in (names)
+          typeof(name) == TYPE_STR || raise(E_TYPE, "Matching names must be strings.");
+        endfor
+        keys[positions[object]] = {candidate_name for candidate_name in (names) if length(candidate_name)};
       endif
     endfor
     return {objects, keys};
   endmethod
 
   method candidates_in_scope owner: ARCH_WIZARD
-    "Return all best matches in scope, or the ordinal selection. IDs must belong to scope.";
+    "Return best scoped matches, including articles and ordinals. IDs must belong to scope.";
     set_task_perms(caller_perms());
     const {token, scope, ?options = []} = args;
-    const {objects, keys} = this:normalize_scope(scope);
-    const text = token:trim();
+    const context = `options['context] ! E_RANGE => player';
+    return this:_candidates(token:trim(), this:normalize_scope(scope, context), options, context);
+  endmethod
+
+  method _candidates owner: ARCH_WIZARD
+    "Match against captured keys without calling name hooks again.";
+    set_task_perms(caller_perms());
+    const {text, normalized, options, context} = args;
+    const {objects, keys} = normalized;
     !text && return {};
     if (`options['allow_literals] ! E_RANGE => true')
       const literal = text:match_objid();
@@ -142,8 +153,78 @@ object MATCH [
         return object in objects ? {object} | {};
       endif
     endif
+    const exact = {objects[i] for i in [1..length(objects)] if text in keys[i]};
+    length(exact) && return exact;
+    const {query, prepared} = this:_article_keys(text, objects, keys, context);
     const threshold = `options['fuzzy_threshold] ! E_RANGE => 0.3';
-    return complex_matches(text, objects, keys, typeof(threshold) == TYPE_BOOL ? (threshold ? 0.3 | 0.0) | tofloat(threshold), false);
+    const fuzzy = typeof(threshold) == TYPE_BOOL ? (threshold ? 0.3 | 0.0) | tofloat(threshold);
+    return complex_matches(query, objects, prepared, fuzzy, false);
+  endmethod
+
+  method _article_keys owner: ARCH_WIZARD
+    "Prepare a query and temporary comparison keys using each object's reported noun kind.";
+    set_task_perms(caller_perms());
+    const {text, objects, keys, context} = args;
+    const first = text:first_word();
+    if (!first || !(first[1] in {"the", "a", "an", "some"}) || !first[2])
+      return {text, keys};
+    endif
+    let prepared = {};
+    for i in [1..length(objects)]
+      const grammar = $root:_validate_noun_grammar(objects[i]:noun_grammar(context));
+      if (grammar['kind] in {'count, 'mass})
+        prepared = {@prepared, keys[i]};
+      else
+        let names = {};
+        for name in (keys[i])
+          const words = name:first_word();
+          if (length(words) && words[1] == first[1] && length(words[2]))
+            names = {@names, words[2]};
+          endif
+        endfor
+        prepared = {@prepared, names};
+      endif
+    endfor
+    return {first[2], prepared};
+  endmethod
+
+  method parse_command owner: ARCH_WIZARD
+    "Use native command structure and raw spans, then resolve nouns through the core's object verbs.";
+    set_task_perms(caller_perms());
+    const {command, scope, ?context = player, ?threshold = 0.3} = args;
+    let parsed = parse_command(command, {}, true, 0.0);
+    const normalized = this:normalize_scope(scope, context);
+    for slot in ({'dobj, 'iobj})
+      const text_key = slot == 'dobj ? 'dobjstr | 'iobjstr;
+      const ambiguous_key = slot == 'dobj ? 'ambiguous_dobj | 'ambiguous_iobj;
+      const text = parsed[text_key];
+      parsed[ambiguous_key] = {};
+      if (!text)
+        parsed[slot] = $nothing;
+        continue;
+      elseif (text == "me")
+        parsed[slot] = context;
+        continue;
+      elseif (text == "here")
+        parsed[slot] = context.location;
+        continue;
+      endif
+      const literal = text:match_objid();
+      if (literal && literal['start] == 1 && literal['end] == length(text))
+        "Native command parsing permits explicit IDs, including completion sentinels.";
+        continue;
+      endif
+      const candidates = this:_candidates(text, normalized, ['fuzzy_threshold -> threshold], context);
+      if (!length(candidates))
+        parsed[slot] = $failed_match;
+      elseif (length(candidates) == 1)
+        parsed[slot] = candidates[1];
+      else
+        parsed[slot] = $ambiguous_match;
+        parsed[ambiguous_key] = candidates;
+      endif
+    endfor
+    return parsed;
   endmethod
 
   method resolve_in_scope owner: ARCH_WIZARD
@@ -304,7 +385,7 @@ object MATCH [
       const value = slot == context["active"] ? "#-2" | `context["bindings"][slot] ! E_RANGE => "#-3"';
       template = strsub(template, "{" + slot + "}", value);
     endfor
-    const parsed = parse_command(template, match_env, true, 0.3);
+    const parsed = this:parse_command(template, match_env);
     const direct = parsed['dobjstr] == "#-2";
     direct || parsed['iobjstr] == "#-2" || raise(E_INVARG, "Input must fill an object argument");
     const active_key = direct ? 'dobj | 'iobj;
@@ -342,11 +423,12 @@ object MATCH [
     return result;
   endmethod
 
-  method rank_suggestions owner: HACKER
-    "Rank exact, prefix, word-prefix, then substring matches; bound returned rows and omit search keys.";
+  method rank_suggestions owner: ARCH_WIZARD
+    "Rank literal and article-aware names without expanding the supplied candidate scope.";
+    set_task_perms(caller_perms());
     const {candidates, query, limit} = args;
-    const needle = query:trim():lowercase();
-    let buckets = {{}, {}, {}, {}};
+    const needle = query:reference_text():lowercase();
+    let buckets = {{}, {}, {}, {}, {}};
     let seen = [];
     let count = 0;
     for candidate in (candidates)
@@ -354,34 +436,45 @@ object MATCH [
       if (maphaskey(seen, id))
         continue;
       endif
-      const keys = {candidate["label"], candidate["value"], @`candidate["keys"] ! E_RANGE => {}'};
-      let rank = 5;
-      for key in (keys)
-        if (typeof(key) != TYPE_STR)
-          continue;
+      const keys = maphaskey(candidate, "keys") ? candidate["keys"]
+        | {candidate["label"], candidate["value"]};
+      let rank = 6;
+      if (!needle || needle in keys || needle == candidate["value"])
+        rank = 1;
+      else
+        let prepared = {keys};
+        let text = needle;
+        if (maphaskey(candidate, "objectKind"))
+          const target = toobj(candidate["value"]);
+          {text, prepared} = this:_article_keys(needle, {target}, {keys}, player);
         endif
-        const text = key:lowercase();
-        if (!needle || text == needle)
-          rank = 1;
-          break;
-        elseif (index(text, needle) == 1)
-          rank = min(rank, 2);
-        elseif (index(text, " " + needle))
-          rank = min(rank, 3);
-        elseif (index(text, needle))
-          rank = min(rank, 4);
-        endif
-      endfor
-      if (rank == 5)
+        for key in (prepared[1])
+          typeof(key) == TYPE_STR || raise(E_TYPE, "Suggestion keys must be strings.");
+          const name = key:lowercase();
+          if (name == text)
+            rank = 2;
+            break;
+          elseif (index(name, text) == 1)
+            rank = min(rank, 3);
+          elseif (index(name, " " + text))
+            rank = min(rank, 4);
+          elseif (index(name, text))
+            rank = min(rank, 5);
+          endif
+        endfor
+      endif
+      if (rank == 6)
         continue;
       endif
       seen[id] = true;
       count = count + 1;
       if (length(buckets[rank]) < limit)
-        buckets[rank] = {@buckets[rank], ["id" -> id, "label" -> candidate["label"], "value" -> candidate["value"], "detail" -> `candidate["detail"] ! E_RANGE => ""', "objectKind" -> `candidate["objectKind"] ! E_RANGE => "object"']};
+        buckets[rank] = {@buckets[rank], ["id" -> id, "label" -> candidate["label"],
+          "value" -> candidate["value"], "detail" -> `candidate["detail"] ! E_RANGE => ""',
+          "objectKind" -> `candidate["objectKind"] ! E_RANGE => "object"']};
       endif
     endfor
-    const ranked = {@buckets[1], @buckets[2], @buckets[3], @buckets[4]};
+    const ranked = {@buckets[1], @buckets[2], @buckets[3], @buckets[4], @buckets[5]};
     return ["items" -> ranked[1..min(length(ranked), limit)], "more" -> count > limit];
   endmethod
 endobject

@@ -9,6 +9,7 @@ object ROOM [
   fertile: true
   readable: true
 
+  property listing_form (owner: HACKER, flags: "rc") = 'indefinite;
   property acoustic_debug_counts (owner: HACKER, flags: "rc") = ["suppressed_not_loud" -> 1];
   property acoustic_debug_enabled (owner: HACKER, flags: "rc") = 0;
   property acoustic_debug_log (owner: HACKER, flags: "rc") = {};

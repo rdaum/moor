@@ -50,6 +50,14 @@ choose the verb form, then select **Preview sentences**. If the sentences look r
 these pronouns**. In profile setup, finish the profile to save the choice. If you change a word,
 preview the sentences again before applying it.
 
+## Names and articles
+
+A name such as `pet rock` stays separate from the article in “a pet rock” or “the pet rock.” Use
+`@grammar boots number plural` for “some boots” and `@grammar water kind mass` for “some water.”
+Actors inherit complete-name grammar, so Henri needs no added article. These choices do not change
+pronouns: “Henri is here” and “They are here” can both be correct. The
+[naming lesson](../docs/names-and-grammar.md) walks through names, aliases, listings, and previews.
+
 ## Choose pronouns for an NPC
 
 If you have builder privileges, you can set pronouns for an actor you own. An actor is an object
@@ -80,11 +88,11 @@ is checked again when you save.
 Give the message a name ending in `_msg`:
 
 ```text
-@set-message "pet rock".pet_msg {nc} {pet|pets} {d}.
+@set-message "pet rock".pet_msg {The actor} {agree actor name:pet|pets} {the d}.
 ```
 
 The command creates the message if it is missing. You must own the object to add one. For an
-ordinary object message, `{nc}` is the person acting and `{d}` is the object. You do not need to
+ordinary object message, `actor` is the person acting and `d` is the object. You do not need to
 write a `message_bindings` verb for these roles.
 
 A programmer can send this message from a command with:
@@ -282,16 +290,17 @@ supplied by common interactions and reaction effects.
 An `announce` step can use the same templates. For example, a welcome reaction on a box can include:
 
 ```text
-@reaction cedarbox welcome then announce "{nc} {open|opens} {the d}."
+@reaction cedarbox welcome then announce "{The actor} {agree actor name open|opens} {the d}."
 ```
 
-For this effect, `{nc}` refers to the person who triggered the reaction. `{d}` refers to the box.
-This example assumes that you already created the reaction.
+For this effect, `actor` refers to whoever triggered the reaction. `{the d}` refers to the box. The
+agreement token chooses “open” or “opens” to suit the actor's name and the reader. This example
+assumes that you already created the reaction.
 
 Before adding the step, you can preview its wording:
 
 ```text
-@reaction cedarbox welcome preview-message announce "{nc} {open|opens} {the d}."
+@reaction cedarbox welcome preview-message announce "{The actor} {agree actor name open|opens} {the d}."
 ```
 
 This command does not add or run a step. A normal reaction `preview` also shows the example
@@ -313,9 +322,10 @@ message when you want an additional response.
 | An object's name appears twice | `{a d}` and `{the d}` already contain the name.                    |
 | A brace error while saving     | Close every token and escape literal braces with a backslash.      |
 
-For an item named “water,” set its `is_countable_noun` property to `false` so it omits “a.” For a
-name with an unusual pronunciation, its `indefinite_article` property can specify “a” or “an.” These
-properties require permission to edit the object. A programmer can help configure them.
+For an item named “water,” use `@grammar water kind mass` to get “some water” and “the water.” For a
+name with an unusual pronunciation, use `@grammar OBJECT article a` or `article an`. These commands
+require permission to edit the object. See `help @grammar` or the
+[naming lesson](../docs/names-and-grammar.md) for examples.
 
 Message templates and Djot descriptions are different authoring formats. A template does not
 automatically interpret asterisks as emphasis. A room description does not automatically interpret

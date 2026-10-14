@@ -13,7 +13,9 @@ object SUB_UTILS [
     {"the ", 5, "the"},
     {"A ", 3, "ac"},
     {"An ", 4, "ac"},
-    {"The ", 5, "thec"}
+    {"The ", 5, "thec"},
+    {"listing ", 9, "listing"},
+    {"Listing ", 9, "listingc"}
   };
   property token_map (owner: HACKER, flags: "rc") = [
     "be" -> {"verb_be", {}},
@@ -101,11 +103,11 @@ object SUB_UTILS [
     "",
     "## Articles and bindings",
     "",
-    "{a d} inserts an object name with a/an. {the d} inserts it with the.",
+    "{a d} asks for an indefinite phrase; {the d} asks for a definite phrase. {listing d} uses the listing preference.",
     "{A d} and {The d} capitalize the phrase; {the dc} capitalizes just the name.",
     "These tokens include the name. Do not add another {d} after them.",
-    "Proper names and \"you\" omit articles. Plurals and uncountable nouns omit a/an.",
-    "A thing's indefinite_article property can override the spelling-based guess with \"a\" or \"an\".",
+    "Complete names and \"you\" omit articles. Indefinite plurals and mass nouns use some.",
+    "Use @grammar OBJECT article a or an to override pronunciation. @grammar also controls noun kind, number, and listing.",
     "",
     "Other identifiers select named event bindings: {direction}, {from_room}, or {relic}.",
     "Names start with a letter or underscore, followed by letters, digits, underscores, or hyphens.",
@@ -214,7 +216,7 @@ object SUB_UTILS [
     kind == 'capitalize && return;
     let name = 'actor;
     let allowed = {'object};
-    if (kind in {'binding, 'content_binding, 'article_a, 'article_the, 'agree, 'pronoun})
+    if (kind in {'binding, 'content_binding, 'article_a, 'article_the, 'listing, 'agree, 'pronoun})
       name = token.binding_name;
       if (kind == 'binding)
         allowed = {'object, 'text};
@@ -253,16 +255,14 @@ object SUB_UTILS [
 
   method _preview_object owner: ARCH_WIZARD
     "Make one temporary example with a fixed prototype; no world object is changed.";
-    const {name, pronouns, ?plural = false, ?proper = false, ?countable = true, ?article = ""} = args;
+    const {name, pronouns, ?kind = 'count, ?number = 'singular} = args;
     typeof(name) == TYPE_STR || raise(E_TYPE);
     const checked = $pronouns:validate(pronouns);
     const example = create($thing, caller_perms(), 1);
     example.name = name;
     example.pronouns = checked;
-    example.is_plural_noun = plural;
-    example.is_proper_noun_name = proper;
-    example.is_countable_noun = countable;
-    example.indefinite_article = article;
+    example.noun_kind = kind;
+    example.noun_number = number;
     return example;
   endmethod
 
@@ -273,12 +273,11 @@ object SUB_UTILS [
     const {template, bindings, host, ?effect = false} = args;
     const effect_kind = typeof(effect) == TYPE_FLYWEIGHT ? effect.type | false;
     const content = $sub_utils:compile(template, bindings);
-    const actor = $sub_utils:_preview_object("Alex", $pronouns.they_them, false, true);
+    const actor = $sub_utils:_preview_object("Alex", $pronouns.they_them, 'name);
     const recipient = (effect_kind == 'emote || (effect_kind == 'tell && effect.target == 'Actor)) ? actor
-      | $sub_utils:_preview_object("Sam", $pronouns.she_her, false, true);
-    const observer = $sub_utils:_preview_object("Robin", $pronouns.he_him, false, true);
-    const subject = $sub_utils:_preview_object(host:name(), `host:pronouns() ! E_VERBNF => $pronouns.it_its',
-      host:is_plural(), host:is_proper_noun(), host:is_countable(), `host.indefinite_article ! E_PROPNF => ""');
+      | $sub_utils:_preview_object("Sam", $pronouns.she_her, 'name);
+    const observer = $sub_utils:_preview_object("Robin", $pronouns.he_him, 'name);
+    const subject = host;
     const room = $sub_utils:_preview_object("example room", $pronouns.it_its);
     const destination = $sub_utils:_preview_object("garden", $pronouns.it_its);
     const item = $sub_utils:_preview_object("pebble", $pronouns.it_its);
@@ -446,7 +445,11 @@ object SUB_UTILS [
     const kind = fw.type;
     const capitalize = `fw.capitalize ! E_PROPNF => false';
     let token = "";
-    if (kind in {'article_a, 'article_the})
+    if (kind == 'listing)
+      const name = tostr(fw.binding_name);
+      this:_binding_name(name);
+      return "{" + (capitalize ? "Listing " | "listing ") + name + "}";
+    elseif (kind in {'article_a, 'article_the})
       const prefix = kind == 'article_a ? "a" | "the";
       const name = tostr(fw.binding_name);
       this:_binding_name(name);

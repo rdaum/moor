@@ -15,6 +15,9 @@ The rock lesson introduces properties, verbs, variables, and events. Here we use
 several objects cooperate. You will write two verbs: one for petting and one for deciding which
 gifts Henri accepts. Commands will supply his moods, rules, reactions, furniture, and schedule.
 
+Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
+See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+
 ## Before you begin
 
 You need builder and programmer privileges, as in the rock lesson. You do not need wizard
@@ -101,20 +104,22 @@ A rule of `0` permits the operation. We will give Henri a reason to refuse later
 Write the messages:
 
 ```moot
-% @set-message Henri.pet_msg {nc} {pet|pets} {d}.
+% @set-message Henri.pet_msg {The actor} {agree actor name:pet|pets} {the d}.
 ~~Set message template
-% @set-message Henri.pet_denied_msg {dc} hisses and keeps his distance.
+% @set-message Henri.pet_denied_msg {The d} hisses and keeps his distance.
 ~~Set message template
-% @set-message Henri.pet_changed_msg Something changed. Try petting {d} again.
+% @set-message Henri.pet_changed_msg Something changed. Try petting {the d} again.
 ~~Set message template
-% @set-message Henri.pet_out_of_reach_msg Move closer to {d} first.
+% @set-message Henri.pet_out_of_reach_msg Move closer to {the d} first.
 ~~Set message template
 % @verb Henri:pet this none none rd
 ~~added
 ```
 
-`{nc}` names the person, and `{d}` names the cat. `{dc}` starts the cat's name with a capital
-letter. The first message says “You pet Henri.” to the person and “Ada pets Henri.” to a visitor.
+`{The actor}` names the person, and `{the d}` names the cat. These forms add an article for a common
+noun, while preserving a name such as Henri. `agree` selects “pet” or “pets” to fit the actor. The
+capitalized form also starts the sentence correctly. The first message says “You pet Henri.” to the
+person and “Ada pets Henri.” to a visitor.
 
 ### An attempt and a successful action are different events
 
@@ -390,27 +395,27 @@ Make a kind of food, then three meals of that kind:
 % @create kibble named supper
 ~~Created
 % put breakfast in cupboard
-~~You put breakfast in cupboard.
+~~You put the breakfast in the cupboard.
 % put lunch in cupboard
-~~You put lunch in cupboard.
+~~You put the lunch in the cupboard.
 % put supper in cupboard
-~~You put supper in cupboard.
+~~You put the supper in the cupboard.
 % drop cupboard
-~~You dropped cupboard.
+~~You dropped the cupboard.
 % @rule cupboard get never
 ~~Set
 % @rule cupboard lock key is "brass key"
 ~~Set
 % @rule cupboard unlock key is "brass key"
 ~~Set
-% @set-message cupboard.open_msg {nc} {open|opens} {d}, releasing a familiar smell of cat food.
+% @set-message cupboard.open_msg {The actor} {agree actor name:open|opens} {the d}, releasing a familiar smell of cat food.
 ~~Set message template
 % close cupboard
-~~You close cupboard.
+~~You close the cupboard.
 % lock cupboard with brass key
-~~You lock cupboard with brass key.
+~~You lock the cupboard with the brass key.
 % open cupboard
-~~Cupboard is locked.
+~~The cupboard is locked.
 ```
 
 `kibble` is now your own prototype. Its children share its description and inherited behaviour. They
@@ -504,14 +509,14 @@ the arriving object. Add a reaction for arriving food:
 % give brass key to Henri
 ~~That recipient can't accept the item.
 % unlock cupboard with brass key
-~~You unlock cupboard with brass key.
+~~You unlock the cupboard with the brass key.
 % open cupboard
-~~You open cupboard, releasing a familiar smell of cat food.
+~~You open the cupboard, releasing a familiar smell of cat food.
 % take supper from cupboard
-~~You take supper from cupboard.
+~~You take the supper from the cupboard.
 % give supper to Henri
 =Henri eats the kibble and curls up, looking sleepy.
-=You give supper to Henri.
+=You give the supper to Henri.
 % pet Henri
 =You pet Henri.
 =Henri tolerates the petting with half-closed eyes.
@@ -533,14 +538,14 @@ cans, leftovers, or a cat's inventory.
 @attach dinner_visitor nonprogrammer
 @dinner_visitor
 % take lunch from cupboard
-~~You take lunch from cupboard.
+~~You take the lunch from the cupboard.
 % give lunch to Henri
 =Henri eats the kibble and curls up, looking sleepy.
-=You give lunch to Henri.
+=You give the lunch to Henri.
 @programmer
-@text Bert takes lunch from cupboard.
+@text Bert takes the lunch from the cupboard.
 @text Henri eats the kibble and curls up, looking sleepy.
-@text Bert gives lunch to Henri.
+@text Bert gives the lunch to Henri.
 ; const cat = $match:match_object("Henri", player); return {length(cat.contents), cat.pet_attempts};
 {2, 0}
 ```
@@ -596,10 +601,10 @@ Try the connection:
 
 ```moot
 % close cupboard
-~~You close cupboard.
+~~You close the cupboard.
 % open cupboard
 =Henri swivels his ears toward the cupboard.
-=You open cupboard, releasing a familiar smell of cat food.
+=You open the cupboard, releasing a familiar smell of cat food.
 ```
 
 Use `@reaction cupboard notify_cat show` to inspect the connection.
@@ -611,9 +616,9 @@ Use `@reaction cupboard notify_cat show` to inspect the connection.
 ; const cat = $match:match_object("Henri", player); add_property(player, "tutorial_cat", cat, {player, ""}); move(cat, #90110); return true;
 true
 % close cupboard
-~~You close cupboard.
+~~You close the cupboard.
 % open cupboard
-=You open cupboard, releasing a familiar smell of cat food.
+=You open the cupboard, releasing a familiar smell of cat food.
 @quiet
 ; move(player.tutorial_cat, player.location); return true;
 true
@@ -631,7 +636,7 @@ Create a seat and leave it in the room:
 % @describe couch as A worn brown couch. Black cat hair occupies most of the cushions.
 ~~Set description
 % drop couch
-~~You dropped couch.
+~~You dropped the couch.
 % @rule couch get never
 ~~Set
 ```
@@ -740,10 +745,10 @@ from this cupboard. He can be disappointed if you keep something else there.
 % take breakfast from cupboard
 =Henri stands up from the couch.
 =Henri perks up, suddenly interested in dinner.
-=You take breakfast from cupboard.
+=You take the breakfast from the cupboard.
 % give breakfast to Henri
 =Henri eats the kibble and curls up, looking sleepy.
-=You give breakfast to Henri.
+=You give the breakfast to Henri.
 ```
 
 That response crosses three objects: the cupboard reports the take, Henri reacts, and the couch

@@ -8,6 +8,7 @@ object ACTOR [
   fertile: true
   readable: true
 
+  property listing_form (owner: HACKER, flags: "rc") = 'indefinite;
   property performing (owner: ARCH_WIZARD, flags: "rc") = "{}";
   property pronouns (owner: ARCH_WIZARD, flags: "rc") = <PRONOUNS, .verb_be = "are", .verb_have = "have", .is_plural = true, .display = "they/them", .ps = "they", .po = "them", .pp = "their", .pq = "theirs", .pr = "themselves">;
   property wearing (owner: ARCH_WIZARD, flags: "rc") = {};
@@ -31,7 +32,7 @@ object ACTOR [
 
   verb put (any in this) owner: HACKER flags: "rd"
     "Reject putting things in an actor";
-    event = $event:mk_error(player, $sub:tc(), " ", $sub:agree('this, 'name, "are", "is"), " a person, not a container."):with_this(this);
+    event = $event:mk_error(player, $sub:thec('this), " ", $sub:agree('this, 'name, "are", "is"), " a person, not a container."):with_this(this);
     player:inform_current(event);
   endverb
 
@@ -83,7 +84,7 @@ object ACTOR [
     const moved = item:moveto(this);
     typeof(moved) == TYPE_ERR && raise(moved);
     item.location == this || raise(E_INVARG, "Item movement did not reach its destination");
-    const event = $event:mk_info(who, $sub:nc(), " ", $sub:self_alt("give", "gives"), " ", $sub:d(), " to ", $sub:i(), "."):with_dobj(item):with_iobj(this):with_this(room);
+    const event = $event:mk_info(who, $sub:thec('actor), " ", $sub:agree('actor, 'name, "give", "gives"), " ", $sub:the('dobj), " to ", $sub:the('iobj), "."):with_dobj(item):with_iobj(this):with_this(room);
     room:announce(event);
     return true;
   endmethod
@@ -101,28 +102,28 @@ object ACTOR [
     try
       dobj = $match:resolve_in_scope(dobjstr, this.contents);
     except e (ANY)
-      event = $event:mk_error(player, $sub:t(), " doesn't have that."):with_this(this);
+      event = $event:mk_error(player, $sub:thec('this), " ", $sub:agree('this, 'name, "don't", "doesn't"), " have that."):with_this(this);
       player:inform_current(event);
       return;
     endtry
     if (!valid(dobj) || typeof(dobj) != TYPE_OBJ)
-      event = $event:mk_error(player, $sub:t(), " doesn't have that."):with_this(this);
+      event = $event:mk_error(player, $sub:thec('this), " ", $sub:agree('this, 'name, "don't", "doesn't"), " have that."):with_this(this);
       player:inform_current(event);
       return;
     endif
     if (dobj.location != this)
-      event = $event:mk_error(player, $sub:d(), " isn't with ", $sub:t(), "."):with_dobj(dobj):with_this(this);
+      event = $event:mk_error(player, $sub:thec('dobj), " ", $sub:agree('dobj, 'name, "aren't", "isn't"), " with ", $sub:the('this), "."):with_dobj(dobj):with_this(this);
       player:inform_current(event);
       return;
     endif
     if (this == player)
-      event = $event:mk_error(player, "You already have ", $sub:d(), "."):with_dobj(dobj);
+      event = $event:mk_error(player, "You already have ", $sub:the('dobj), "."):with_dobj(dobj);
       player:inform_current(event);
       return;
     endif
     "Check if player can accept the item";
     if (!player:acceptable(dobj))
-      event = $event:mk_error(player, "You can't carry ", $sub:d(), "."):with_dobj(dobj);
+      event = $event:mk_error(player, "You can't carry ", $sub:the('dobj), "."):with_dobj(dobj);
       player:inform_current(event);
       return;
     endif
@@ -130,26 +131,26 @@ object ACTOR [
     try
       dobj:moveto(player);
     except e (E_PERM)
-      msg = length(e) > 2 ? e[2] | "You can't take that from " + this:name() + ".";
+      msg = length(e) > 2 ? e[2] | "You can't take that from " + this:noun_phrase('definite, player) + ".";
       event = $event:mk_error(player, msg):with_dobj(dobj);
       player:inform_current(event);
       return;
     endtry
     "Announce to room";
     if (valid(player.location))
-      event = $event:mk_info(player, $sub:nc(), " ", $sub:self_alt("take", "takes"), " ", $sub:d(), " from ", $sub:i(), "."):with_dobj(dobj):with_iobj(this):with_this(player.location);
+      event = $event:mk_info(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "take", "takes"), " ", $sub:the('dobj), " from ", $sub:the('iobj), "."):with_dobj(dobj):with_iobj(this):with_this(player.location);
       player.location:announce(event);
     endif
   endverb
 
   method mk_emote_event owner: HACKER
-    "Emotes always show the actor's name, never 'You'";
-    return $event:mk_emote(this, this:name(), " ", @$format.djot:inline(args[1])):with_this(this.location);
+    "Use a third-person subject; the authored continuation is not conjugated.";
+    return $event:mk_emote(this, $sub:attribution(this), " ", @$format.djot:inline(args[1])):with_this(this.location);
   endmethod
 
   method mk_say_event owner: HACKER
     "Parse authored speech before combining it with literal attribution.";
-    let event = $event:mk_say(this, $sub:nc(), " ", $sub:self_alt("say", "says"), ", \"", @$format.djot:inline(args[1]), "\""):with_this(this.location);
+    let event = $event:mk_say(this, $sub:thec('actor), " ", $sub:agree('actor, 'name, "say", "says"), ", \"", @$format.djot:inline(args[1]), "\""):with_this(this.location);
     event = event:with_metadata('content, args[1]);
     event = event:with_presentation_hint('speech_bubble);
     return event;
@@ -158,7 +159,7 @@ object ACTOR [
   method mk_directed_say_event owner: HACKER
     "Directed say: 'Name [to Target]: message'";
     {target, message} = args;
-    return $event:mk_directed_say(this, this:name(), " [to ", $sub:i(), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
+    return $event:mk_directed_say(this, this:name(), " [to ", $sub:the('iobj), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
   endmethod
 
   method mk_think_event owner: HACKER
@@ -175,9 +176,9 @@ object ACTOR [
     {?is_new_player = false} = args;
     "Select template based on whether this is a new player";
     if (is_new_player)
-      template = `$login.new_player_arrival_template ! E_PROPNF => "{nc} {have|has} just arrived."';
+      template = `$login.new_player_arrival_template ! E_PROPNF => "{The actor} {agree actor name:have|has} just arrived."';
     else
-      template = `$login.player_wakeup_template ! E_PROPNF => "{nc} {have|has} woken up."';
+      template = `$login.player_wakeup_template ! E_PROPNF => "{The actor} {agree actor name:have|has} woken up."';
     endif
     "Compile the template into $sub flyweights";
     content = $sub_utils:compile(template);
@@ -185,7 +186,7 @@ object ACTOR [
   endmethod
 
   method mk_disconnected_event owner: HACKER
-    return $event:mk_say(this, $sub:nc(), " ", $sub:self_alt("go", "goes"), " to sleep."):with_presentation_hint('inset):with_group('connection, this);
+    return $event:mk_say(this, $sub:thec('actor), " ", $sub:agree('actor, 'name, "go", "goes"), " to sleep."):with_presentation_hint('inset):with_group('connection, this);
   endmethod
 
   method mk_departure_event owner: HACKER
@@ -194,7 +195,7 @@ object ACTOR [
     typeof(direction) == TYPE_STR || (direction = "");
     typeof(passage_desc) == TYPE_STR || (passage_desc = "");
     typeof(departure_phrase) == TYPE_STR || (departure_phrase = "");
-    parts = {$sub:nc(), " ", $sub:self_alt("head", "heads")};
+    parts = {$sub:thec('actor), " ", $sub:agree('actor, 'name, "head", "heads")};
     if (departure_phrase)
       "Use custom departure phrase if provided";
       parts = {@parts, " ", departure_phrase};
@@ -223,7 +224,7 @@ object ACTOR [
     typeof(direction) == TYPE_STR || (direction = "");
     typeof(passage_desc) == TYPE_STR || (passage_desc = "");
     typeof(arrival_phrase) == TYPE_STR || (arrival_phrase = "");
-    parts = {$sub:nc(), " ", $sub:self_alt("arrive", "arrives")};
+    parts = {$sub:thec('actor), " ", $sub:agree('actor, 'name, "arrive", "arrives")};
     if (arrival_phrase)
       "Use custom arrival phrase if provided";
       parts = {@parts, " ", arrival_phrase};
@@ -306,7 +307,7 @@ object ACTOR [
   method mk_stagetalk owner: ARCH_WIZARD
     "Stagetalk: directed speech 'Name [to Target]: message'";
     {target, message} = args;
-    return $event:mk_stagetalk(this, this:name(), " [to ", $sub:i(), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
+    return $event:mk_stagetalk(this, this:name(), " [to ", $sub:the('iobj), "]: ", @$format.djot:inline(message)):with_iobj(target):with_this(this.location);
   endmethod
 
   method pronouns_display owner: ARCH_WIZARD
@@ -335,7 +336,7 @@ object ACTOR [
   method mk_shout_event owner: ARCH_WIZARD
     "Create a shout event with loudness for acoustic propagation.";
     {text} = args;
-    event = $event:mk_shout(this, $sub:nc(), " ", $sub:self_alt("shout", "shouts"), ", \"", @$format.djot:inline(text), "\""):with_this(this.location);
+    event = $event:mk_shout(this, $sub:thec('actor), " ", $sub:agree('actor, 'name, "shout", "shouts"), ", \"", @$format.djot:inline(text), "\""):with_this(this.location);
     event = event:with_metadata('content, text);
     event = event:with_metadata('loudness, 5);
     event = event:with_presentation_hint('speech_bubble);
@@ -422,34 +423,46 @@ object ACTOR [
     return descriptions;
   endmethod
 
-  method _look_self_details owner: ARCH_WIZARD
-    "Shared actor self-description details (wearing + current activities).";
+  method look_self owner: ARCH_WIZARD
+    "Include shared clothing and activity details when looking at an NPC.";
     set_task_perms(caller_perms());
-    details = {};
-    if (typeof(this.wearing) == TYPE_LIST && length(this.wearing) > 0)
-      wearing_names = {};
-      integrated_descs = {};
-      for item in (this.wearing)
-        if (valid(item))
-          wearing_names = {@wearing_names, item:display_name()};
-          if (respond_to(item, 'integrate_description))
-            idesc = item:integrate_description();
-            if (typeof(idesc) == TYPE_STR && idesc != "")
-              integrated_descs = {@integrated_descs, idesc};
-            endif
+    const view = pass(@args);
+    let slots = flyslots(view);
+    slots['description] = {view.description, @this:_look_self_details()};
+    return toflyweight(view.delegate, slots, flycontents(view));
+  endmethod
+
+  method _look_self_details owner: ARCH_WIZARD
+    "Describe clothing with object references and retain authored activity descriptions.";
+    set_task_perms(caller_perms());
+    let details = {};
+    if (typeof(this.wearing) == TYPE_LIST && length(this.wearing))
+      const items = {item for item in (this.wearing) if valid(item)};
+      let clothing = {};
+      let integrated = {};
+      for i in [1..length(items)]
+        i > 1 && (clothing = {@clothing, i == length(items) ? " and " | ", "});
+        const item = items[i];
+        clothing = {@clothing, $sub:reference(item, 'listing)};
+        if (respond_to(item, 'integrate_description))
+          const description = item:integrate_description();
+          if (typeof(description) == TYPE_STR && length(description))
+            integrated = {@integrated, description};
           endif
         endif
       endfor
-      if (wearing_names)
-        details = {@details, " ", $sub:sc_dobj(), " ", $sub:verb_be_dobj(), " wearing ", wearing_names:english_list(), "."};
+      if (length(clothing))
+        details = {@details, " ", $sub:sc_dobj(), " ", $sub:verb_be_dobj(),
+          " wearing ", @clothing, "."};
       endif
-      for idesc in (integrated_descs)
-        details = {@details, " ", idesc};
+      for description in (integrated)
+        details = {@details, " ", description};
       endfor
     endif
-    activity_descriptions = this:action_activity_descriptions(this);
-    if (activity_descriptions && length(activity_descriptions) > 0)
-      details = {@details, "\n\n", $sub:sc_dobj(), " ", $sub:verb_be_dobj(), " currently ", activity_descriptions:english_list(), "."};
+    const activities = this:action_activity_descriptions(this);
+    if (length(activities))
+      details = {@details, "\n\n", $sub:sc_dobj(), " ", $sub:verb_be_dobj(),
+        " currently ", activities:english_list(), "."};
     endif
     return details;
   endmethod

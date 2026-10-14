@@ -28,13 +28,13 @@ object LLM_ROOM_OBSERVER [
   property response_prompt (owner: HACKER, flags: "rc") = "Respond to what you've observed. CRITICAL: Do NOT output any text directly - only use tool calls. For physical actions, use the emote tool. For speech, use directed_say. You can make multiple tool calls in sequence. If you have nothing to say or do, output nothing at all. Never explain your reasoning or thought process in your response - just act.";
   property role_prompt (owner: HACKER, flags: "rc") = "When asked, provide witty or insightful commentary based on what you've seen.";
   property shut_off_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "reach", .for_others = "reaches">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "reach", .singular_form = "reaches">,
     " behind ",
     <SUB, .capitalize = false, .type = 'dobj>,
     "'s head and ",
-    <SUB, .type = 'self_alt, .for_self = "flip", .for_others = "flips">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "flip", .singular_form = "flips">,
     " a small switch. ",
     <SUB, .capitalize = true, .type = 'dobj>,
     " freezes mid-motion, eyes going vacant."
@@ -64,13 +64,13 @@ object LLM_ROOM_OBSERVER [
   property triage_model (owner: HACKER, flags: "rc") = "MiniMaxAI/MiniMax-M2.1";
   property triage_prompt (owner: HACKER, flags: "rc") = "You are a triage filter for an NPC named {name}. Decide if {name} should engage with the recent activity.\n\nEXAMPLES:\n\nActivity: Alice says, \"Hey {name}, can you help me find the restaurant?\"\nAnswer: ENGAGE (directly addressed by name, asking for help)\n\nActivity: Bob arrives from the north.\nAnswer: IGNORE (just someone arriving, wait to see if they need help)\n\nActivity: Carol says, \"I have a commit that might help with that bug\"\nAnswer: IGNORE (technical discussion between others, \"help\" not directed at {name})\n\nActivity: Dan says, \"where am I? how do I check in?\"\nAnswer: ENGAGE (newcomer seems confused and needs orientation)\n\nActivity: Eve [to Frank]: \"did you see the game last night?\"\nAnswer: IGNORE (conversation between two other people)\n\nActivity: Grace says, \"this websocket code is tricky\"\nAnswer: IGNORE (technical discussion, not asking {name} for anything)\n\nActivity: Henry says, \"{name}?\"\nAnswer: ENGAGE (directly addressed by name)\n\nActivity: Iris nods\nActivity: Jack waves to everyone\nAnswer: IGNORE (social gestures not requiring response)\n\nActivity: Kate says, \"excuse me, is there someone who works here?\"\nAnswer: ENGAGE (looking for staff assistance)\n\nNOW DECIDE for this activity:\n{events}\n\nAnswer with ONLY one word: ENGAGE or IGNORE";
   property turn_on_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "reach", .for_others = "reaches">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "reach", .singular_form = "reaches">,
     " behind ",
     <SUB, .capitalize = false, .type = 'dobj>,
     "'s head and ",
-    <SUB, .type = 'self_alt, .for_self = "flip", .for_others = "flips">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "flip", .singular_form = "flips">,
     " the switch back. ",
     <SUB, .capitalize = true, .type = 'dobj>,
     " blinks and looks around, reorienting."
@@ -222,7 +222,7 @@ object LLM_ROOM_OBSERVER [
     let replies = 0;
     let reply = 0;
     if (!this.enabled)
-      player:inform_current($event:mk_info(player, this:name() + " is currently switched off."));
+      player:inform_current($event:mk_info(player, $sub:capitalize($sub:reference(this)), " ", $sub:agree('dobj, 'name, "are", "is"), " currently switched off."):with_dobj(this));
       return;
     endif
     if (!valid(this.agent))
@@ -234,7 +234,7 @@ object LLM_ROOM_OBSERVER [
     endif
     "Announce the poke action to the room";
     if (valid(this.location))
-      poke_event = $event:mk_emote(player, $sub:nc(), " ", $sub:self_alt("poke", "pokes"), " ", this:name(), ".");
+      poke_event = $event:mk_emote(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "poke", "pokes"), " ", $sub:reference(this), ".");
       this.location:announce(poke_event);
     endif
     "Ensure event loop is running";
@@ -250,14 +250,14 @@ object LLM_ROOM_OBSERVER [
         try
           task_send(this.loop_task, ["type" -> "poke", "player" -> player, "reply_to" -> my_task]);
         except e2 (ANY)
-          player:inform_current($event:mk_error(player, "Something went wrong - could not reach " + this:name() + "."));
+          player:inform_current($event:mk_error(player, "Something went wrong - could not reach ", $sub:reference(this), "."));
           return;
         endtry
       endtry
       "Wait for reply from event loop (up to 90s for LLM + thinking time)";
       replies = task_recv(90);
       if (length(replies) == 0)
-        player:inform_current($event:mk_info(player, this:name() + " seems lost in thought."));
+        player:inform_current($event:mk_info(player, $sub:capitalize($sub:reference(this)), " ", $sub:agree('dobj, 'name, "seem", "seems"), " lost in thought."):with_dobj(this));
       else
         reply = replies[1];
         if (typeof(reply) == TYPE_MAP && maphaskey(reply, "error"))
@@ -331,7 +331,7 @@ object LLM_ROOM_OBSERVER [
       player:inform_current($event:mk_error(player, "You can't do that."));
       return;
     endif
-    const reset_event = $event:mk_emote(player, player:name(), " reaches behind ", this:name(), "'s head and flips a formerly unseen switch...");
+    const reset_event = $event:mk_emote(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "reach", "reaches"), " behind ", $sub:reference(this), "'s head and flips a formerly unseen switch...");
     caller.location:announce(reset_event);
     this:reset();
   endverb
@@ -595,7 +595,7 @@ object LLM_ROOM_OBSERVER [
   method mk_emote_event owner: ARCH_WIZARD
     "Helper to create an emote event for this observer.";
     const {message} = args;
-    return $event:mk_emote(this, this:name(), " ", message);
+    return $event:mk_emote(this, $sub:attribution(this), " ", message);
   endmethod
 
   method _format_time_ago owner: ARCH_WIZARD
@@ -990,7 +990,7 @@ object LLM_ROOM_OBSERVER [
     endwhile
     remaining = remaining:trim();
     if (length(remaining) > 3)
-      say_event = $event:mk_say(this, this:name(), " says, \"", remaining, "\"");
+      say_event = $event:mk_say(this, $sub:thec('actor), " ", $sub:agree('actor, 'name, "say", "says"), ", \"", remaining, "\"");
       this.location:announce(say_event);
       return true;
     endif
@@ -1271,7 +1271,7 @@ object LLM_ROOM_OBSERVER [
         return true;
       endif
     endif
-    const say_event = $event:mk_say(this, this:name(), " says, \"", message, "\"");
+    const say_event = $event:mk_say(this, $sub:thec('actor), " ", $sub:agree('actor, 'name, "say", "says"), ", \"", message, "\"");
     this.location:announce(say_event);
     return true;
   endmethod

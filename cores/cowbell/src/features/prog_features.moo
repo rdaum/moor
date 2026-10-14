@@ -1604,7 +1604,7 @@ object PROG_FEATURES [
       player:inform_current($event:mk_error(player, "Code paste is greater than 50 lines, too long."));
       return;
     endif
-    title = $format.title:mk({$sub:nc(), " ", $sub:self_alt("codepaste", "codepastes")}, 4);
+    title = $format.title:mk({$sub:thec('actor), " ", $sub:agree('actor, 'name, "codepaste", "codepastes")}, 4);
     code = $format.code:mk(content, 'moo);
     event = $event:mk_paste(player, title, code):with_presentation_hint('inset):with_group('paste);
     player.location:announce(event);

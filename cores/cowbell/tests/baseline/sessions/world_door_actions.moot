@@ -13,16 +13,16 @@ true
 % @reaction here open_stairs enable
 ~~enabled
 % open east
-~~You open the stairs.
-~~You open the east door.
+~~You open the door "stairs".
+~~You open the door "east".
 ; return $room:find_passage(player.location, "stairs").is_open;
 true
 % @reaction here open_stairs step 1 do close_exit target=this actor=me exit="stairs"
 ~~open_stairs
 % close east
-~~You close the east door.
+~~You close the door "east".
 % open east
-~~You close the stairs.
-~~You open the east door.
+~~You close the door "stairs".
+~~You open the door "east".
 ; return $room:find_passage(player.location, "stairs").is_open;
 false

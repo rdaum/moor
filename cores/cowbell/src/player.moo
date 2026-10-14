@@ -18,6 +18,7 @@ object PLAYER [
   property features (owner: ARCH_WIZARD, flags: "rc") = {SOCIAL_FEATURES, MAIL_FEATURES};
   property gaglist (owner: ARCH_WIZARD, flags: "rc") = {};
   property grants_area (owner: ARCH_WIZARD, flags: "") = [];
+  property grants_object (owner: ARCH_WIZARD, flags: "") = [];
   property grants_room (owner: ARCH_WIZARD, flags: "") = [];
   property home (owner: ARCH_WIZARD, flags: "rc") = 0;
   property is_builder (owner: ARCH_WIZARD, flags: "") = false;
@@ -179,7 +180,7 @@ object PLAYER [
     items = this.contents;
     !items && return this:inform_current($event:mk_inventory(player, "You are not carrying anything."):with_audience('utility):with_group('inventory));
     "Get item names";
-    item_names = { $format.annotation:object(item, item:display_name()) for item in (items) };
+    item_names = { $sub:reference(item, 'listing) for item in (items) };
     "Create and display the inventory list";
     list_obj = $format.list:mk(item_names);
     title_obj = $format.title:mk("Inventory");
@@ -1768,7 +1769,7 @@ object PLAYER [
         "Letter object";
         msg_type = msg.read_at == 0 ? "letter*" | "letter";
         from_name = valid(msg.author) ? msg.author.name | "???";
-        preview = msg.name != "letter" ? msg.name | "(no subject)";
+        preview = msg.subject ? msg.subject | "(no subject)";
         age = time() - msg.sent_at;
         when = age < 60 ? "now" | age:format_time_seconds();
       endif
@@ -2058,17 +2059,17 @@ object PLAYER [
     if (is_player(target))
       gl = this.gaglist;
       if (target in gl)
-        return this:inform_current($event:mk_error(this, target:name() + " is already gagged."):with_audience('utility));
+        return this:inform_current($event:mk_error(this, "Already gagged: " + target:noun_phrase('definite, this) + "."):with_audience('utility));
       endif
       this.gaglist = {@gl, target};
-      this:inform_current($event:mk_say(this, "You gag ", target:name(), "."):with_audience('utility));
+      this:inform_current($event:mk_say(this, "You gag ", target:noun_phrase('definite, this), "."):with_audience('utility));
     else
       ogl = this.object_gaglist;
       if (target in ogl)
-        return this:inform_current($event:mk_error(this, target:name() + " is already gagged."):with_audience('utility));
+        return this:inform_current($event:mk_error(this, "Already gagged: " + target:noun_phrase('definite, this) + "."):with_audience('utility));
       endif
       this.object_gaglist = {@ogl, target};
-      this:inform_current($event:mk_say(this, "You gag ", target:name(), "."):with_audience('utility));
+      this:inform_current($event:mk_say(this, "You gag ", target:noun_phrase('definite, this), "."):with_audience('utility));
     endif
     return this:listgag();
   endverb
@@ -2120,7 +2121,7 @@ object PLAYER [
       if (is_player(target))
         gl = this.gaglist;
         if (!(target in gl))
-          return this:inform_current($event:mk_error(this, target:name() + " is not gagged."):with_audience('utility));
+          return this:inform_current($event:mk_error(this, "Not gagged: " + target:noun_phrase('definite, this) + "."):with_audience('utility));
         endif
         new = {};
         for o in (gl)
@@ -2129,12 +2130,12 @@ object PLAYER [
           endif
         endfor
         this.gaglist = new;
-        this:inform_current($event:mk_say(this, "You ungag ", target:name(), "."):with_audience('utility));
+        this:inform_current($event:mk_say(this, "You ungag ", target:noun_phrase('definite, this), "."):with_audience('utility));
         return this:listgag();
       else
         ogl = this.object_gaglist;
         if (!(target in ogl))
-          return this:inform_current($event:mk_error(this, target:name() + " is not gagged."):with_audience('utility));
+          return this:inform_current($event:mk_error(this, "Not gagged: " + target:noun_phrase('definite, this) + "."):with_audience('utility));
         endif
         new = {};
         for o in (ogl)
@@ -2143,7 +2144,7 @@ object PLAYER [
           endif
         endfor
         this.object_gaglist = new;
-        this:inform_current($event:mk_say(this, "You ungag ", target:name(), "."):with_audience('utility));
+        this:inform_current($event:mk_say(this, "You ungag ", target:noun_phrase('definite, this), "."):with_audience('utility));
         return this:listgag();
       endif
     endif
@@ -2166,7 +2167,7 @@ object PLAYER [
         endif
       endfor
       this.gaglist = new;
-      this:inform_current($event:mk_say(this, "You ungag ", match:name(), "."):with_audience('utility));
+      this:inform_current($event:mk_say(this, "You ungag ", match:noun_phrase('definite, this), "."):with_audience('utility));
       return this:listgag();
     endif
     try
@@ -2186,7 +2187,7 @@ object PLAYER [
         endif
       endfor
       this.object_gaglist = new;
-      this:inform_current($event:mk_say(this, "You ungag ", match:name(), "."):with_audience('utility));
+      this:inform_current($event:mk_say(this, "You ungag ", match:noun_phrase('definite, this), "."):with_audience('utility));
       return this:listgag();
     endif
     return this:inform_current($event:mk_error(this, "'" + ref + "' isn't on your gag lists."):with_audience('utility));
@@ -2508,7 +2509,7 @@ object PLAYER [
     endif
     destination = match_result;
     if (destination == current_room)
-      player:inform_current($event:mk_info(player, "You're already at " + destination:name() + "!"));
+      player:inform_current($event:mk_info(player, "You're already at " + destination:noun_phrase('definite, player) + "!"));
       return;
     endif
     "First try to find a walkable route (passages only, no transports)";
@@ -2527,25 +2528,25 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach " + destination:name() + ", you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
+            player:inform_current($event:mk_info(player, "To reach " + destination:noun_phrase('definite, player) + ", you'll need to use the exit " + toliteral(label) + ". At " + room:noun_phrase('definite, player) + ", use: " + connector[4] + "."));
             return;
           endif
         endfor
       endif
-      player:inform_current($event:mk_error(player, "Can't find a walkable route to " + destination:name() + "."));
+      player:inform_current($event:mk_error(player, "Can't find a walkable route to " + destination:noun_phrase('definite, player) + "."));
       return;
     endif
     "Cancel any existing movement activity";
     this:action_stop_activities(this, 'walk);
     "Start walking";
     steps = length(path) - 1;
-    player:inform_current($event:mk_info(player, "Walking to " + destination:name() + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
+    player:inform_current($event:mk_info(player, "Walking to " + destination:noun_phrase('definite, player) + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
     "Fork task to do the walking";
     const output_connection = `connection() ! E_INVARG => 0';
     fork activity_task_id (0)
       this:_do_walk(path, output_connection);
     endfork
-    this:action_start_activity(this, 'walk, activity_task_id, "walking to " + destination:name());
+    this:action_start_activity(this, 'walk, activity_task_id, "walking to " + destination:noun_phrase('definite, player));
   endverb
 
   method _do_walk owner: ARCH_WIZARD
@@ -2597,7 +2598,7 @@ object PLAYER [
     endfor
     "Arrived at destination";
     const destination = path[$][1];
-    this:inform_connection(output_connection, $event:mk_info(this, "You've arrived at " + destination:name() + "."));
+    this:inform_connection(output_connection, $event:mk_info(this, "You've arrived at " + destination:noun_phrase('definite, player) + "."));
     this:action_clear_activity_task(this, current_task);
   endmethod
 
@@ -2654,7 +2655,7 @@ object PLAYER [
     "Check target is in a room";
     target_room = target.location;
     if (!valid(target_room))
-      player:inform_current($event:mk_error(player, target:name() + " isn't anywhere you can go."));
+      player:inform_current($event:mk_error(player, "You cannot travel to " + target:noun_phrase('definite, player) + "."));
       return;
     endif
     "Get current room and area";
@@ -2664,7 +2665,7 @@ object PLAYER [
       return;
     endif
     if (target_room == current_room)
-      player:inform_current($event:mk_info(player, target:name() + " is already here!"));
+      player:inform_current($event:mk_info(player, "Already here: " + target:noun_phrase('definite, player) + "."));
       return;
     endif
     area = current_room.location;
@@ -2688,25 +2689,25 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach " + target:name() + ", you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
+            player:inform_current($event:mk_info(player, "To reach " + target:noun_phrase('definite, player) + ", you'll need to use the exit " + toliteral(label) + ". At " + room:noun_phrase('definite, player) + ", use: " + connector[4] + "."));
             return;
           endif
         endfor
       endif
-      player:inform_current($event:mk_error(player, "Can't find a walkable route to " + target:name() + "."));
+      player:inform_current($event:mk_error(player, "Can't find a walkable route to " + target:noun_phrase('definite, player) + "."));
       return;
     endif
     "Cancel any existing movement activity";
     this:action_stop_activities(this, 'walk);
     "Start walking";
     steps = length(path) - 1;
-    player:inform_current($event:mk_info(player, "Walking to " + target:name() + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
+    player:inform_current($event:mk_info(player, "Walking to " + target:noun_phrase('definite, player) + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
     "Fork task to do the walking";
     const output_connection = `connection() ! E_INVARG => 0';
     fork activity_task_id (0)
       this:_do_walk(path, output_connection);
     endfork
-    this:action_start_activity(this, 'walk, activity_task_id, "walking to " + target:name());
+    this:action_start_activity(this, 'walk, activity_task_id, "walking to " + target:noun_phrase('definite, player));
   endverb
 
   method _walk_path_options owner: ARCH_WIZARD
@@ -2780,7 +2781,7 @@ object PLAYER [
           {room, connector} = path_with_transport[i];
           if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
             label = connector[2];
-            player:inform_current($event:mk_info(player, "To reach home, you'll need to take the " + label + ". At " + room:name() + ", use: " + connector[4] + "."));
+            player:inform_current($event:mk_info(player, "To reach home, you'll need to use the exit " + toliteral(label) + ". At " + room:noun_phrase('definite, player) + ", use: " + connector[4] + "."));
             return;
           endif
         endfor
@@ -2792,13 +2793,13 @@ object PLAYER [
     this:action_stop_activities(this, 'walk);
     "Start walking";
     steps = length(path) - 1;
-    player:inform_current($event:mk_info(player, "Walking home to " + home:name() + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
+    player:inform_current($event:mk_info(player, "Walking home to " + home:noun_phrase('definite, player) + " (" + tostr(steps) + " " + (steps == 1 ? "step" | "steps") + ")..."));
     "Fork task to do the walking";
     const output_connection = `connection() ! E_INVARG => 0';
     fork activity_task_id (0)
       this:_do_walk(path, output_connection);
     endfork
-    this:action_start_activity(this, 'walk, activity_task_id, "walking home to " + home:name());
+    this:action_start_activity(this, 'walk, activity_task_id, "walking home to " + home:noun_phrase('definite, player));
   endverb
 
   verb "@sethome" (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -2818,9 +2819,9 @@ object PLAYER [
     old_home = this.home;
     this.home = current_room;
     if (valid(old_home) && old_home != current_room)
-      player:inform_current($event:mk_info(player, "Home set to " + current_room:name() + " (was " + old_home:name() + ")."));
+      player:inform_current($event:mk_info(player, "Home set to " + current_room:noun_phrase('definite, player) + " (was " + old_home:noun_phrase('definite, player) + ")."));
     else
-      player:inform_current($event:mk_info(player, "Home set to " + current_room:name() + "."));
+      player:inform_current($event:mk_info(player, "Home set to " + current_room:noun_phrase('definite, player) + "."));
     endif
   endverb
 

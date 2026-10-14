@@ -16,7 +16,7 @@ object LOGIN [
   property intercepted_actions (owner: ARCH_WIZARD, flags: "rc") = {};
   property intercepted_players (owner: ARCH_WIZARD, flags: "rc") = {};
   property moo_title (owner: ARCH_WIZARD, flags: "rc") = "Cowbell-Core";
-  property new_player_arrival_template (owner: ARCH_WIZARD, flags: "rc") = "{nc} {have|has} just arrived.";
+  property new_player_arrival_template (owner: ARCH_WIZARD, flags: "rc") = "{The actor} {agree actor name:have|has} just arrived.";
   property new_player_letter (owner: ARCH_WIZARD, flags: "rc") = {
     ARCH_WIZARD,
     "Welcome to Cowbell!",
@@ -38,7 +38,7 @@ object LOGIN [
   property oauth2_identity_version (owner: ARCH_WIZARD, flags: "") = 0;
   property player_creation_enabled (owner: ARCH_WIZARD, flags: "r") = true;
   property player_setup_capability (owner: LOGIN, flags: "") = <PLAYER, .token = "v4.local.EIjSChEcQf8hjLCih4NGE-vKw_UZDTKRpWaYiZeQP615jQATzm-KoZTU_t7DfF8lVdOkzNqSRrItjVEZczaN6BIB-83GPs-xGAM4eg9J8sb3NJJr8z8sJPXh2uNurXg4vEbB5TMhj04AQsuski87Jmwe0r1kEq1cS5baIer5griqGFykpZBCHuieE382dS8XJdOzq0p9xViQ9-x_87dmbVdJPAP0tbxA-7KycBk72eldC-mGBTPjfD2qQWqhczzmB77RJ1azUhhOTZU4g6uEBEBfLgE8a-heeB_AIqK1zKl_t8lOf-vUq9rUEQChG5YJID6_NNZGNB8y68eciVHUD1lPnPOaeCc">;
-  property player_wakeup_template (owner: ARCH_WIZARD, flags: "rc") = "{nc} {have|has} woken up.";
+  property player_wakeup_template (owner: ARCH_WIZARD, flags: "rc") = "{The actor} {agree actor name:have|has} woken up.";
   property post_creation_setup_enabled (owner: ARCH_WIZARD, flags: "rc") = true;
   property post_creation_setup_fields (owner: ARCH_WIZARD, flags: "rc") = "pronouns,description,picture";
   property post_creation_setup_title (owner: ARCH_WIZARD, flags: "rc") = "Set Up Your Profile";
@@ -553,7 +553,8 @@ object LOGIN [
       this:_server_log(tostr("setup_new_player: created mailbox ", mailbox, " owner = ", mailbox.owner));
       "Create the welcome letter";
       const letter = create($letter, from_obj);
-      letter.name = subject;
+      letter.name = "letter";
+      letter.subject = subject;
       letter.author = from_obj;
       letter.addressee = new_player;
       letter.sealed = true;

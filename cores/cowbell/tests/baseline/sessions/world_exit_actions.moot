@@ -45,7 +45,7 @@ true
 true
 @nonprogrammer
 % use-test-exit
-=You open the east door.
+=You open the door "east".
 @wizard
 ; return #90102.location == #90103 && #90108:passage_for(#90103, #90110).is_open;
 true

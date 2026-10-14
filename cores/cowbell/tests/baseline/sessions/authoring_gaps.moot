@@ -52,9 +52,9 @@ true
 % @reaction box relay enable
 ~~Saved
 % close box
-~~You close box.
+~~You close the box.
 % open box
-~~You open box.
+~~You open the box.
 @wizard
 ; return #90102.runtime_probe.visits;
 1
@@ -74,17 +74,17 @@ true
 % @reaction box welcome enable
 ~~Saved
 % close box
-~~You close box.
+~~You close the box.
 % open box
 =Hello, you.
-~~You open box.
+~~You open the box.
 % @set-message box.greeting_msg Welcome back, {n}.
 ~~Set message template
 % close box
-~~You close box.
+~~You close the box.
 % open box
 =Welcome back, you.
-~~You open box.
+~~You open the box.
 % @add-message box.choices_msg_bag First choice.
 ~~Added message
 % @add-message box.choices_msg_bag Second choice.

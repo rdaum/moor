@@ -8,6 +8,7 @@ object AREA [
   fertile: true
   readable: true
 
+  property listing_form (owner: HACKER, flags: "rc") = 'indefinite;
   property passages_rel (owner: HACKER, flags: "r") = 0;
 
   override description (owner: HACKER, flags: "rc") = "Area container that manages passages between rooms using a relation.";

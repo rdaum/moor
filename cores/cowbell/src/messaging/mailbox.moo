@@ -10,6 +10,8 @@ object MAILBOX [
   readable: true
 
   override aliases (owner: HACKER, flags: "rc") = {"mailbox"};
+  override noun_kind = 'name;
+
   override description (owner: HACKER, flags: "rc") = "A sturdy mailbox for receiving letters.";
   override object_documentation (owner: HACKER, flags: "rc") = "A mailbox holds letters for its owner. Anyone can deposit letters, but only the owner can view or take them.";
 
@@ -41,10 +43,10 @@ object MAILBOX [
       return;
     endif
     move(dobj, this);
-    player:inform_current($event:mk_info(player, "You deposit ", dobj.name, " into the mailbox."));
+    player:inform_current($event:mk_info(player, "You deposit ", $sub:reference(dobj), " into ", $sub:reference(this), "."));
     const recipient = this.owner;
     if (valid(recipient) && recipient != player && recipient in connected_players())
-      `recipient:tell($event:mk_info(recipient, "You have new mail from ", player.name, "."):with_audience('utility)) ! ANY';
+      `recipient:tell($event:mk_info(recipient, "You have new mail from ", $sub:reference(player), "."):with_audience('utility)) ! ANY';
     endif
   endverb
 
@@ -72,7 +74,7 @@ object MAILBOX [
     count = length(letters);
     "Non-owners just see basic info";
     if (caller_perms() != this.owner && !caller_perms().wizard)
-      desc = desc + " It belongs to " + this.owner.name + ".";
+      desc = desc + " It belongs to " + this.owner:noun_phrase('definite, player) + ".";
       return <$look, .what = this, .title = this:name(), .description = desc>;
     endif
     "Owner sees letter table";
@@ -87,7 +89,7 @@ object MAILBOX [
     for letter in (letters)
       status = letter.read_at == 0 ? "New" | "Read";
       from_name = valid(letter.author) ? letter.author.name | "anonymous";
-      subject = letter.name != "letter" ? letter.name | "(no subject)";
+      subject = letter.subject ? letter.subject | "(no subject)";
       rows = {@rows, {tostr(idx), status, from_name, subject}};
       idx = idx + 1;
     endfor
@@ -162,7 +164,7 @@ object MAILBOX [
       return;
     endif
     move(target, player);
-    player:inform_current($event:mk_info(player, "You take ", target.name, " from the mailbox."));
+    player:inform_current($event:mk_info(player, "You take ", $sub:reference(target), " from ", $sub:reference(this), "."));
   endverb
 
   verb mail (this none none) owner: ARCH_WIZARD flags: "rxd"
@@ -190,7 +192,7 @@ object MAILBOX [
     for letter in (letters)
       const status = letter.read_at == 0 ? "NEW" | "";
       const from_name = valid(letter.author) ? letter.author.name | "anonymous";
-      const subject = letter.name != "letter" ? letter.name | "(no subject)";
+      const subject = letter.subject ? letter.subject | "(no subject)";
       rows = {@rows, {tostr(idx), status, from_name, subject}};
       idx = idx + 1;
     endfor

@@ -9,88 +9,88 @@ object CONTAINER [
   fertile: true
   readable: true
 
-  property already_closed_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'dobj>, " is already closed."};
-  property already_locked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'dobj>, " is already locked."};
-  property already_open_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'dobj>, " is already open."};
-  property already_unlocked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'dobj>, " is already unlocked."};
-  property close_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " won't close."};
+  property already_closed_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>, " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " already closed."};
+  property already_locked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>, " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " already locked."};
+  property already_open_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>, " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " already open."};
+  property already_unlocked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>, " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " already unlocked."};
+  property close_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " won't close."};
   property close_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "close", .for_others = "closes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "close", .singular_form = "closes">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property close_rule (owner: HACKER, flags: "rc") = 0;
-  property lock_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " won't lock."};
+  property lock_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " won't lock."};
   property lock_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "lock", .for_others = "locks">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "lock", .singular_form = "locks">,
     " ",
-    <SUB, .capitalize = false, .type = 'iobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'iobj>,
     " with ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property lock_rule (owner: HACKER, flags: "rc") = 0;
   property locked (owner: HACKER, flags: "r") = false;
-  property not_closeable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " can't be closed."};
-  property not_lockable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " doesn't have a lock."};
-  property not_openable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " can't be opened."};
-  property not_unlockable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " doesn't have a lock."};
+  property not_closeable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " can't be closed."};
+  property not_lockable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " ", <SUB, .type = 'agree, .binding_name = 'iobj, .subject_form = 'name, .plural_form = "do not", .singular_form = "does not">, " have a lock."};
+  property not_openable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " can't be opened."};
+  property not_unlockable_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " ", <SUB, .type = 'agree, .binding_name = 'iobj, .subject_form = 'name, .plural_form = "do not", .singular_form = "does not">, " have a lock."};
   property open (owner: HACKER, flags: "r") = true;
-  property open_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " won't open."};
-  property open_locked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'dobj>, " is locked."};
+  property open_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " won't open."};
+  property open_locked_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>, " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " locked."};
   property open_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "open", .for_others = "opens">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "open", .singular_form = "opens">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property open_rule (owner: HACKER, flags: "rc") = 0;
-  property put_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " is closed."};
+  property put_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " ", <SUB, .type = 'agree, .binding_name = 'iobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " closed."};
   property put_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "put", .for_others = "puts">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "put", .singular_form = "puts">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     " ",
     <SUB, .capitalize = false, .type = 'binding, .binding_name = 'prep>,
     " ",
-    <SUB, .capitalize = false, .type = 'iobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'iobj>,
     "."
   };
   property put_prep_display (owner: HACKER, flags: "rc") = "in";
   property put_preps (owner: HACKER, flags: "rc") = {"in", "inside", "into"};
   property put_rule (owner: HACKER, flags: "rc") = 0;
-  property take_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " is closed."};
+  property take_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " ", <SUB, .type = 'agree, .binding_name = 'iobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " closed."};
   property take_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "take", .for_others = "takes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "take", .singular_form = "takes">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     " from ",
-    <SUB, .capitalize = false, .type = 'iobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'iobj>,
     "."
   };
   property take_rule (owner: HACKER, flags: "rc") = 0;
   property view_rule (owner: HACKER, flags: "rc") = 0;
   property view_denied_msg (owner: HACKER, flags: "rc") = {"You cannot see inside that container."};
-  property unlock_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'iobj>, " won't unlock."};
+  property unlock_denied_msg (owner: HACKER, flags: "rc") = {<SUB, .capitalize = true, .type = 'article_the, .binding_name = 'iobj>, " won't unlock."};
   property unlock_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "unlock", .for_others = "unlocks">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "unlock", .singular_form = "unlocks">,
     " ",
-    <SUB, .capitalize = false, .type = 'iobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'iobj>,
     " with ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property unlock_rule (owner: HACKER, flags: "rc") = 0;
@@ -115,15 +115,15 @@ object CONTAINER [
     "Customize using the `@set-message` command:",
     "",
     "```",
-    "@set-message chest.take_msg {nc} {retrieve|retrieves} {d} from {i}.",
-    "@set-message chest.put_msg {nc} {store|stores} {d} in {i}.",
+    "@set-message chest.take_msg {The actor} {agree actor name:retrieve|retrieves} {the d} from {the i}.",
+    "@set-message chest.put_msg {The actor} {agree actor name:store|stores} {the d} in {the i}.",
     "```",
     "",
     "Template tokens:",
-    "- `{nc}` - Actor name (capitalized)",
-    "- `{retrieve|retrieves}` - Self-alternation verb",
-    "- `{d}` - Direct object (the item)",
-    "- `{i}` - Indirect object (the container)",
+    "- `{The actor}` - Actor noun phrase (capitalized)",
+    "- `{agree actor name:retrieve|retrieves}` - Agreement with the actor name",
+    "- `{the d}` - Definite reference to the item",
+    "- `{the i}` - Definite reference to the container",
     "",
     "### open property",
     "",
@@ -234,12 +234,12 @@ object CONTAINER [
     "",
     "```moo",
     "chest = create($container);",
-    "chest:set_name(\"a wooden chest\");",
+    "chest:set_name(\"wooden chest\");",
     "chest.description = \"An old wooden chest with brass hinges.\";",
     "@set-rule chest.lock_rule This owner_is(Accessor)?",
     "@set-rule chest.unlock_rule This owner_is(Accessor)?",
     "sword = create($thing);",
-    "sword:set_name(\"a gleaming sword\");",
+    "sword:set_name(\"gleaming sword\");",
     "sword:moveto(chest);",
     "```",
     "",
@@ -400,12 +400,12 @@ object CONTAINER [
     if (this:can_view_contents(player))
       const contents = {item for item in (this.contents) if (valid(item))};
       if (length(contents))
-        let parts = {"It contains "};
+        let parts = {"Contents: "};
         for i in [1..length(contents)]
           if (i > 1)
             parts = {@parts, i == length(contents) ? " and " | ", "};
           endif
-          parts = {@parts, $format.annotation:object(contents[i], contents[i]:display_name())};
+          parts = {@parts, $sub:reference(contents[i], 'listing)};
         endfor
         blocks = {@blocks, $format.paragraph:mk(@parts, ".")};
       endif
@@ -459,17 +459,17 @@ object CONTAINER [
     try
       dobj = $match:match_object(dobjstr, this);
     except e (ANY)
-      event = $event:mk_error(player, $sub:i(), " doesn't have that."):with_iobj(this);
+      event = $event:mk_error(player, $sub:thec('iobj), " ", $sub:agree('iobj, 'name, "don't", "doesn't"), " have that."):with_iobj(this);
       player:inform_current(event);
       return;
     endtry
     if (!valid(dobj) || typeof(dobj) != TYPE_OBJ)
-      event = $event:mk_error(player, $sub:i(), " doesn't have that."):with_iobj(this);
+      event = $event:mk_error(player, $sub:thec('iobj), " ", $sub:agree('iobj, 'name, "don't", "doesn't"), " have that."):with_iobj(this);
       player:inform_current(event);
       return;
     endif
     if (dobj.location != this)
-      event = $event:mk_error(player, $sub:d(), " isn't in ", $sub:i(), "."):with_dobj(dobj):with_iobj(this);
+      event = $event:mk_error(player, $sub:thec('dobj), " ", $sub:agree('dobj, 'name, "aren't", "isn't"), " in ", $sub:the('iobj), "."):with_dobj(dobj):with_iobj(this);
       player:inform_current(event);
       return;
     endif
@@ -486,12 +486,12 @@ object CONTAINER [
     set_task_perms(actor == #-1 ? player | actor);
     "Check preposition is valid for this container.";
     if (!(prepstr in this.put_preps))
-      event = $event:mk_error(player, "You can't put things ", prepstr, " ", $sub:i(), "."):with_iobj(this);
+      event = $event:mk_error(player, "You can't put things ", prepstr, " ", $sub:the('iobj), "."):with_iobj(this);
       player:inform_current(event);
       return;
     endif
     if (!dobjstr || dobjstr == "")
-      event = $event:mk_error(player, "Put what ", prepstr, " ", $sub:i(), "?"):with_iobj(this);
+      event = $event:mk_error(player, "Put what ", prepstr, " ", $sub:the('iobj), "?"):with_iobj(this);
       player:inform_current(event);
       return;
     endif
@@ -509,12 +509,12 @@ object CONTAINER [
       return;
     endif
     if (dobj.location != player)
-      event = $event:mk_error(player, "You don't have ", $sub:d(), "."):with_dobj(dobj);
+      event = $event:mk_error(player, "You don't have ", $sub:the('dobj), "."):with_dobj(dobj);
       player:inform_current(event);
       return;
     endif
     if (dobj == this)
-      event = $event:mk_error(player, "You can't put ", $sub:d(), " inside itself."):with_dobj(dobj);
+      event = $event:mk_error(player, "You can't put ", $sub:the('dobj), " inside itself."):with_dobj(dobj);
       player:inform_current(event);
       return;
     endif
@@ -534,7 +534,7 @@ object CONTAINER [
       return;
     endif
     if (!iobjstr || iobjstr == "")
-      event = $event:mk_error(player, "Lock ", $sub:i(), " with what?"):with_iobj(this);
+      event = $event:mk_error(player, "Lock ", $sub:the('iobj), " with what?"):with_iobj(this);
       player:inform_current(event);
       return;
     endif
@@ -554,7 +554,7 @@ object CONTAINER [
     endif
     "Check if already locked";
     if (this.locked)
-      event = $event:mk_error(player, $sub:i(), " is already locked."):with_iobj(this);
+      event = $event:mk_error(player, $sub:thec('iobj), " ", $sub:agree('iobj, 'name, "are", "is"), " already locked."):with_iobj(this);
       player:inform_current(event);
       return;
     endif
@@ -574,7 +574,7 @@ object CONTAINER [
       return;
     endif
     if (!iobjstr || iobjstr == "")
-      event = $event:mk_error(player, "Unlock ", $sub:i(), " with what?"):with_iobj(this);
+      event = $event:mk_error(player, "Unlock ", $sub:the('iobj), " with what?"):with_iobj(this);
       player:inform_current(event);
       return;
     endif
@@ -594,7 +594,7 @@ object CONTAINER [
     endif
     "Check if already unlocked";
     if (!this.locked)
-      event = $event:mk_error(player, $sub:i(), " is already unlocked."):with_iobj(this);
+      event = $event:mk_error(player, $sub:thec('iobj), " ", $sub:agree('iobj, 'name, "are", "is"), " already unlocked."):with_iobj(this);
       player:inform_current(event);
       return;
     endif

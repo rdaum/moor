@@ -40,6 +40,7 @@ object LOOK [
     let description = typeof(this.description) == TYPE_LIST ? this.description | {this.description};
     let actors = {};
     let things = {};
+    let subjects = [];
     for item in (flycontents(this))
       if (!valid(item) || item == viewer)
         continue;
@@ -54,7 +55,8 @@ object LOOK [
       endif
       const actor = item:is_actor();
       const status = actor ? $look:actor_idle_status(item) | "";
-      const name = actor ? item:name() | item:display_name();
+      const {name, named} = $document_resolver:capture_subject(item, viewer, 'listing, subjects);
+      subjects = named;
       const label = length(status) && status != "awake" ? name + " (" + status + ")" | name;
       const descriptor = is_anonymous(item) ? [] | ["kind" -> "object",
         "ref" -> $url_utils:to_curie_str(item), "objectKind" -> item:reference_kind()];
@@ -64,6 +66,9 @@ object LOOK [
       entry['bare] = $look:_entry(name, descriptor);
       entry['integrated] = has_integration;
       if (actor)
+        const {grammar, captured} = $document_resolver:capture_subject(item, viewer, 'grammar, subjects);
+        subjects = captured;
+        entry['plural] = grammar['number] == 'plural;
         actors = {@actors, entry};
       else
         things = {@things, entry};
@@ -191,12 +196,13 @@ object LOOK [
       const actors = {actor for actor in (view['actors]) if (
         !actor['integrated] && ((actor['status] == "deeply asleep") == sleeping))};
       if (length(actors))
-        const ending = (length(actors) == 1 ? " is" | " are")
+        const ending = ((length(actors) > 1 || actors[1]['plural]) ? " are" | " is")
           + (sleeping ? " deeply asleep." | " here.");
-        "Sleeping is already expressed by the sentence, so use the captured bare name.";
+        "Sleeping is already expressed by the sentence, so omit the status suffix.";
         const labels = sleeping ? {sleeping_actor['bare] for sleeping_actor in (actors)} | actors;
         blocks = {@blocks, $document_node:mk('paragraph, {
-          @$look:_join(labels), @$format:literal_inline(ending)})};
+          @$document_resolver:_capitalize($look:_join(labels))[1],
+          @$format:literal_inline(ending)})};
       endif
     endfor
     let event = toflyweight($event, flyslots(view['event]), blocks);

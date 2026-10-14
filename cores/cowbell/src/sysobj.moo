@@ -247,13 +247,21 @@ object SYSOBJ [
     return this:_command_handler(command, env);
   endmethod
 
+  method _parse_command owner: ARCH_WIZARD
+    "Query object naming hooks with the command player's authority before privileged dispatch.";
+    caller == this || raise(E_PERM);
+    set_task_perms(player);
+    const {command, scope} = args;
+    return $match:parse_command(command, scope, player);
+  endmethod
+
   method _command_handler owner: ARCH_WIZARD
     "The wizard-permissioned portion of the custom command handler";
     caller == this || raise(E_PERM);
     {command, match_env} = args;
     "Parse command using match environment (all visible objects for dobj/iobj matching)";
     try
-      pc = parse_command(command, match_env, true, 0.3);
+      pc = this:_parse_command(command, match_env);
     except e (ANY)
       "parse_command failed - report to programmers, friendly message to others";
       if (player.programmer || player.wizard)

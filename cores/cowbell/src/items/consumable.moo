@@ -10,17 +10,17 @@ object CONSUMABLE [
   readable: true
 
   property consume_denied_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "can't", .for_others = "can't">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "can't", .singular_form = "can't">,
     " consume ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
   };
   property consume_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "consume", .for_others = "consumes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "consume", .singular_form = "consumes">,
     " ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
@@ -28,12 +28,12 @@ object CONSUMABLE [
   property consume_rule (owner: ARCH_WIZARD, flags: "rc") = 0;
   property empty_msg (owner: ARCH_WIZARD, flags: "rc") = {
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
-    " is empty."
+    " ", <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">, " empty."
   };
   property finish_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "finish", .for_others = "finishes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "finish", .singular_form = "finishes">,
     " ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
@@ -69,11 +69,11 @@ object CONSUMABLE [
     "### Message Templates",
     "",
     "```",
-    "@set-message potion.consume_msg {nc} {drink|drinks} {the d}, feeling magic flow through {o}.",
-    "@set-message potion.finish_msg {nc} {drain|drains} the last drops from {the d}.",
+    "@set-message potion.consume_msg {The actor} {agree actor name:drink|drinks} {the d}, feeling magic flow through {o}.",
+    "@set-message potion.finish_msg {The actor} {agree actor name:drain|drains} the last drops from {the d}.",
     "```",
     "",
-    "Available tokens: `{n}` actor, `{d}` direct object, `{the d}` with article, `{verb|verbs}` self-alt",
+    "Available tokens: `{n}` actor, `{the d}` direct object, `{the d}` with article, `{agree actor name:verb|verbs}` self-alt",
     "",
     "## Rules",
     "",

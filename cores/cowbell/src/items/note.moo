@@ -11,31 +11,31 @@ object NOTE [
 
   property content_kind (owner: ARCH_WIZARD, flags: "rc") = 'literal;
   property erase_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "erase", .for_others = "erases">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "erase", .singular_form = "erases">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property read_denied_msg (owner: ARCH_WIZARD, flags: "rc") = {"You can't read that."};
   property read_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "read", .for_others = "reads">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "read", .singular_form = "reads">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property read_rule (owner: ARCH_WIZARD, flags: "rc") = 0;
   property text (owner: ARCH_WIZARD, flags: "c") = {};
   property write_denied_msg (owner: ARCH_WIZARD, flags: "rc") = {"You can't write on that."};
   property write_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "write", .for_others = "writes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "write", .singular_form = "writes">,
     " on ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property write_rule (owner: ARCH_WIZARD, flags: "rc") = 0;
@@ -94,7 +94,7 @@ object NOTE [
     "",
     "```moo",
     "letter = create($note);",
-    "letter.name = \"a sealed letter\";",
+    "letter.name = \"sealed letter\";",
     "letter.description = \"A letter sealed with red wax.\";",
     "letter:set_text({\"Dear friend,\", \"\", \"Meet me at midnight.\", \"\", \"- A\"});",
     "@set-rule letter.read_rule This owner_is(Accessor)?",
@@ -104,7 +104,7 @@ object NOTE [
     "",
     "```moo",
     "sign = create($note);",
-    "sign.name = \"a wooden sign\";",
+    "sign.name = \"wooden sign\";",
     "sign.description = \"A weathered wooden sign.\";",
     "sign:set_text({\"Welcome to Cowbell!\", \"Population: Growing\"});",
     "@set-rule sign.get_rule NOT true",
@@ -280,7 +280,7 @@ object NOTE [
     "Write on this note";
     set_task_perms(caller_perms());
     if (!dobjstr || dobjstr == "")
-      event = $event:mk_error(player, "Write what on ", $sub:i(), "?"):with_iobj(this);
+      event = $event:mk_error(player, "Write what on ", $sub:the('iobj), "?"):with_iobj(this);
       player:inform_current(event);
       return;
     endif

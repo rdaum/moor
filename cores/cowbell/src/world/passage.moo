@@ -980,8 +980,10 @@ object PASSAGE [
     if (!length(parts))
       const action = operation == 'open && passage.is_locked ? "unlock and open" | tostr(operation);
       const other_action = operation == 'open && passage.is_locked ? "unlocks and opens" | tostr(operation) + "s";
-      parts = {<$sub, .type = 'actor, .capitalize = true>, " ",
-        <$sub, .type = 'self_alt, .for_self = action, .for_others = other_action>, " the ", label, "."};
+      const direction = from_room == passage.side_a_room ? passage.side_a_label | passage.side_b_label;
+      const descriptor = $room:_passage_annotation(from_room, updated, direction);
+      const reference = $format.annotation:mk("the " + label, descriptor);
+      parts = {$sub:thec('actor), " ", $sub:agree('actor, 'name, action, other_action), " ", reference, "."};
     endif
     const event = $event:mk_info(who, @parts):with_this(from_room)
       :with_text_binding('direction, from_room == passage.side_a_room ? passage.side_a_label | passage.side_b_label)
@@ -1048,11 +1050,8 @@ object PASSAGE [
     "Name a door from stored side fields without calling its custom delegate.";
     const {passage, from_room} = args;
     const label = from_room == passage.side_a_room ? passage.side_a_label | passage.side_b_label;
-    if (label:lowercase() in {"north", "south", "east", "west", "northeast", "northwest",
-        "southeast", "southwest", "up", "down", "in", "out"})
-      return label + " door";
-    endif
-    return label != "" ? label | "door";
+    const kind = passage.is_door ? "door" | "passage";
+    return label != "" ? kind + " " + toliteral(label) | kind;
   endmethod
 
   method test_description_formats_are_explicit owner: HACKER

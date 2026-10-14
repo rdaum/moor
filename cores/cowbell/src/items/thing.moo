@@ -11,25 +11,23 @@ object THING [
 
   property drop_denied_msg (owner: HACKER, flags: "rc") = {"You can't drop that."};
   property drop_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " dropped ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property drop_rule (owner: HACKER, flags: "rc") = 0;
   property get_denied_msg (owner: HACKER, flags: "rc") = {"You can't pick that up."};
   property get_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " picked up ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property get_rule (owner: HACKER, flags: "rc") = 0;
-  property indefinite_article (owner: HACKER, flags: "rc") = "";
+  override noun_kind = 'count;
+  property listing_form (owner: HACKER, flags: "rc") = 'indefinite;
   property integrated_description (owner: HACKER, flags: "rc") = "";
-  property is_countable_noun (owner: HACKER, flags: "rc") = true;
-  property is_plural_noun (owner: HACKER, flags: "rc") = false;
-  property is_proper_noun_name (owner: HACKER, flags: "rc") = false;
   property portable (owner: HACKER, flags: "rc") = true;
   property pronouns (owner: HACKER, flags: "rc") = <PRONOUNS, .verb_be = "is", .verb_have = "has", .is_plural = false, .display = "it/its", .ps = "it", .po = "it", .pp = "its", .pq = "its", .pr = "itself">;
   property unlocks (owner: HACKER, flags: "rc") = #-1;
@@ -44,30 +42,16 @@ object THING [
     "",
     "## Properties",
     "",
-    "### pronouns",
+    "### Names and grammar",
     "",
-    "Grammatical properties for this object (pronouns, plurality, noun type).",
-    "",
-    "- Default: it/its pronouns, singular, countable",
-    "- Can be customized per item or use preset pronoun objects",
-    "",
-    "### is_plural_noun",
-    "",
-    "Whether this object should be treated as grammatically plural.",
-    "",
-    "- Default: `false`",
-    "",
-    "### is_countable_noun",
-    "",
-    "Whether this object can use articles like 'a' or 'the'.",
-    "",
-    "- Default: `true`",
-    "",
-    "### is_proper_noun_name",
-    "",
-    "Whether this object is a proper noun (like a name) that doesn't need articles.",
-    "",
-    "- Default: `false`",
+    "Store a name such as pet rock without a generated article. Put shorter command names in aliases.",
+    "Things inherit noun_kind = 'count and noun_number = 'singular: a pet rock, the pet rock is here.",
+    "Use @grammar boots number plural for some boots, and @grammar water kind mass for some water.",
+    "Use @grammar Henri kind name for a complete name. Actors already inherit this choice.",
+    "Use @grammar box listing definite to introduce the box in room and contents lists.",
+    "indefinite_article is empty for automatic a/an; @grammar scanner article an overrides pronunciation.",
+    "@grammar OBJECT shows settings, inheritance, and preview sentences. Use help @grammar for details.",
+    "Pronouns remain separate. The default pronouns for a thing are it/its.",
     "",
     "### integrated_description",
     "",
@@ -83,14 +67,14 @@ object THING [
     "Customize using the `@set-message` command:",
     "",
     "```",
-    "@set-message sword.get_msg {nc} {grasp|grasps} {d} firmly.",
-    "@set-message sword.drop_msg {nc} {release|releases} {d} carefully.",
+    "@set-message sword.get_msg {The actor} {agree actor name:grasp|grasps} {the d} firmly.",
+    "@set-message sword.drop_msg {The actor} {agree actor name:release|releases} {the d} carefully.",
     "```",
     "",
     "Template tokens:",
-    "- `{nc}` - Actor name (capitalized)",
-    "- `{grasp|grasps}` - Self-alternation verb",
-    "- `{d}` - Direct object (the item)",
+    "- `{The actor}` - Actor noun phrase (capitalized)",
+    "- `{agree actor name:grasp|grasps}` - Agreement with the actor name",
+    "- `{the d}` - Definite reference to the item",
     "",
     "## Commands",
     "",
@@ -117,17 +101,12 @@ object THING [
     "",
     "Returns the pronoun set for this object.",
     "",
-    "### is_plural()",
+    "### Naming verbs",
     "",
-    "Returns whether this object is grammatically plural.",
-    "",
-    "### is_countable()",
-    "",
-    "Returns whether this object is countable (can use articles).",
-    "",
-    "### is_proper_noun()",
-    "",
-    "Returns whether this object is a proper noun.",
+    "noun_phrase(form, viewer) returns a label, bare, definite, indefinite, or listing phrase.",
+    "noun_grammar(viewer) returns kind, number, and article. listing_form(viewer) selects a list form.",
+    "match_names(context) returns accepted names. Override these verbs on a prototype for custom behavior.",
+    "Queries must not mutate or suspend. Messages and lists capture their answers locally for one output.",
     "",
     "### integrate_description()",
     "",
@@ -137,7 +116,7 @@ object THING [
     "",
     "```moo",
     "sword = create($thing);",
-    "sword:set_name(\"a gleaming sword\");",
+    "sword:set_name(\"gleaming sword\");",
     "sword.description = \"A well-crafted sword with a sharp blade.\";",
     "sword.integrated_description = \"a sword lies here, glinting in the light\";",
     "```"
@@ -167,24 +146,6 @@ object THING [
     "Return the validated pronoun set for this object.";
     set_task_perms(caller_perms());
     return $pronouns:validate(this.pronouns);
-  endmethod
-
-  method is_plural owner: ARCH_WIZARD
-    "Returns whether this object should be treated as a plural noun.";
-    "Things are singular by default but can be set to plural.";
-    return this.is_plural_noun;
-  endmethod
-
-  method is_countable owner: ARCH_WIZARD
-    "Returns whether this object is countable in English grammar.";
-    "Things are countable by default (can use 'a' or 'the').";
-    return this.is_countable_noun;
-  endmethod
-
-  method is_proper_noun owner: ARCH_WIZARD
-    "Returns whether this object should be treated as a proper noun.";
-    "Things are common nouns by default, not proper nouns.";
-    return this.is_proper_noun_name;
   endmethod
 
   method integrate_description owner: ARCH_WIZARD
@@ -413,9 +374,8 @@ object THING [
     thing = this:create(true);
     thing.name = "test pebble";
     $test_utils:assert_eq(thing:pronouns(), this.pronouns, "things should inherit default pronouns");
-    $test_utils:assert_false(thing:is_plural(), "things should be singular by default");
-    $test_utils:assert_true(thing:is_countable(), "things should be countable by default");
-    $test_utils:assert_false(thing:is_proper_noun(), "things should not be proper nouns by default");
+    $test_utils:assert_eq(thing:noun_grammar(player),
+      ['kind -> 'count, 'number -> 'singular, 'article -> ""], "Singular count noun");
     $test_utils:assert_eq(thing:pronoun_subject(), "it", "default subject pronoun");
     $test_utils:assert_eq(thing:pronoun_object(), "it", "default object pronoun");
     $test_utils:assert_eq(thing:pronoun_possessive('adj), "its", "default possessive adjective");

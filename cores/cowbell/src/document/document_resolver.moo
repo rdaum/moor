@@ -34,7 +34,7 @@ object DOCUMENT_RESOLVER [
     typeof(facts) == TYPE_MAP || raise(E_TYPE, "Event facts must be a map");
     const context = ['viewer -> viewer, 'principal -> caller_perms(), 'event -> facts];
     const {resolved, state} = $document_resolver:_sequence(
-      blocks, 'block, context, "document.blocks", 1, ['expansions -> 0]);
+      blocks, 'block, context, "document.blocks", 1, ['expansions -> 0, 'subjects -> []]);
     return $document:mk(resolved);
   endmethod
 
@@ -72,7 +72,9 @@ object DOCUMENT_RESOLVER [
       typeof(value) == TYPE_FLYWEIGHT || raise(E_INVARG, path + ": expected content node");
       if (value.delegate == $sub)
         expected == 'inline || raise(E_INVARG, path + ": substitution requires inline content");
-        expansion = value:resolve_inline(context);
+        const {inline, next_state} = value:resolve_with_state(context, state);
+        expansion = inline;
+        state = next_state;
       else
         value.delegate in {$document_node, $document_template}
           || raise(E_INVARG, path + ": use an explicit producer constructor for custom content");
@@ -171,6 +173,34 @@ object DOCUMENT_RESOLVER [
       return {{fields}, state};
     endif
     return {{toflyweight($document_node, fields, resolved_contents)}, state};
+  endmethod
+
+  method capture_subject owner: ARCH_WIZARD
+    "Read one object answer once within a resolution. Return {answer, local capture map}.";
+    set_task_perms(caller_perms());
+    const {target, viewer, request, subjects} = args;
+    (typeof(target) == TYPE_OBJ && valid(target)) || raise(E_INVARG, "Invalid naming subject.");
+    let perspectives = maphaskey(subjects, target) ? subjects[target] | [];
+    let captured = maphaskey(perspectives, viewer) ? perspectives[viewer] | [];
+    if (maphaskey(captured, request))
+      return {captured[request], subjects};
+    endif
+    let answer;
+    if (request == 'grammar)
+      answer = $root:_validate_noun_grammar(target:noun_grammar(viewer));
+    elseif (request == 'pronouns)
+      answer = $pronouns:validate(target:pronouns());
+    else
+      request in {'label, 'bare, 'definite, 'indefinite, 'listing}
+        || raise(E_INVARG, "Unknown naming request.");
+      answer = target:noun_phrase(request, viewer);
+      typeof(answer) == TYPE_STR || raise(E_TYPE, "noun_phrase must return literal text.");
+    endif
+    captured[request] = answer;
+    let result = subjects;
+    perspectives[viewer] = captured;
+    result[target] = perspectives;
+    return {answer, result};
   endmethod
 
   method binding owner: HACKER

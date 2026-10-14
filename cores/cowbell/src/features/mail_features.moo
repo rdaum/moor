@@ -30,12 +30,8 @@ object MAIL_FEATURES [
     const actor = caller_perms();
     actor == #-1 && caller == player || actor == player || (valid(actor) && actor.wizard) || raise(E_PERM);
     const letter = create($letter, player);
-    "Set subject if provided";
-    if (dobjstr && dobjstr != "")
-      letter.name = dobjstr;
-    else
-      letter.name = "letter";
-    endif
+    letter.name = "letter";
+    letter.subject = dobjstr;
     "Set addressee if 'to' preposition used";
     if (prepstr == "to" && iobjstr)
       "Use match_player to find players anywhere, not just nearby";
@@ -50,10 +46,10 @@ object MAIL_FEATURES [
     move(letter, player);
     "Build confirmation message";
     if (valid(letter.addressee))
-      if (letter.name != "letter")
-        player:inform_current($event:mk_info(player, "You have a letter titled '", letter.name, "' addressed to ", letter.addressee.name, ". Write on it to compose your message."));
+      if (letter.subject)
+        player:inform_current($event:mk_info(player, "You have a letter titled '", letter.subject, "' addressed to ", $sub:reference(letter.addressee), ". Write on it to compose your message."));
       else
-        player:inform_current($event:mk_info(player, "You have a letter addressed to ", letter.addressee.name, ". Write on it to compose your message."));
+        player:inform_current($event:mk_info(player, "You have a letter addressed to ", $sub:reference(letter.addressee), ". Write on it to compose your message."));
       endif
     else
       player:inform_current($event:mk_info(player, "You have a fresh letter ready to write on."));
@@ -90,7 +86,7 @@ object MAIL_FEATURES [
     "Find recipient's mailbox";
     let recipient_mailbox = recipient:find_mailbox();
     if (!valid(recipient_mailbox))
-      player:inform_current($event:mk_error(player, recipient.name, " doesn't have a mailbox."));
+      player:inform_current($event:mk_error(player, $sub:capitalize($sub:reference(recipient)), " ", $sub:agree('iobj, 'name, "do not", "does not"), " have a mailbox."):with_iobj(recipient));
       return;
     endif
     "Mailbox lookup may suspend or change custody; validate its result without callbacks.";
@@ -108,10 +104,10 @@ object MAIL_FEATURES [
     if (!valid(dobj.author))
       dobj.author = player;
     endif
-    player:inform_current($event:mk_info(player, "You send ", dobj.name, " to ", recipient.name, "."));
+    player:inform_current($event:mk_info(player, "You send ", $sub:reference(dobj), " to ", $sub:reference(recipient), "."));
     "Notify recipient if online";
     if (recipient in connected_players() && recipient != player)
-      const event = $event:mk_info(recipient, "You have new mail from ", $format.annotation:object(player), "."):as_inset();
+      const event = $event:mk_info(recipient, "You have new mail from ", $sub:reference(player), "."):as_inset();
       `recipient:tell(event) ! ANY';
     endif
   endverb

@@ -9,17 +9,17 @@ true
 % open
 =Open what?
 % open east
-=You unlock and open the east door.
+=You unlock and open the door "east".
 @event data:state room_snapshot
 @event text/plain utility
 % open east
-=The east door is already open.
+=The door "east" is already open.
 % close east
-=You close the east door.
+=You close the door "east".
 % unlock east
-=The east door is already unlocked.
+=The door "east" is already unlocked.
 % lock east
-=You lock the east door.
+=You lock the door "east".
 @wizard
 ; const p = $room:find_passage(#90103, "east"); return {p.is_open, p.is_locked, $room:find_passage(#90103, "stairs").is_open};
 {false, true, true}
@@ -29,17 +29,17 @@ true
 % unlock east with brass key
 =You are not carrying that key.
 % unlock east
-=You cannot unlock the east door.
+=You cannot unlock the door "east".
 @wizard
 ; move(#90100.runtime_probe, #90102); return true;
 true
 @nonprogrammer
 % unlock east with brass key
-=You unlock the east door.
+=You unlock the door "east".
 % lock east with brass key
-=You lock the east door.
+=You lock the door "east".
 % open east with brass key
-=You unlock and open the east door.
+=You unlock and open the door "east".
 @wizard
 ; const p = $room:find_passage(#90103, "east"); return {p.is_open, p.is_locked};
 {true, false}

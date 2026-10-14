@@ -8,6 +8,11 @@ Cowbell entries.
 
 ### Added
 
+- Objects control noun phrases, grammar, and matching names through inherited verbs. `@grammar` lets
+  builders inspect and edit articles, plural names, and room-listing preferences. Rooms, inventory,
+  clothing, and stock messages share those choices. Articles work in commands and completion without
+  fuzzy matching. See the [naming lesson](docs/names-and-grammar.md).
+
 - Builders can send events between objects, use named messages and message bags in reaction steps,
   and direct owned NPCs with `@act`. `@schedule` can send recurring events with optional timing
   variation. `@exit-provider` lists, approves, refreshes, and removes custom room exits.
@@ -70,6 +75,12 @@ Cowbell entries.
 - Add `list:find_index(predicate)` to distinguish a matching value of zero from no match.
 
 ### Changed
+
+- The naming API replaces `is_plural()`, `is_countable()`, `is_proper_noun()` and their item flags
+  with `noun_grammar()`, `noun_phrase()`, `listing_form()`, and `match_names()`. Custom prototypes
+  must update old overrides. Indefinite mass and plural nouns now use “some.”
+- Letter subjects use `.subject`; their physical name is `letter`. Mailbox lists and readers retain
+  the subject. Default door messages quote their side labels, such as `the door "north"`.
 
 - Henri and his cupboard, kibble, key, and couch are now tutorial content. New core imports no
   longer contain those objects or their system aliases. The travel example rooms remain included.

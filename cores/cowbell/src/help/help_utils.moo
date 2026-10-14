@@ -247,10 +247,10 @@ object HELP_UTILS [
     content = {};
     location = player_obj.location;
     area = location.location;
-    location_name = `location:display_name() ! ANY => "somewhere"';
+    location_name = `location:noun_phrase('definite, player_obj) ! ANY => "somewhere"';
     location_desc = {"You are in ", $format.annotation:object(location, location_name)};
     if (valid(area))
-      area_name = `area:display_name() ! ANY => "somewhere"';
+      area_name = `area:noun_phrase('definite, player_obj) ! ANY => "somewhere"';
       location_desc = {@location_desc, " in ", $format.annotation:object(area, area_name)};
     endif
     content = {@content, $format.paragraph:mk(@location_desc)};
@@ -259,7 +259,7 @@ object HELP_UTILS [
     if (inventory && length(inventory) > 0)
       inv_names = {};
       for item in (inventory)
-        inv_names = {@inv_names, @length(inv_names) ? {", "} | {}, $format.annotation:object(item, `item:display_name() ! ANY => "something"')};
+        inv_names = {@inv_names, @length(inv_names) ? {", "} | {}, $sub:reference(item, 'listing)};
       endfor
       content = {@content, $format.paragraph:mk("You are carrying ", @inv_names, ".")};
     endif
@@ -298,9 +298,9 @@ object HELP_UTILS [
     if (nearby_items && length(nearby_items) > 0)
       nearby_names = {};
       for item in (nearby_items)
-        nearby_names = {@nearby_names, @length(nearby_names) ? {", "} | {}, $format.annotation:object(item, `item:display_name() ! ANY => "something"')};
+        nearby_names = {@nearby_names, @length(nearby_names) ? {", "} | {}, $sub:reference(item, 'listing)};
       endfor
-      content = {@content, $format.paragraph:mk("Around you there is ", @nearby_names, ".")};
+      content = {@content, $format.paragraph:mk("Around you: ", @nearby_names, ".")};
     endif
     return $format.block:mk(@content);
   endmethod

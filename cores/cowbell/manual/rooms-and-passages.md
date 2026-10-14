@@ -80,7 +80,7 @@ The connection starts open. Turn it into a door, then create its key:
 % @set-passage east access key is workshopkey
 =Set east access condition.
 % lock east
-=You lock the east door.
+=You lock the door "east".
 ```
 
 The access condition compares the supplied key with `workshopkey`. The door looks through your
@@ -93,7 +93,7 @@ Try opening it with your key:
 
 ```moot
 % open east with workshopkey
-=You unlock and open the east door.
+=You unlock and open the door "east".
 ```
 
 You can also use conditions such as `actor is me`, `always`, or a relation condition from the
@@ -113,7 +113,7 @@ To change the door's wording, use `open_msg`, `close_msg`, `lock_msg`, or `unloc
 % @set-passage east close_msg clear
 =Set east close_msg.
 % open east
-=You open the east door.
+=You open the door "east".
 ```
 
 These are message templates. They can name the actor, `{direction}`, and `{passage}`. An invalid
@@ -230,3 +230,13 @@ remain visible from both ends. Moving a room does not grant control of a neighbo
 
 Inspect `@passage DIRECTION` before changing or removing a connection. Tell the other room's author
 before you remove a shared route. Recycling a room also removes its connections.
+
+## Names in room descriptions
+
+Rooms and areas inherit complete-name grammar, so titles such as `The First Room` remain unchanged.
+Objects choose their own listing phrases. Use `@grammar box listing definite` for “the box,” or
+`@grammar boots number plural` for “some boots.” A collective actor also takes plural agreement. See
+the [naming lesson](../docs/names-and-grammar.md) for examples.
+
+Passage labels are travel choices, not object nouns. Default operation messages identify a door as
+`the door "east"`. Custom passage messages can say “the brass door” when that fits the scene.

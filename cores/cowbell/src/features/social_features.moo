@@ -24,9 +24,9 @@ object SOCIAL_FEATURES [
         player:inform_current($event:mk_error(player, msg));
         return;
       endtry
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("nod", "nods"), " ", prepstr, " ", $sub:i(), "."):with_iobj(target):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "nod", "nods"), " ", prepstr, " ", $sub:the('iobj), "."):with_iobj(target):with_this(player.location);
     else
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("nod", "nods"), "."):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "nod", "nods"), "."):with_this(player.location);
     endif
     player.location:announce(event);
   endverb
@@ -45,9 +45,9 @@ object SOCIAL_FEATURES [
         player:inform_current($event:mk_error(player, msg));
         return;
       endtry
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("wave", "waves"), " ", prepstr, " ", $sub:i(), "."):with_iobj(target):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "wave", "waves"), " ", prepstr, " ", $sub:the('iobj), "."):with_iobj(target):with_this(player.location);
     else
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("wave", "waves"), "."):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "wave", "waves"), "."):with_this(player.location);
     endif
     player.location:announce(event);
   endverb
@@ -66,9 +66,9 @@ object SOCIAL_FEATURES [
         player:inform_current($event:mk_error(player, msg));
         return;
       endtry
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("bow", "bows"), " ", prepstr, " ", $sub:i(), "."):with_iobj(target):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "bow", "bows"), " ", prepstr, " ", $sub:the('iobj), "."):with_iobj(target):with_this(player.location);
     else
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("bow", "bows"), "."):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "bow", "bows"), "."):with_this(player.location);
     endif
     player.location:announce(event);
   endverb
@@ -91,9 +91,9 @@ object SOCIAL_FEATURES [
       return;
     endtry
     if (target == player)
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("bonk", "bonks"), " ", $sub:self_alt("yourself", "themselves"), "."):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "bonk", "bonks"), " ", $sub:r(), "."):with_this(player.location);
     else
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("bonk", "bonks"), " ", $sub:d(), "."):with_dobj(target):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "bonk", "bonks"), " ", $sub:the('dobj), "."):with_dobj(target):with_this(player.location);
     endif
     player.location:announce(event);
   endverb
@@ -122,9 +122,9 @@ object SOCIAL_FEATURES [
         player:inform_current($event:mk_error(player, msg));
         return;
       endtry
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("smile", "smiles"), " ", prepstr, " ", $sub:i(), "."):with_iobj(target):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "smile", "smiles"), " ", prepstr, " ", $sub:the('iobj), "."):with_iobj(target):with_this(player.location);
     else
-      event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("smile", "smiles"), "."):with_this(player.location);
+      event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "smile", "smiles"), "."):with_this(player.location);
     endif
     player.location:announce(event);
   endverb
@@ -135,7 +135,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("frown", "frowns"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "frown", "frowns"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -145,7 +145,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("laugh", "laughs"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "laugh", "laughs"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -155,7 +155,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("dance", "dances"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "dance", "dances"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -165,7 +165,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("shrug", "shrugs"), " ", $sub:self_alt("your", $sub:p()), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "shrug", "shrugs"), " ", $sub:p(), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -190,7 +190,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("ponder", "ponders"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "ponder", "ponders"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -200,7 +200,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("clap", "claps"), " ", $sub:self_alt("your", $sub:p()), " hands."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "clap", "claps"), " ", $sub:p(), " hands."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -210,7 +210,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("cheer", "cheers"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "cheer", "cheers"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -220,7 +220,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("sigh", "sighs"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "sigh", "sighs"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -230,7 +230,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("yawn", "yawns"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "yawn", "yawns"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -240,7 +240,7 @@ object SOCIAL_FEATURES [
     if (!valid(player.location))
       return;
     endif
-    event = $event:mk_social(player, $sub:nc(), " ", $sub:self_alt("stretch", "stretches"), "."):with_this(player.location);
+    event = $event:mk_social(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "stretch", "stretches"), "."):with_this(player.location);
     player.location:announce(event);
   endverb
 
@@ -251,7 +251,7 @@ object SOCIAL_FEATURES [
       return;
     endif
     content = verb[2..$] + " " + argstr;
-    event = $event:mk_pasteline(player, $sub:nc(), " | ", content);
+    event = $event:mk_pasteline(player, $sub:thec('actor), " | ", content);
     player.location:announce(event);
   endverb
 
@@ -264,7 +264,7 @@ object SOCIAL_FEATURES [
     url = verb + argstr;
     "Fetch preview metadata";
     preview = `$url_utils:fetch_preview(url) ! ANY => false';
-    event = $event:mk_url_share(player, $sub:nc(), " ", $sub:self_alt("share", "shares"), ": ", url):with_metadata('url, url):with_presentation_hint('inset);
+    event = $event:mk_url_share(player, $sub:thec('actor), " ", $sub:agree('actor, 'name, "share", "shares"), ": ", url):with_metadata('url, url):with_presentation_hint('inset);
     "Attach preview if we got useful data";
     if (typeof(preview) == TYPE_MAP && (preview["title"] || preview["description"] || preview["image"]))
       event = event:with_metadata('link_preview, preview);
@@ -288,7 +288,7 @@ object SOCIAL_FEATURES [
       player:inform_current($event:mk_error(player, "Paste content is greater than 25 lines, too long."));
       return;
     endif
-    event = $event:mk_paste(player, $format.title:mk({$sub:nc(), " ", $sub:self_alt("paste", "pastes")}, 4), $format.code:mk(content)):with_presentation_hint('inset):with_group('paste);
+    event = $event:mk_paste(player, $format.title:mk({$sub:thec('actor), " ", $sub:agree('actor, 'name, "paste", "pastes")}, 4), $format.code:mk(content)):with_presentation_hint('inset):with_group('paste);
     player.location:announce(event);
   endverb
 

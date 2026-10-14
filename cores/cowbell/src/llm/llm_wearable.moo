@@ -108,10 +108,10 @@ object LLM_WEARABLE [
     if (player != this.owner && !player.wizard)
       "Announce the violation to the room";
       if (valid(player.location))
-        event = $event:mk_info(player, this:name(), " emits a sharp warning tone as ", $sub:n(), " ", $sub:self_alt("attempt", "attempts"), " to ", action, " it, rejecting the unauthorized user."):with_this(player.location);
+        event = $event:mk_info(player, $sub:capitalize($sub:reference(this)), " ", $sub:agree('dobj, 'name, "emit", "emits"), " a sharp warning tone as ", $sub:the('actor), " ", $sub:agree('actor, 'name, "attempt", "attempts"), " to ", action, " it, rejecting the unauthorized user."):with_this(player.location):with_dobj(this);
         player.location:announce(event);
       else
-        player:inform_current($event:mk_error(player, this:name(), " refuses to attune to you. The device is bonded to its rightful owner and will not respond to unauthorized use."));
+        player:inform_current($event:mk_error(player, $sub:capitalize($sub:reference(this)), " ", $sub:agree('dobj, 'name, "refuse", "refuses"), " to attune to you. The device is bonded to its rightful owner and will not respond to unauthorized use."):with_dobj(this));
       endif
       return;
     endif
@@ -1087,7 +1087,7 @@ object LLM_WEARABLE [
     const wearing_check = is_member(this, request_principal.wearing);
     const carrying_check = !this.requires_wearing_only && is_member(this, request_principal.contents);
     if (!wearing_check && !carrying_check)
-      error_msg = this.requires_wearing_only ? "You have to wear " + this:name() + " first." | "You have to wear or carry " + this:name() + " first.";
+      error_msg = this.requires_wearing_only ? "You have to wear " + this:noun_phrase('definite, player) + " first." | "You have to wear or carry " + this:noun_phrase('definite, player) + " first.";
       request_principal:inform_current($event:mk_error(request_principal, error_msg));
       return;
     endif

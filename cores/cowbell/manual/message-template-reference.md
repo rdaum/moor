@@ -77,7 +77,7 @@ The syntax is `{agree BINDING FORM:PLURAL|SINGULAR}`:
 - `FORM` is `name` or `pronoun`, matching how the sentence refers to its subject.
 - `PLURAL` and `SINGULAR` are literal words or phrases. They cannot contain nested substitutions.
 
-Name agreement reads the object's `is_plural()` result. Pronoun agreement reads
+Name agreement reads the object's `noun_grammar(viewer)['number]` result. Pronoun agreement reads
 `pronouns.is_plural`. The subject's own view always uses the plural form, as in “you are.” Thus
 singular Alex using `they/them` gives “Alex is” or “They are,” depending on the chosen subject.
 Missing object roles produce placeholders. Text bindings cannot supply grammar.
@@ -98,28 +98,69 @@ capitalizes a named text binding. `{cap {you|they}}` capitalizes the selected al
 
 ## Articles
 
-`{a d}` or `{an d}` inserts an indefinite article and the direct object's name. `{the d}` inserts
-the definite article and the name. Both return “you” for the object itself and omit articles for
-proper names. Indefinite articles are also omitted for plural and uncountable nouns.
+`{the d}` asks the direct object for its definite phrase, such as “the box.” `{a d}` and `{an d}`
+ask for its indefinite phrase: “a box,” “an apple,” “some boots,” or “some water.” `{listing d}`
+uses the object's preferred form for room and contents lists. Complete names such as Henri and Ada's
+mailbox acquire no article. For the object itself, prose references become “you.”
 
-These forms accept other object roles and named object bindings, such as `{the i}` or `{a gift}`.
-They do not accept text bindings. For a text binding `direction`, use `{direction}` with any
-required surrounding words: `to the {direction}`.
+These operations accept object roles and named object bindings, such as `{the i}` or `{a gift}`.
+They reject text bindings. A direction is text, so `{direction}` inserts its authored label
+unchanged.
 
-`{A d}` and `{The d}` capitalize the whole phrase. `{the dc}` capitalizes only the object's name.
-Only `nc`, `dc`, `ic`, `tc`, and `lc` have the article-specific capitalization suffix. Names such as
-`relic` remain intact.
+`{A d}`, `{The d}`, and `{Listing d}` capitalize the whole phrase. `{the dc}` capitalizes the name
+after its article. Only the short forms `nc`, `dc`, `ic`, `tc`, and `lc` have that suffix; a binding
+called `relic` remains intact.
 
-The object supplies `is_proper_noun()`, `is_plural()`, and `is_countable()`. On things, these read
-`is_proper_noun_name`, `is_plural_noun`, and `is_countable_noun`.
+Builders use `@grammar` to configure ordinary objects. See the
+[naming tutorial](../docs/names-and-grammar.md). The spelling helper selects “an hour” and “a user.”
+`article an` or `article a` overrides the choice for a singular count noun. `article auto` restores
+automatic selection. It cannot force an article onto a complete name, mass noun, or plural noun.
 
-Automatic `a`/`an` selection uses spelling and common pronunciation exceptions, such as “hour” and
-“user.” Set a thing's `indefinite_article` to `"a"` or `"an"` to override it. An empty string uses
-the automatic choice. This override covers acronyms and dialect-dependent words such as “herb.” It
-does not force an article onto a proper name, plural noun, or uncountable noun.
+The constructors are `$sub:a('d)`, `$sub:ac('d)`, `$sub:the('d)`, `$sub:thec('d)`,
+`$sub:listing('d)`, and `$sub:listingc('d)`. `$sub:reference(object, form)` refers directly to an
+object when building a list. It resolves for the actual reader and preserves the object link. Its
+default form is `'definite`. `$sub:attribution(object)` uses a third-person definite phrase for an
+emote prefix, including for the actor. This preserves authored continuations such as “waves,” which
+would not agree with “You.” It asks for the phrase with a neutral viewer and still resolves when the
+document does.
 
-The MOO constructors are `$sub:a('d)`, `$sub:ac('d)`, `$sub:the('d)`, and `$sub:thec('d)`. They
-insert the name with its article, exactly like the template tokens.
+### Object naming verbs
+
+All objects inherit the basic interface from `$root`. Settings configure these verbs; callers use
+the verbs rather than reading settings themselves.
+
+| Verb                        | Result                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `noun_grammar(viewer)`      | `['kind -> 'count, 'number -> 'singular, 'article -> ""]`, for example. Kind is count, mass, or name; number is singular or plural.            |
+| `noun_phrase(form, viewer)` | A string for label, bare, definite, indefinite, or listing. Label preserves the literal name even for the viewer.                              |
+| `listing_form(viewer)`      | `'indefinite` or `'definite`. World prototypes expose the inherited `listing_form` preference. Utilities need no such property.                |
+| `match_names(context)`      | A list of accepted names. The default returns the main name and aliases. Explicit scope keys still replace this list.                          |
+| `set_grammar(changes)`      | Validates fields kind, number, article, and listing. The value `'inherit` clears a local setting. Requires owner, wizard, or bearer authority. |
+
+For example, a box prototype can override one phrase for its keeper:
+
+```moo
+const {form, viewer} = args;
+if (form == 'definite && viewer == this.keeper)
+  return "the box you left here";
+endif
+return pass(@args);
+```
+
+Listing calls the object's selected phrase through ordinary verb dispatch, so this override also
+works with definite listing. A grammar override can call `pass(@args)` and change the returned map.
+If the phrase describes a plural subject, report plural number too.
+
+These queries must not mutate or suspend. The resolver captures answers locally for one output,
+shared across bindings to the same object. Formatting that document does not call the object again.
+A later resolution can see a rename. No utility keeps a naming registry or persistent cache. The
+viewer controls perspective, not permissions. Malformed return values cause an authoring error.
+Message previews query the actual host, including its overrides.
+
+Matching consumes at most one leading the, a, an, or some before the normal matcher runs. Exact
+authored names win first. Articles do not widen scope, expose omitted aliases, or select one of
+several matching objects. `the second box` uses the existing ordinal rule; an object literally named
+`the second box` takes precedence.
 
 ## Default participants for object messages
 
@@ -242,7 +283,7 @@ only, for callers that supply their own event context.
 Compile authored template text before making the event:
 
 ```moo
-const parts = $sub_utils:compile("{nc} {pick|picks} up {the d}.");
+const parts = $sub_utils:compile("{The actor} {agree actor name pick|picks} up {the d}.");
 const event = $event:mk_info(player, @parts):with_dobj(item);
 player.location:announce(event);
 ```
@@ -254,7 +295,7 @@ The equivalent programmatic content is:
 
 ```moo
 const event = $event:mk_info(player,
-  $sub:nc(), " ", $sub:self_alt("pick", "picks"), " up ", $sub:the('d), ".")
+  $sub:thec('actor), " ", $sub:agree('actor, 'name, "pick", "picks"), " up ", $sub:the('d), ".")
   :with_dobj(item);
 ```
 
@@ -312,7 +353,8 @@ flyweight: an immutable value containing a delegate and named fields.
 | `display`   | Selector label           | `they/them`      |
 
 `is_plural` here describes agreement. It does not mean that the person is more than one individual.
-An object's noun number is separate: `$thing.is_plural_noun` controls its `is_plural()` result.
+An object's noun number is separate: `noun_grammar(viewer)['number]` reports whether its name is
+singular or plural.
 
 Create a custom set with:
 
@@ -352,3 +394,48 @@ object:pronoun_reflexive();
 ```
 
 For `she/her`, the two possessive calls return `her` and `hers`. Each takes exactly one selector.
+
+## Upgrade an existing world
+
+This is a core API change. Fresh cores use the new settings directly. An existing world must
+preserve its old settings before the update removes their properties.
+
+The conversion helpers are in `$obj_utils`, in `src/utils/obj_utils.moo`. They require wizard
+authority. Install `capture_legacy_naming` and `apply_legacy_naming` from that file before applying
+the rest of the core update. The capture helper uses the old properties; it does not need the new
+naming API.
+
+Capture the objects you will upgrade and retain the returned map. For a small world, a wizard can
+make a checkpoint object:
+
+```moo
+const checkpoint = create($root, player);
+const snapshot = $obj_utils:capture_legacy_naming({$root, @descendants($root)});
+add_property(checkpoint, "snapshot", snapshot, {player, ""});
+return checkpoint;
+```
+
+Keep the returned object identifier. Read its `snapshot['review]` list before proceeding. For a
+larger world, capture batches of objects and retain every batch; do not increase task limits to scan
+the whole database. The helpers store no checkpoint on a utility singleton.
+
+The records preserve local noun settings and pronunciation overrides. Children that inherited old
+settings continue to inherit the corresponding new ones. Complete-name flags take precedence over
+countability. Mailbox records select complete-name grammar. Letter records preserve the old name as
+their subject.
+
+Review names beginning with articles; the conversion does not strip articles or lowercase names.
+Convert custom `is_plural`, `is_countable`, `is_proper_noun`, and article-bearing `display_name`
+overrides into the new object verbs. A record with custom verbs refuses application until you review
+it and clear its `custom` list. Previews and room lists must call the same naming verbs; do not keep
+a separate `display_name` article rule.
+
+Apply the core update, including removal of the obsolete flags and methods. Then pass the saved
+`records` list to `$obj_utils:apply_legacy_naming(records)`. It checks the batch before writing and
+refuses targets whose owner, parent, or name changed. It sets each letter's subject before changing
+its physical name to `letter`. Reapplying the same batch is supported. Retain the checkpoint until
+you verify the results.
+
+Remove any site-defined copies of the three obsolete flags after converting their descendants. Keep
+only the new writable settings. Check custom templates for bare references and singular verbs: use
+`{the d}` for an identified object and `agree` for its subject.

@@ -20,7 +20,7 @@ object SITTABLE [
     " from here."
   };
   property dumped_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'dobj>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>,
     " ",
     <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">,
     " dumped off ",
@@ -39,9 +39,9 @@ object SITTABLE [
   };
   property seats (owner: HACKER, flags: "rc") = 2;
   property sit_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "sit", .for_others = "sits">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "sit", .singular_form = "sits">,
     " on ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'This>,
     "."
@@ -51,7 +51,7 @@ object SITTABLE [
   property sitting_verb (owner: HACKER, flags: "rc") = "sitting";
   property squeeze (owner: HACKER, flags: "rc") = 0;
   property squeezed_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'dobj>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'dobj>,
     " ",
     <SUB, .type = 'agree, .binding_name = 'dobj, .subject_form = 'name, .plural_form = "are", .singular_form = "is">,
     " squeezed off ",
@@ -59,9 +59,9 @@ object SITTABLE [
     "."
   };
   property stand_msg (owner: HACKER, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "stand", .for_others = "stands">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "stand", .singular_form = "stands">,
     " up from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'This>,
     "."
@@ -141,7 +141,7 @@ object SITTABLE [
     "",
     "```moo",
     "chair = create($sittable);",
-    "chair:set_name(\"a cozy armchair\");",
+    "chair:set_name(\"cozy armchair\");",
     "chair.description = \"A worn leather armchair with plush cushions.\";",
     "chair.seats = 1;",
     "chair.squeeze = -1;  // Rigid - only one person fits",
@@ -312,23 +312,30 @@ object SITTABLE [
     endfor
   endverb
 
-  verb sitters_string (none none none) owner: HACKER flags: "rxd"
-    "Return a string describing who is sitting, or empty if nobody.";
-    length(this.sitting) == 0 && return "";
-    names = { sitter:name() for sitter in (this.sitting) };
-    name_list = $list_proto:english_list(names);
-    verb = length(this.sitting) == 1 ? "is" | "are";
-    return name_list + " " + verb + " " + this.sitting_verb + " " + this.sitting_prep + " it.";
-  endverb
+  method sitter_description owner: ARCH_WIZARD
+    "Describe the current sitters with linked phrases and agreement for the whole subject.";
+    set_task_perms(caller_perms());
+    const sitters = {sitter for sitter in (this.sitting) if valid(sitter)};
+    !sitters && return false;
+    let parts = {};
+    for i in [1..length(sitters)]
+      i > 1 && (parts = {@parts, i == length(sitters) ? " and " | ", "});
+      parts = {@parts, $sub:reference(sitters[i])};
+    endfor
+    let event = $event:mk_info(player, $sub:capitalize(parts), " ",
+      length(sitters) > 1 ? "are" | $sub:agree('sitter, 'name, "are", "is"),
+      " ", this.sitting_verb, " ", this.sitting_prep, " ", $sub:reference(this), ".")
+      :with_object_binding('sitter, sitters[1]);
+    return event:resolve(player);
+  endmethod
 
-  verb description (none none none) owner: HACKER flags: "rxd"
-    "Return description, appending sitter info if any.";
-    desc = pass(@args);
-    sitters = this:sitters_string();
-    length(sitters) == 0 && return desc;
-    typeof(desc) == TYPE_LIST && return {@desc, sitters};
-    return desc + " " + sitters;
-  endverb
+  method description owner: ARCH_WIZARD
+    "Append linked sitter prose to the authored description.";
+    set_task_perms(caller_perms());
+    const description = pass(@args);
+    const sitters = this:sitter_description();
+    return typeof(sitters) == TYPE_FLYWEIGHT ? $format.block:mk(description, sitters) | description;
+  endmethod
 
   verb moveto (none none none) owner: ARCH_WIZARD flags: "rxd"
     "Preserve the mover's authority and empty seats only after a successful move.";
@@ -364,12 +371,12 @@ object SITTABLE [
     "Add a sitter directly";
     test_obj.sitting = {player};
     length(test_obj.sitting) == 1 || raise(E_ASSERT, "Should have 1 sitter");
-    "Check sitters_string";
-    sitter_desc = test_obj:sitters_string();
-    index(sitter_desc, "sitting on it") || raise(E_ASSERT, "Should mention sitting: " + sitter_desc);
+    "Check linked sitter description";
+    sitter_desc = $document:render(test_obj:sitter_description(), 'text_plain)['body];
+    index(sitter_desc, "sitting on the test bench") || raise(E_ASSERT, "Should mention sitting: " + sitter_desc);
     "Remove sitter";
     test_obj.sitting = {};
-    test_obj:sitters_string() == "" || raise(E_ASSERT, "Should be empty string");
+    test_obj:sitter_description() == false || raise(E_ASSERT, "Should omit an empty sitter list");
     return true;
   endverb
 

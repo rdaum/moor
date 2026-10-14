@@ -18,6 +18,85 @@ object BUILDER_FEATURES [
     who.is_builder || raise(E_PERM, "Builder features required.");
   endmethod
 
+  verb "@grammar" (any any any) owner: ARCH_WIZARD flags: "rd"
+    "HINT: <object> [kind|number|article|listing VALUE] -- Inspect or set noun grammar.";
+    caller == player || raise(E_PERM);
+    try
+      this:_require_builder_command(player);
+      set_task_perms(player);
+      const words = command_words(argstr);
+      length(words) || raise(E_INVARG, "Usage: @grammar OBJECT [kind|number|article|listing VALUE]. See help @grammar.");
+      const fields = {"kind", "number", "article", "listing"};
+      const editing = length(words) >= 3 && words[$ - 1][1] in fields;
+      const reference = editing ? argstr[1..words[$ - 1][2] - 1]:trim() | argstr;
+      const target = $match:match_object(reference, player);
+      if (editing)
+        const field = tosym(words[$ - 1][1]);
+        const text = words[$][1];
+        const value = text == "inherit" ? 'inherit | field == 'article
+          ? (text == "auto" ? "" | text) | tosym(text);
+        let subject = target;
+        if (target.owner != player && !player.wizard)
+          const capability = player:find_capability_for(target, 'object);
+          typeof(capability) == TYPE_FLYWEIGHT || raise(E_PERM);
+          subject = capability;
+        endif
+        subject:set_grammar([field -> value]);
+        player:inform_current($event:mk_info(player, "Grammar updated for " + target:name() + ".")
+          :with_audience('utility));
+      else
+        player:inform_current($event:mk_info(player, this:_grammar_details(target, player))
+          :with_audience('utility));
+      endif
+    except problem (E_PERM)
+      player:inform_current($event:mk_error(player,
+        "You need builder privileges and permission to edit that object's grammar."):with_audience('utility));
+    except problem (E_INVARG, E_TYPE, E_PROPNF, E_INVIND, E_RANGE)
+      player:inform_current($event:mk_error(player, problem[2]):with_audience('utility));
+    endtry
+  endverb
+
+  method _grammar_details owner: ARCH_WIZARD
+    "Show inherited settings separately from the object's answers for this viewer.";
+    set_task_perms(caller_perms());
+    const {target, viewer} = args;
+    let lines = {"Name: " + target:name(), "Aliases: " + target:aliases():join(", ")};
+    for setting in ({{"Kind", "noun_kind"}, {"Number", "noun_number"},
+      {"Article", "indefinite_article"}, {"Room listing", "listing_form"}})
+      const {label, property} = setting;
+      const value = `target.(property) ! E_PROPNF => E_PROPNF';
+      if (value == E_PROPNF)
+        lines = {@lines, label + ": supplied by listing_form()"};
+        continue;
+      endif
+      let source = target;
+      while (is_clear_property(source, property))
+        source = parent(source);
+      endwhile
+      const description = label == "Article" && value == "" ? "automatic" | tostr(value);
+      const origin = source == target ? "local" | "inherited from " + source:name() + " (" + tostr(source) + ")";
+      lines = {@lines, label + ": " + description + " (" + origin + ")"};
+    endfor
+    let custom = {};
+    for name in ({"noun_phrase", "noun_grammar", "listing_form"})
+      const definer = target:find_verb_definer(name);
+      if (definer != $root)
+        custom = {@custom, name + " on " + tostr(definer)};
+      endif
+    endfor
+    if (custom)
+      lines = {@lines, "Custom behavior: " + custom:join(", ") + ". The examples use these verbs, not just the settings above."};
+    endif
+    const grammar = $root:_validate_noun_grammar(target:noun_grammar(viewer));
+    const phrase = target:noun_phrase('definite, viewer);
+    const agreement = target == viewer || grammar['number] == 'plural ? "are" | "is";
+    lines = {@lines, "Room: You see " + target:noun_phrase('listing, viewer) + " here.",
+      "Action: You examine " + phrase + ".", "Subject: " + phrase:capitalize() + " " + agreement + " here.",
+      "Matching names: " + target:match_names(viewer):join("; "),
+      "Use VALUE inherit to reset a setting; article auto selects a/an automatically. Pronouns use @set-pronouns."};
+    return $format.block:mk(@lines);
+  endmethod
+
   verb "@set-pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"
     "Set an actor's pronouns. Usage: @set-pronouns ACTOR to PRESET|custom.";
     "Requires builder privileges and ownership of the actor, or wizard authority.";

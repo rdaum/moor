@@ -49,7 +49,7 @@ include ../make/core.mk
 
 TEST_BIN_DIR = $(MOORC_BIN_DIR)
 SESSION_RUNNER = $(TEST_BIN_DIR)/core-session-runner
-SESSION_TUTORIALS = docs/object-shortcuts.md docs/programming-with-rules-and-reactions.md docs/henri-and-the-cupboard.md manual/rooms-and-passages.md manual/custom-exits.md
+SESSION_TUTORIALS = docs/names-and-grammar.md docs/object-shortcuts.md docs/programming-with-rules-and-reactions.md docs/henri-and-the-cupboard.md manual/rooms-and-passages.md manual/custom-exits.md
 EXPECT_FAILURE = $(PYTHON) $(CORE_MAKE_DIR)expect_failure.py
 TEST_TOOL_PACKAGES = moorc core-style-audit core-session-runner moor-server moor-daemon moor-telnet-host moor-git-worker
 

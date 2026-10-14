@@ -2,13 +2,14 @@ object LETTER [
   import_export_id -> "letter",
   import_export_hierarchy -> {"messaging"}
 ]
-  name: "Generic Letter"
+  name: "letter"
   parent: NOTE
   location: PROTOTYPE_BOX
   owner: TEST_PLAYER
   fertile: true
   readable: true
 
+  property subject (owner: TEST_PLAYER, flags: "rc") = "";
   property addressee (owner: TEST_PLAYER, flags: "rc") = #-1;
   property author (owner: TEST_PLAYER, flags: "rc") = #-1;
   property read_at (owner: TEST_PLAYER, flags: "rc") = 0;
@@ -16,7 +17,7 @@ object LETTER [
   property sent_at (owner: TEST_PLAYER, flags: "rc") = 0;
 
   override aliases (owner: TEST_PLAYER, flags: "rc") = {"letter"};
-  override object_documentation (owner: TEST_PLAYER, flags: "rc") = "A letter is a note with communication metadata: author, addressee, timestamps, and sealing. When sealed, only the addressee can read it.";
+  override object_documentation (owner: TEST_PLAYER, flags: "rc") = "A letter is a note with a subject, author, addressee, timestamps, and sealing. The subject is message content; the object name remains letter. A sealed letter can be read by its author or addressee.";
 
   method can_read owner: ARCH_WIZARD
     "Report whether the accessor can read an open or sealed letter.";
@@ -62,7 +63,7 @@ object LETTER [
     "Build letter display";
     parts = {};
     "Title/subject";
-    subject = this.name != "letter" ? this.name | "(no subject)";
+    subject = this.subject ? this.subject | "(no subject)";
     parts = {@parts, $format.title:mk(subject)};
     "From/To metadata";
     meta_lines = {};
@@ -191,7 +192,7 @@ object LETTER [
     if (!valid(this.author))
       this.author = player;
     endif
-    event = $event:mk_info(player, "You address the letter to ", recipient.name, " and seal it.");
+    event = $event:mk_info(player, "You address the letter to ", $sub:reference(recipient), " and seal it.");
     player:inform_current(event);
   endverb
 
@@ -226,11 +227,12 @@ object LETTER [
     "Create new letter";
     const new_letter = create($letter, player);
     new_letter.name = "letter";
+    new_letter.subject = this.subject ? "Re: " + this.subject | "";
     new_letter.addressee = this.author;
     new_letter.author = player;
     "Move to player";
     move(new_letter, player);
-    const event = $event:mk_info(player, "You prepare a reply to ", this.author.name, ". Write on it to compose your response.");
+    const event = $event:mk_info(player, "You prepare a reply to ", $sub:reference(this.author), ". Write on it to compose your response.");
     player:inform_current(event);
   endverb
 
@@ -245,7 +247,7 @@ object LETTER [
     endif
     const conn = connection();
     const session_id = player:start_edit_session(this, "receive_edit", {conn});
-    const editor_title = "Edit: " + this.name;
+    const editor_title = "Edit: " + (this.subject ? this.subject | "(no subject)");
     const current_body = this.text:join("\n");
     present(conn, session_id, "text/djot", "text-editor", current_body, {{"object", $url_utils:to_curie_str(this)}, {"verb", "receive_edit"}, {"title", editor_title}, {"text_mode", "string"}, {"session_id", session_id}});
   endverb

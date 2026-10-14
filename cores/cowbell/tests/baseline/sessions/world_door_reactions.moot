@@ -17,8 +17,8 @@ true
 @nonprogrammer
 % open east
 ~~A brass bell rings.
-~~You open the east door.
+~~You open the door "east".
 % open east
-~~The east door is already open.
+~~The door "east" is already open.
 % open stairs
-~~You open the stairs.
+~~You open the door "stairs".

@@ -2,7 +2,7 @@ object EXAMPLE_KEY [
   import_export_id -> "example_key",
   import_export_hierarchy -> {"initial", "travel"}
 ]
-  name: "an example key"
+  name: "example key"
   parent: THING
   location: EXAMPLE_GALLERY
   owner: ARCH_WIZARD

@@ -11,11 +11,11 @@ true
 % @set-passage east access key is testkey
 =Set east access condition.
 % lock east
-=You lock the east door.
+=You lock the door "east".
 @nonprogrammer
 % open east
-=RUNTIME_PROGRAMMER locks the east door.
-=You cannot open the east door.
+=RUNTIME_PROGRAMMER locks the door "east".
+=You cannot open the door "east".
 @programmer
 % @set-passage east open_msg The brass hinges creak.
 =Set east open_msg.

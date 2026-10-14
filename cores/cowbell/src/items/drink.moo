@@ -12,9 +12,9 @@ object DRINK [
   property consume_amounts (owner: ARCH_WIZARD, flags: "rc") = ["drink" -> 2, "gulp" -> 3, "quaff" -> 5, "sip" -> 1];
   property contents_name (owner: ARCH_WIZARD, flags: "rc") = "liquid";
   property drink_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "drink", .for_others = "drinks">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "drink", .singular_form = "drinks">,
     " from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
@@ -22,34 +22,34 @@ object DRINK [
   property empty_name (owner: ARCH_WIZARD, flags: "rc") = "";
   property fill_time (owner: ARCH_WIZARD, flags: "rc") = 0;
   property gulp_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "gulp", .for_others = "gulps">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "gulp", .singular_form = "gulps">,
     " from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
   };
   property quaff_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "quaff", .for_others = "quaffs">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "quaff", .singular_form = "quaffs">,
     " deeply from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
   };
   property refill_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "refill", .for_others = "refills">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "refill", .singular_form = "refills">,
     " ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
   };
   property refillable (owner: ARCH_WIZARD, flags: "rc") = true;
   property sip_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "take", .for_others = "takes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "take", .singular_form = "takes">,
     " a small sip from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
@@ -64,18 +64,18 @@ object DRINK [
   property temperature (owner: ARCH_WIZARD, flags: "rc") = "room";
 
   override consume_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "drink", .for_others = "drinks">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "drink", .singular_form = "drinks">,
     " from ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
   };
   override description (owner: ARCH_WIZARD, flags: "rc") = "Prototype for drinkable beverages in vessels. Supports sip, drink, gulp, quaff and refill.";
   override finish_msg (owner: ARCH_WIZARD, flags: "rc") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .capitalize = false, .type = 'self_alt, .for_self = "drain", .for_others = "drains">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "drain", .singular_form = "drains">,
     " the last of ",
     <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'd, .capitalize_binding = false>,
     "."
@@ -123,7 +123,7 @@ object DRINK [
     "- `finish_msg`: Shown when draining the last portion",
     "- `empty_msg`: Shown when trying to drink an empty vessel",
     "",
-    "**Template note:** Use `{nc}` for actor, `{the d}` for the vessel, and `{verb|verbs}` for proper grammar.",
+    "**Template note:** Use `{The actor}` for actor, `{the d}` for the vessel, and `{agree actor name:verb|verbs}` for proper grammar.",
     "",
     "## Rules",
     "",
@@ -158,7 +158,7 @@ object DRINK [
     "Handle drinking - command verb for drink/sip/gulp/quaff.";
     "Check if player has access to the drink";
     if (this.location != player && this.location != player.location)
-      event = $event:mk_error(player, "You don't have ", $sub:d(), "."):with_dobj(this);
+      event = $event:mk_error(player, "You don't have ", $sub:the('dobj), "."):with_dobj(this);
       player:inform_current(event);
       return;
     endif
@@ -203,19 +203,19 @@ object DRINK [
     "Handle refilling the drink vessel.";
     "Check if player has the drink";
     if (this.location != player)
-      event = $event:mk_error(player, "You need to be holding ", $sub:d(), " to refill it."):with_dobj(this);
+      event = $event:mk_error(player, "You need to be holding ", $sub:the('dobj), " to refill it."):with_dobj(this);
       player:inform_current(event);
       return;
     endif
     "Check if refillable";
     if (!this.refillable)
-      event = $event:mk_error(player, $sub:dc(), " can't be refilled."):with_dobj(this);
+      event = $event:mk_error(player, $sub:thec('dobj), " can't be refilled."):with_dobj(this);
       player:inform_current(event);
       return;
     endif
     "Check if already full";
     if (this.portions >= this.max_portions)
-      event = $event:mk_error(player, $sub:dc(), " is already full."):with_dobj(this);
+      event = $event:mk_error(player, $sub:thec('dobj), " ", $sub:agree('dobj, 'name, "are", "is"), " already full."):with_dobj(this);
       player:inform_current(event);
       return;
     endif

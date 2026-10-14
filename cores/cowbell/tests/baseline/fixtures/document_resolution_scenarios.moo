@@ -369,7 +369,7 @@ object DOCUMENT_RESOLUTION_SCENARIOS
         "Closed view retains the description and resolves its own container binding");
       container.open = true;
       const opened = $look:narrative(container:look_self():capture(player)):resolve(player);
-      $test_utils:assert_true(index(this:_plain(opened), "It contains hidden *token*."), "Visible contents are literal");
+      $test_utils:assert_true(index(this:_plain(opened), "Contents: a hidden *token*."), "Visible contents are literal");
       $test_utils:assert_eq(length($document:render(opened, 'text_html)['annotations]), 2,
         "Container and visible contents retain references");
     finally

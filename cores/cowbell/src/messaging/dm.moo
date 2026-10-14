@@ -49,18 +49,30 @@ object DM [
     return "";
   endmethod
 
+  method _display_parts owner: ARCH_WIZARD
+    "Capture attribution once for the recipient's displayed and spoken message.";
+    set_task_perms(caller_perms());
+    const {for_player} = args;
+    const sender = this.from;
+    const label = valid(sender) ? sender:noun_phrase('label, for_player) | "(unknown sender)";
+    const name = valid(sender) ? sender:noun_phrase('definite, for_player) | "unknown";
+    const source = valid(sender) ? $format.annotation:object(sender, label) | label;
+    const loc = this.location;
+    const location_name = valid(loc) ? loc:noun_phrase('definite, for_player) | "";
+    const place = valid(loc) ? {" (in ", $format.annotation:object(loc, location_name), ")"} | {};
+    const age = time() - this.sent;
+    const age_text = age < 60 ? "just now" | age:format_time_seconds() + " ago";
+    const header = $format.paragraph:mk(source, @place, " [", age_text, "]:");
+    const spoken_place = valid(loc) ? " in " + location_name | "";
+    const spoken = "Direct message from " + name + spoken_place + ", " + age_text + ": " + this.text;
+    return {$format.block:mk(header, this.text), spoken};
+  endmethod
+
   method display owner: ARCH_WIZARD
     "Construct the recipient's attribution and literal body paragraphs.";
     set_task_perms(caller_perms());
     const {?for_player = this.to} = args;
-    const sender = this.from;
-    const source = valid(sender) ? $format.annotation:object(sender) | "(unknown sender)";
-    const loc = this.location;
-    const place = valid(loc) ? {" (in ", $format.annotation:object(loc), ")"} | {};
-    const age = time() - this.sent;
-    const age_text = age < 60 ? "just now" | age:format_time_seconds() + " ago";
-    const header = $format.paragraph:mk(source, @place, " [", age_text, "]:");
-    return $format.block:mk(header, this.text);
+    return this:_display_parts(for_player)[1];
   endmethod
 
   method display_short owner: ARCH_WIZARD
@@ -78,14 +90,9 @@ object DM [
 
   method display_tts owner: ARCH_WIZARD
     "Return spoken attribution and message text.";
-    {?for_player = this.to} = args;
-    sender = this.from;
-    sender_name = valid(sender) ? sender.name | "unknown";
-    loc = this.location;
-    loc_str = valid(loc) ? " in " + loc.name | "";
-    age = time() - this.sent;
-    age_str = age < 60 ? "just now" | age:format_time_seconds() + " ago";
-    return "Direct message from " + sender_name + loc_str + ", " + age_str + ": " + this.text;
+    set_task_perms(caller_perms());
+    const {?for_player = this.to} = args;
+    return this:_display_parts(for_player)[2];
   endmethod
 
   method display_event owner: ARCH_WIZARD
@@ -93,8 +100,9 @@ object DM [
     set_task_perms(caller_perms());
     const {recipient} = args;
     const group = tosym("dm_" + $url_utils:to_curie_str(this.from));
-    return $event:mk_dm(recipient, this:display(recipient))
-      :with_presentation_hint('inset):with_group(group):with_tts(this:display_tts(recipient))
+    const {body, spoken} = this:_display_parts(recipient);
+    return $event:mk_dm(recipient, body)
+      :with_presentation_hint('inset):with_group(group):with_tts(spoken)
       :with_metadata('dm_from, this.from):with_metadata('dm_location, this.location)
       :with_metadata('dm_content, this.text):with_metadata('dm_timestamp, this.sent);
   endmethod
@@ -107,10 +115,12 @@ object DM [
     const loc = this.location;
     const recipient_name = valid(recipient) ? recipient:name() | "(unknown recipient)";
     const target = valid(recipient) ? $format.annotation:object(recipient, recipient_name) | recipient_name;
-    const place = valid(loc) ? {" (in ", $format.annotation:object(loc), ")"} | {};
+    const location_name = valid(loc) ? loc:noun_phrase('definite, sender) | "";
+    const place = valid(loc) ? {" (in ", $format.annotation:object(loc, location_name), ")"} | {};
     const header = $format.paragraph:mk("You", @place, " → ", target, ":");
-    const spoken_place = valid(loc) ? " in " + loc:name() | "";
-    const spoken = "Message sent to " + recipient_name + spoken_place + ": " + this.text;
+    const spoken_place = valid(loc) ? " in " + location_name | "";
+    const spoken_name = valid(recipient) ? recipient:noun_phrase('definite, sender) | recipient_name;
+    const spoken = "Message sent to " + spoken_name + spoken_place + ": " + this.text;
     const group = tosym("dm_" + $url_utils:to_curie_str(recipient));
     return $event:mk_dm(sender, $format.block:mk(header, this.text))
       :with_audience('utility):with_presentation_hint('inset):with_group(group):with_tts(spoken)

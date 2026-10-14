@@ -8,6 +8,9 @@ This short lesson makes a lamp to experiment with. You'll read its properties, c
 call a verb. You can get the command reference at any time by typing `help #` or `help hash` inside
 the world.
 
+Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
+See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+
 ## Before you begin
 
 You need builder privileges to look up objects with `#`. Changing properties and running code also

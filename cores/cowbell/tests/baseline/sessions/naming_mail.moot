@@ -1,0 +1,28 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; for item in (#90101.contents) if (isa(item, $letter)) move(item, #90100); endif endfor #90101.name = "Ada"; #90102.name = "Bert"; #90101.features = setadd(#90101.features, $mail_features); let mailbox = #90102:find_mailbox(); if (!valid(mailbox)) mailbox = create($mailbox, #90102); move(mailbox, $mail_room); endif mailbox.name = "Bert's mailbox"; add_property(#90101, "mail_output", "", {#90101, ""}); add_verb(#90101, {#90101, "rxd", "inform_current"}, {"this", "none", "this"}); return set_verb_code(#90101, "inform_current", {"this.mail_output = $document:render(args[1]:resolve(this), 'text_plain)['body];"});
+0
+@programmer
+% compose "A trip to the sea" to Bert
+@quiet
+@wizard
+; const letter = $match:match_object("letter", #90101); #90100.runtime_probe = letter; return {letter.name, letter.subject, letter:noun_phrase('definite, #90102)};
+{"letter", "A trip to the sea", "the letter"}
+; return index(#90101.mail_output, "a letter titled 'A trip to the sea' addressed to Bert") > 0;
+true
+@programmer
+% read letter
+@text You read the letter.
+@wizard
+; return index(#90101.mail_output, "A trip to the sea") == 1;
+true
+@programmer
+% send the letter
+@quiet
+@wizard
+; return #90101.mail_output;
+"You send the letter to Bert."
+; const letter = #90100.runtime_probe; const box = #90102:find_mailbox(); return {letter.location == box, letter.subject, box:noun_phrase('listing, #90102)};
+{true, "A trip to the sea", "Bert's mailbox"}

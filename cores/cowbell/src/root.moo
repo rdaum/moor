@@ -13,6 +13,9 @@ object ROOT [
   property reaction_timers (owner: ARCH_WIZARD, flags: "") = [];
 
   property aliases (owner: HACKER, flags: "rc") = {};
+  property noun_kind (owner: HACKER, flags: "rc") = 'name;
+  property noun_number (owner: HACKER, flags: "rc") = 'singular;
+  property indefinite_article (owner: HACKER, flags: "rc") = "";
   property description (owner: HACKER, flags: "rc") = "Root prototype object from which all other objects inherit.";
   property description_kind (owner: HACKER, flags: "rc") = 'literal;
   property object_documentation (owner: HACKER, flags: "rc") = 0;
@@ -246,21 +249,110 @@ object ROOT [
     return this.aliases;
   endmethod
 
-  method is_plural owner: ARCH_WIZARD
-    "Returns whether this object should be treated as a plural noun.";
-    "Default for system objects: false (singular).";
-    return false;
+  method noun_grammar owner: ARCH_WIZARD
+    "Return this object's noun kind, number, and article override for a viewer.";
+    set_task_perms(caller_perms());
+    const {?viewer = player} = args;
+    return $root:_validate_noun_grammar(['kind -> this.noun_kind,
+      'number -> this.noun_number, 'article -> this.indefinite_article]);
   endmethod
 
-  method is_countable owner: ARCH_WIZARD
-    "Returns whether this object is countable in English grammar.";
-    "Default for system objects: false (mass nouns, proper nouns, etc).";
-    return false;
+  method _validate_noun_grammar owner: HACKER
+    "Validate an object's reported noun grammar without reading or changing the object.";
+    const {grammar} = args;
+    typeof(grammar) == TYPE_MAP || raise(E_TYPE, "Noun grammar must be a map.");
+    for field in ({'kind, 'number, 'article})
+      maphaskey(grammar, field) || raise(E_INVARG, "Missing noun grammar field: " + tostr(field));
+    endfor
+    grammar['kind] in {'count, 'mass, 'name}
+      || raise(E_INVARG, "Noun kind must be count, mass, or name.");
+    grammar['number] in {'singular, 'plural}
+      || raise(E_INVARG, "Noun number must be singular or plural.");
+    grammar['article] in {"", "a", "an"}
+      || raise(E_INVARG, "Indefinite article must be automatic, a, or an.");
+    return grammar;
   endmethod
 
-  method is_proper_noun owner: ARCH_WIZARD
-    "Returns whether this object should be treated as a proper noun.";
-    "Default for system objects: true (all system objects are proper nouns).";
+  method noun_phrase owner: ARCH_WIZARD
+    "Return a literal label, bare, definite, indefinite, or listing phrase for a viewer.";
+    set_task_perms(caller_perms());
+    const {form, ?viewer = player} = args;
+    form in {'label, 'bare, 'definite, 'indefinite, 'listing}
+      || raise(E_INVARG, "Unknown noun phrase form: " + tostr(form));
+    if (form == 'listing)
+      const selected = this:listing_form(viewer);
+      selected in {'definite, 'indefinite}
+        || raise(E_INVARG, "Listing form must be definite or indefinite.");
+      return this:noun_phrase(selected, viewer);
+    endif
+    const label = this:name();
+    typeof(label) == TYPE_STR || raise(E_TYPE, "An object's name must be a string.");
+    form == 'label && return label;
+    this == viewer && return "you";
+    form == 'bare && return label;
+    const grammar = $root:_validate_noun_grammar(this:noun_grammar(viewer));
+    grammar['kind] == 'name && return label;
+    form == 'definite && return "the " + label;
+    (grammar['kind] == 'mass || grammar['number] == 'plural) && return "some " + label;
+    const article = grammar['article] ? grammar['article] | label:indefinite_article();
+    return article + " " + label;
+  endmethod
+
+  method listing_form owner: ARCH_WIZARD
+    "Return a world listing preference, or indefinite for objects without that setting.";
+    set_task_perms(caller_perms());
+    const {?viewer = player} = args;
+    return `this.listing_form ! E_PROPNF => 'indefinite';
+  endmethod
+
+  method match_names owner: ARCH_WIZARD
+    "Return the names accepted for this object in a matching context.";
+    set_task_perms(caller_perms());
+    const {?context = player} = args;
+    const aliases = `this:aliases() ! E_PERM, E_PROPNF => {}';
+    return {this:name(), @aliases};
+  endmethod
+
+  method set_grammar owner: ARCH_WIZARD
+    "Set noun settings, or reset fields with 'inherit. Requires owner, wizard, or set_grammar authority.";
+    const principal = caller_perms();
+    const {target, perms, grants} = $root:_check_permissions_with_grants_as(
+      this, principal, 'set_grammar);
+    set_task_perms(perms, grants);
+    const {changes} = args;
+    typeof(changes) == TYPE_MAP || raise(E_TYPE, "Grammar settings must be a map.");
+    const properties = ['kind -> "noun_kind", 'number -> "noun_number",
+      'article -> "indefinite_article", 'listing -> "listing_form"];
+    let resolved = [];
+    for field in (mapkeys(changes))
+      maphaskey(properties, field) || raise(E_INVARG, "Unknown grammar setting: " + tostr(field));
+      const property = properties[field];
+      const current = `target.(property) ! E_PROPNF => E_PROPNF';
+      typeof(current) != TYPE_ERR || raise(E_INVARG, "This prototype does not define " + property + ".");
+      let value = changes[field];
+      if (value == 'inherit)
+        const ancestor = parent(target);
+        valid(ancestor) || raise(E_INVARG, "This object has no parent to inherit from.");
+        value = `ancestor.(property) ! E_PROPNF => E_PROPNF';
+        typeof(value) != TYPE_ERR || raise(E_INVARG, "This setting is not inherited: " + property);
+      endif
+      resolved[field] = value;
+    endfor
+    $root:_validate_noun_grammar([
+      'kind -> maphaskey(resolved, 'kind) ? resolved['kind] | target.noun_kind,
+      'number -> maphaskey(resolved, 'number) ? resolved['number] | target.noun_number,
+      'article -> maphaskey(resolved, 'article) ? resolved['article] | target.indefinite_article]);
+    if (maphaskey(resolved, 'listing))
+      resolved['listing] in {'definite, 'indefinite}
+        || raise(E_INVARG, "Listing form must be definite or indefinite.");
+    endif
+    for field in (mapkeys(changes))
+      if (changes[field] == 'inherit)
+        clear_property(target, properties[field]);
+      else
+        target.(properties[field]) = resolved[field];
+      endif
+    endfor
     return true;
   endmethod
 
@@ -627,6 +719,11 @@ object ROOT [
           {"property_write", target, "description_kind"}};
       elseif (cap == 'set_name_aliases)
         grants = {@grants, {"object_rename", target}, {"property_write", target, "aliases"}};
+      elseif (cap == 'set_grammar)
+        grants = {@grants, {"property_write", target, "noun_kind"},
+          {"property_write", target, "noun_number"},
+          {"property_write", target, "indefinite_article"},
+          {"property_write", target, "listing_form"}};
       elseif (cap == 'set_owner)
         grants = {@grants, {"property_write", target, "owner"}};
       elseif (cap == 'set_thumbnail)
@@ -1242,9 +1339,8 @@ object ROOT [
       $test_utils:assert_eq(scratch:display_name(), "Root Test Object", "display_name() should default to name()");
       $test_utils:assert_eq(scratch:aliases(), {"root-test", "rto"}, "aliases() should return .aliases");
       $test_utils:assert_false(scratch:is_actor(), "root descendants should not be actors by default");
-      $test_utils:assert_false(scratch:is_plural(), "root descendants should be singular by default");
-      $test_utils:assert_false(scratch:is_countable(), "root descendants should be uncountable by default");
-      $test_utils:assert_true(scratch:is_proper_noun(), "root descendants should be proper nouns by default");
+      $test_utils:assert_eq(scratch:noun_grammar(player),
+        ['kind -> 'name, 'number -> 'singular, 'article -> ""], "Complete singular name");
     finally
       valid(scratch) && recycle(scratch);
     endtry

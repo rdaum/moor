@@ -11,6 +11,9 @@ This lesson takes inspiration from [Yib's Pet Rock](https://lisdude.com/moo/yib_
 beginner's introduction to programming on LambdaMOO. The commands here are for Cowbell, a ready-made
 world for the [mooR server](../../../README.md).
 
+Names do not need a leading `a` or `the`. Cowbell supplies articles when a message asks for them.
+See [names and grammar](names-and-grammar.md) for aliases, plural names, and room-listing choices.
+
 ## Before you begin
 
 You'll need an account in a Cowbell world, with both builder and programmer privileges. Ask the
@@ -117,7 +120,7 @@ We need two things: a message to show people, and a command that shows it.
 First, write the message that people will see:
 
 ```moot
-% @set-message rock.pet_msg {nc} {pet|pets} {d}.
+% @set-message rock.pet_msg {The actor} {agree actor name:pet|pets} {the d}.
 ~~Set message template
 ```
 
@@ -126,11 +129,11 @@ separate from the command lets you change it later without changing the code.
 
 The text looks peculiar because it has blanks for Cowbell to fill in:
 
-| Part          | What it supplies                                                                  |
-| ------------- | --------------------------------------------------------------------------------- |
-| `{nc}`        | The person petting the rock: “You” to that person, or their name to someone else. |
-| `{pet\|pets}` | The verb form that fits: “You pet” or “Ada pets.”                                 |
-| `{d}`         | The thing being petted.                                                           |
+| Part                           | What it supplies                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| `{The actor}`                  | The person petting the rock: “You” to that person, or their name to someone else. |
+| `{agree actor name:pet\|pets}` | The verb form that fits: “You pet” or “Ada pets.”                                 |
+| `{the d}`                      | The identified object: “the pet rock.”                                            |
 
 One message can now read correctly to everyone in the room. This is a **message template**: it
 describes the sentence before we know who will pet the rock. The verb will supply that person when
@@ -260,7 +263,7 @@ Now try your new command:
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 ```
 
 <details>
@@ -268,14 +271,14 @@ Now try your new command:
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @programmer
 ```
 
 </details>
 
-There: you have a pet rock. It hasn't moved, which seems appropriate. You see “You pet pet rock.”
-Someone else in the room sees “Ada pets pet rock,” with your name in place of Ada's.
+There: you have a pet rock. It hasn't moved, which seems appropriate. You see “You pet the pet
+rock.” Someone else in the room sees “Ada pets pet rock,” with your name in place of Ada's.
 
 Read the body again with that result in mind. It checks the caller, names the person and room,
 checks reach, and sends the message. The final `return true;` reports success and ends the verb.
@@ -389,7 +392,7 @@ Try the rock, then look at its counter:
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock remains impressively still.
 ```
 
@@ -398,7 +401,7 @@ Try the rock, then look at its counter:
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock remains impressively still.
 @programmer
 ```
@@ -421,7 +424,7 @@ Suppose the rock needs a different line. Change the message and pet it again:
 % @set-message rock.greeting_msg The rock accepts the compliment in silence.
 ~~Set message template
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -430,7 +433,7 @@ Suppose the rock needs a different line. Change the message and pet it again:
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -482,7 +485,7 @@ Pet the rock, then wait a few seconds:
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -491,7 +494,7 @@ Pet the rock, then wait a few seconds:
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 @text-within 5 Your rock still appreciates the attention.
@@ -530,7 +533,7 @@ Give the rock a place for that rule and messages for refused attempts:
 ```
 
 ```moot
-% @set-message rock.pet_denied_msg {dc} declines your attention.
+% @set-message rock.pet_denied_msg {The d} declines your attention.
 ~~Set message template
 % @set-message rock.pet_out_of_reach_msg {dc} is out of reach.
 ~~Set message template
@@ -689,7 +692,7 @@ Put the rock in the room so Bert can reach it:
 
 ```moot
 % drop rock
-=You dropped pet rock.
+=You dropped the pet rock.
 ```
 
 <details>
@@ -697,7 +700,7 @@ Put the rock in the room so Bert can reach it:
 
 ```moot
 @nonprogrammer
-@text Ada dropped pet rock.
+@text Ada dropped the pet rock.
 ```
 
 </details>
@@ -706,7 +709,7 @@ Ask Bert to type:
 
 ```moot
 % pet rock
-=Pet rock declines your attention.
+=The pet rock declines your attention.
 ```
 
 <details>
@@ -743,7 +746,7 @@ Ask Bert to try again:
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -752,7 +755,7 @@ Ask Bert to try again:
 
 ```moot
 @programmer
-@text Bert pets pet rock.
+@text Bert pets the pet rock.
 @text The rock accepts the compliment in silence.
 % @state rock
 =pets: 4
@@ -799,7 +802,7 @@ Create the book and tell a reaction to write in it:
 % @reaction rock remember enable
 ~~enabled
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -808,7 +811,7 @@ Create the book and tell a reaction to write in it:
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -834,7 +837,7 @@ Pet the rock again. It should remember one visit from you, rather than make a du
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ```
 
@@ -843,7 +846,7 @@ Pet the rock again. It should remember one visit from you, rather than make a du
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -903,7 +906,7 @@ Pet the rock. You should see one of the two new remarks, along with its usual gr
 
 ```moot
 % pet rock
-=You pet pet rock.
+=You pet the pet rock.
 =The rock accepts the compliment in silence.
 ~~The rock
 ```
@@ -913,7 +916,7 @@ Pet the rock. You should see one of the two new remarks, along with its usual gr
 
 ```moot
 @nonprogrammer
-@text Ada pets pet rock.
+@text Ada pets the pet rock.
 @text The rock accepts the compliment in silence.
 ~~The rock
 @programmer
@@ -971,7 +974,7 @@ compare the counters:
 % @reaction pebble greeting enable
 ~~enabled
 % pet pebble
-=You pet pebble.
+=You pet the pebble.
 =The rock accepts the compliment in silence.
 ```
 
@@ -980,7 +983,7 @@ compare the counters:
 
 ```moot
 @nonprogrammer
-@text Ada pets pebble.
+@text Ada pets the pebble.
 @text The rock accepts the compliment in silence.
 @programmer
 ```
@@ -1002,7 +1005,7 @@ Give the pebble a different greeting:
 % @set-message pebble.greeting_msg The pebble seems unusually sociable.
 ~~Set message template
 % pet pebble
-=You pet pebble.
+=You pet the pebble.
 =The pebble seems unusually sociable.
 ```
 
@@ -1011,7 +1014,7 @@ Give the pebble a different greeting:
 
 ```moot
 @nonprogrammer
-@text Ada pets pebble.
+@text Ada pets the pebble.
 @text The pebble seems unusually sociable.
 @programmer
 ```

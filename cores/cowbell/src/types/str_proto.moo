@@ -785,12 +785,20 @@ object STR_PROTO [
   endmethod
 
   method indefinite_article owner: HACKER
-    "Return 'an' for an initial vowel, or 'a' otherwise.";
-    const {s} = args;
-    typeof(s) == TYPE_STR || raise(E_TYPE("Expected string"));
-    !s && return "a";
-    const first_char = s[1..1]:lowercase();
-    return first_char in {"a", "e", "i", "o", "u"} ? "an" | "a";
+    "Guess an English indefinite article. Object grammar supplies overrides for ambiguous names.";
+    const {word} = args;
+    typeof(word) == TYPE_STR || raise(E_TYPE, "Article lookup needs a string.");
+    !word && return "a";
+    const lower = word:lowercase();
+    for prefix in ({"hour", "honest", "honor", "honour", "heir"})
+      lower:starts_with(prefix) && return "an";
+    endfor
+    for prefix in ({"user", "use", "usual", "utensil", "util", "ubiq", "euro", "eulog",
+      "euphem", "eucalypt", "unicorn", "unicycle", "uniform", "union", "unit", "univer",
+      "unique", "unison", "unilateral", "one", "once"})
+      lower:starts_with(prefix) && return "a";
+    endfor
+    return index("aeiou", lower[1], 1) ? "an" | "a";
   endmethod
 
   method with_indefinite_article owner: HACKER

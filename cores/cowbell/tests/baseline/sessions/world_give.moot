@@ -7,19 +7,19 @@
 {#2, true}
 @nonprogrammer
 % get #47
-~~You picked up Architect's Compass.
+~~You picked up the Architect's Compass.
 % give #47 at #45
-~~You give Architect's Compass to Mr. Welcome.
+~~You give the Architect's Compass to Mr. Welcome.
 @quiet
 @wizard
 ; return {#47.location, #47.owner};
 {#45, #2}
-~~RUNTIME_PLAYER picked up Architect's Compass.
-~~RUNTIME_PLAYER gives Architect's Compass to Mr. Welcome.
+~~RUNTIME_PLAYER picked up the Architect's Compass.
+~~RUNTIME_PLAYER gives the Architect's Compass to Mr. Welcome.
 // The command also works for a wizard, using the natural-language preposition.
 ; move(#47, #90100); return true;
 true
 % hand #47 to #45
-~~You give Architect's Compass to Mr. Welcome.
+~~You give the Architect's Compass to Mr. Welcome.
 ; return {#47.location, #47.owner};
 {#45, #2}

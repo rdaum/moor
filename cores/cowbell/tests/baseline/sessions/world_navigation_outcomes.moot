@@ -7,7 +7,7 @@ true
 @nonprogrammer
 % walk Far Landing
 =Walking to Far Landing (1 step)...
-@text-within 5 The east door is locked.
+@text-within 5 The passage "east" is locked.
 =Something blocked your path - stopping.
 @quiet
 @wizard

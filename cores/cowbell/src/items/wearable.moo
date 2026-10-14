@@ -10,19 +10,19 @@ object WEARABLE [
 
   property body_area (owner: HACKER, flags: "rw") = false;
   property remove_msg (owner: HACKER, flags: "rw") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "remove", .for_others = "removes">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "remove", .singular_form = "removes">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
   property wear_msg (owner: HACKER, flags: "rw") = {
-    <SUB, .capitalize = true, .type = 'actor>,
+    <SUB, .capitalize = true, .type = 'article_the, .binding_name = 'actor>,
     " ",
-    <SUB, .type = 'self_alt, .for_self = "put on", .for_others = "puts on">,
+    <SUB, .type = 'agree, .binding_name = 'actor, .subject_form = 'name, .plural_form = "put on", .singular_form = "puts on">,
     " ",
-    <SUB, .capitalize = false, .type = 'dobj>,
+    <SUB, .capitalize = false, .type = 'article_the, .binding_name = 'dobj>,
     "."
   };
 
@@ -57,14 +57,14 @@ object WEARABLE [
     "Customize using the `@set-message` command:",
     "",
     "```",
-    "@set-message hat.wear_msg {nc} {feel|feels} a bit more stylish putting on {d}.",
-    "@set-message hat.remove_msg {nc} {feel|feels} less stylish removing {d}.",
+    "@set-message hat.wear_msg {The actor} {agree actor name:feel|feels} a bit more stylish putting on {the d}.",
+    "@set-message hat.remove_msg {The actor} {agree actor name:feel|feels} less stylish removing {the d}.",
     "```",
     "",
     "Template tokens:",
-    "- `{nc}` - Actor name (capitalized)",
-    "- `{feel|feels}` - Self-alternation (actor sees \"feel\", others see \"feels\")",
-    "- `{d}` - Direct object (the item)",
+    "- `{The actor}` - Actor noun phrase (capitalized)",
+    "- `{agree actor name:feel|feels}` - Self-alternation (actor sees \"feel\", others see \"feels\")",
+    "- `{the d}` - Definite reference to the item",
     "",
     "## Commands",
     "",
@@ -104,7 +104,7 @@ object WEARABLE [
     "",
     "```moo",
     "hat = create($wearable);",
-    "hat:set_name(\"a fancy hat\");",
+    "hat:set_name(\"fancy hat\");",
     "hat.body_area = 'head;",
     "hat.description = \"A stylish hat with a wide brim.\";",
     "```"
@@ -195,7 +195,7 @@ object WEARABLE [
     endif
     const conflict = this:conflicting_item();
     if (valid(conflict))
-      const msg = "You're already wearing " + conflict:display_name() + " on that body part. Remove it first.";
+      const msg = "You're already wearing " + conflict:noun_phrase('definite, player) + " on that body part. Remove it first.";
       player:inform_current($event:mk_error(player, msg));
       return;
     endif
@@ -245,18 +245,6 @@ object WEARABLE [
     return;
   endmethod
 
-  method display_name owner: ARCH_WIZARD
-    "Return display name with article for wearing context. Override for custom descriptions.";
-    set_task_perms(caller_perms());
-    name = this:name();
-    "Check if name already has an article";
-    lower_name = name:lowercase();
-    if (lower_name:starts_with("the ") || lower_name:starts_with("a ") || lower_name:starts_with("an "))
-      return name;
-    endif
-    return name:with_indefinite_article();
-  endmethod
-
   method wearer owner: ARCH_WIZARD
     "Return who is wearing this item, or #-1 if not worn";
     set_task_perms(caller_perms());
@@ -301,7 +289,7 @@ object WEARABLE [
     endif
     area_name = iobjstr:trim():tosym();
     this.body_area = area_name;
-    event = $event:mk_info(player, "Body area for ", $sub:d(), " set to ", tostr(area_name), "."):with_dobj(this);
+    event = $event:mk_info(player, "Body area for ", $sub:the('dobj), " set to ", tostr(area_name), "."):with_dobj(this);
     player:inform_current(event);
   endverb
 
