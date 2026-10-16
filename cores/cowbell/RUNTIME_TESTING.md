@@ -313,26 +313,27 @@ or Git hosting account is required.
 
 ```sh
 cargo build -p moor-daemon -p moor-web-host -p moor-telnet-host \
-  -p moor-mcp-host -p moor-git-worker -p moor-curl-worker
+  -p moor-git-worker -p moor-curl-worker
+npm run web:prepare
 node tools/tsc.mjs --noEmit -p cores/cowbell/tests/tsconfig.json
 node --import tsx cores/cowbell/tests/mcp/changes.ts
 ```
 
 Run these commands from the repository root. The test drives review changes through real MCP stdio
 requests. It checks catalog discovery, the guide, argument errors, compiler errors, edited source,
-historical source, declared additions, and prepared application through both hosts and both source
+historical source, declared additions, and prepared application through web MCP and both source
 transports. The fixture contains 73 existing verbs, a new helper, and a new property. Review pages,
 effect pages, and result pages must include the complete set.
 
 The test restarts the persistent world before apply and after finish. It drops an apply reply at the
 client boundary, starts another MCP process, and recovers the committed result. It also revokes the
-requester's wizard authority during worker suspension. A native-host timeout probe verifies that a
-committed mutation executes only once. Independent assertions check installed programs and retained
-property data and permissions. A separate uploaded review binds a new object to an explicit address
-and installs its contents without calling an initialization verb.
+requester's wizard authority during worker suspension. Independent assertions check installed
+programs and retained property data and permissions. A separate uploaded review binds a new object
+to an explicit address and installs its contents without calling an initialization verb.
 
-Use `--web-only` for a focused run of the TypeScript host. The full acceptance run must cover both
-hosts.
+The shared LLM tool checks cover catalog discovery, object creation and inspection, verb
+programming, compiler failures, and object recycling. They verify installed code and object
+ownership through web-host independently of MCP replies.
 
 The `change_tools.moot` scenario checks the shared provider and requester permissions.
 `change_agents.moot` uses a deterministic model to exercise base and coding room execution through
@@ -364,7 +365,6 @@ Run the shared native tests and browser acceptance suite from the repository roo
 
 ```sh
 cargo test -p moor-objdef
-cargo test -p moor-mcp-host
 cargo build -p moor
 npm run test:changes --prefix clients/meadow
 ```

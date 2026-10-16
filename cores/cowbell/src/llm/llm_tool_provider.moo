@@ -12,6 +12,25 @@ object LLM_TOOL_PROVIDER [
 
   override description (owner: ARCH_WIZARD, flags: "rc") = "Shared actor validation and exact object resolution for domain tool providers.";
 
+  method "mcp_*" owner: ARCH_WIZARD
+    "Validate a published external tool call and serialize its outcome at the MOO boundary.";
+    const {input, actor} = args;
+    $llm_tool_provider:check(this, actor, caller_perms());
+    set_task_perms(actor);
+    const endpoint = verb[5..$];
+    for tool in (this:get_tools())
+      if (tool.target_obj == this && tool.target_verb == endpoint)
+        const parameters = $llm_tool_schema:arguments(input, tool.parameters);
+        const result = $llm_tool_result:normalize(this:(endpoint)(parameters, actor));
+        if (result:is_success() && typeof(result.value) == TYPE_STR)
+          return result.value;
+        endif
+        return parse_json(result:content());
+      endif
+    endfor
+    raise(E_VERBNF, "Tool handler is not in the published catalog.");
+  endmethod
+
   method _require_tool_dispatch owner: ARCH_WIZARD
     "Validate the entry's captured principal before privileged tool effects. Caller ancestry does not grant authority.";
     const {actor, principal} = args;

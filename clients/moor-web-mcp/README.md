@@ -73,5 +73,6 @@ a partial review without accepting deferred changes.
 
 The
 [acceptance instructions](../../cores/cowbell/RUNTIME_TESTING.md#change-tools-and-agent-workflows)
-run both MCP hosts against isolated HTTP and Git sources. The tests include saved drafts, additions,
-restart, permission loss, and recovery after a lost reply. They require no paid model access.
+run web MCP against isolated HTTP and Git sources. The tests include shared LLM tools, saved drafts,
+additions, restart, permission loss, and recovery after a lost reply. They require no paid model
+access.

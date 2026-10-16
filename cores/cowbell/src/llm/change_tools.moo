@@ -88,7 +88,7 @@ object CHANGE_TOOLS [
   endmethod
 
   method _json owner: ARCH_WIZARD
-    "Produce the same JSON-safe values for native MCP, web MCP, and internal agents.";
+    "Produce the same JSON-safe values for web MCP and internal agents.";
     caller == this || raise(E_PERM);
     const {value} = args;
     const kind = typeof(value);

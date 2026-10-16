@@ -30,7 +30,8 @@ object LLM_AGENT_TOOL [
 
   method to_mcp_schema owner: HACKER
     "Convert tool definition to MCP (Model Context Protocol) format for external agents";
-    return ["name" -> this.name, "description" -> this.description, "input_schema" -> this.parameters, "target_obj" -> this.target_obj, "target_verb" -> this.target_verb];
+    const endpoint = isa(this.target_obj, $llm_tool_provider) ? "mcp_" + this.target_verb | this.target_verb;
+    return ["name" -> this.name, "description" -> this.description, "input_schema" -> this.parameters, "target_obj" -> this.target_obj, "target_verb" -> endpoint];
   endmethod
 
   method execute owner: ARCH_WIZARD

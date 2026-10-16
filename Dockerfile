@@ -99,7 +99,6 @@ COPY --from=backend-build /moor-build/target-final/moor-git-worker /moor/moor-gi
 # Utility binaries
 COPY --from=backend-build /moor-build/target-final/moorc /moor/moorc
 COPY --from=backend-build /moor-build/target-final/moor-emh /moor/moor-emh
-COPY --from=backend-build /moor-build/target-final/moor-mcp-host /moor/moor-mcp-host
 
 EXPOSE 8080 8081 8888
 
