@@ -207,6 +207,9 @@ Cowbell entries.
 
 ### Fixed
 
+- LLM suggestions no longer lose replies or fallback messages when worker cleanup races with output
+  delivery.
+
 - MCP calls to shared LLM tools validate their published arguments and report failed operations as
   errors. Compiler failures retain their diagnostics instead of exposing an internal flyweight as a
   successful result. MCP also preserves MOO error codes and messages for rejected calls.
