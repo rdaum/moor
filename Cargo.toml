@@ -130,8 +130,8 @@ fjall = "3.1"
 axum = { version = "0.8", features = ["ws"] }
 hickory-resolver = "0.26"
 ipnet = "2.11"
-r0z = "0.1.0"
-r0z-async = "0.1.0"
+r0z = "0.2.0"
+r0z-async = "0.2.0"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 socket2 = { version = "0.6", features = ["all"] }

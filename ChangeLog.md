@@ -31,6 +31,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Updated the ZeroMQ bindings to r0z 0.2, removing the yanked ZIP 8 build dependency while retaining
+  CURVE encryption. Custom sodium installations now require `SODIUM_INCLUDE_DIR` alongside
+  `SODIUM_LIB_DIR`; shared sodium builds are rejected.
+
 - Updated rustls to 0.23.46 to address four upstream TLS security advisories.
 
 - Cowbell no longer requires a group for local edits or already-installed code just because the same
