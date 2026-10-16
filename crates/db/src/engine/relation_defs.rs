@@ -657,6 +657,7 @@ macro_rules! define_relations {
                         prop_perm_memo: crate::engine::ws_transaction::PropertyPermMemo::new(),
                         inherited_policy_reads: std::collections::HashSet::new(),
                         owner_change_reads: std::collections::HashSet::new(),
+                        verb_program_revision: 0,
                     }
                 }
             }
@@ -725,6 +726,8 @@ macro_rules! define_relations {
             /// all defined database relations. It contains relation transactions for each
             /// relation, along with caches needed for transaction processing.
             pub struct WorldStateTransaction {
+                /// Invalidates executable program lookups independently of resolution cache fills.
+                pub(crate) verb_program_revision: u64,
                 pub(crate) owner_change_reads: std::collections::HashSet<moor_var::Obj>,
                 pub(crate) inherited_policy_reads: std::collections::HashSet<crate::model::ObjAndUUIDHolder>,
                 #[allow(dead_code)]
@@ -758,6 +761,11 @@ macro_rules! define_relations {
                 }
 
                 pub(crate) fn edit(&mut self, scope: crate::engine::ws_transaction::edit::EditScope) -> WorldStateEdit<'_> {
+                    use crate::engine::ws_transaction::edit::EditScope;
+                    if matches!(&scope, EditScope::Verbs(_) | EditScope::Remove { .. } | EditScope::Renumber { .. }) {
+                        self.verb_program_revision = self.verb_program_revision.checked_add(1)
+                            .expect("verb program revision exhausted");
+                    }
                     WorldStateEdit {
                         $( $field: &mut self.$field, )*
                         _invalidation: crate::engine::ws_transaction::edit::EditInvalidation::new(

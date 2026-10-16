@@ -53,6 +53,7 @@ mod commands;
 mod execution;
 mod input;
 mod limits;
+mod programs;
 mod transactions;
 
 struct TestVerb {

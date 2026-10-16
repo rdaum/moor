@@ -122,6 +122,14 @@ pub struct VerbProgramKey {
     pub verb_uuid: Uuid,
 }
 
+/// Validity of executable program lookups within one database.
+/// A new transaction or a verb edit changes this token. It is not an authorization grant.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct VerbProgramCacheToken {
+    pub transaction: u64,
+    pub revision: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct VerbDispatchResult {
     pub program_key: VerbProgramKey,
@@ -625,6 +633,10 @@ pub trait WorldState: Send {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<(ProgramType, VerbDef), WorldStateError>;
+
+    /// Token for task-local executable program caches. Changes on every transaction and on
+    /// local edits that can replace, remove, or relocate a verb program, including loader edits.
+    fn verb_program_cache_token(&self) -> VerbProgramCacheToken;
 
     /// Resolve verb metadata (with inheritance) for a canonical lookup request.
     ///

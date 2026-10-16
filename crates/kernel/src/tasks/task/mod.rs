@@ -112,7 +112,7 @@ pub struct Task {
     pub(crate) handling_uncaught_error: bool,
     /// The original exception when calling handle_uncaught_error, in case it returns false.
     pub(crate) pending_exception: Option<Exception>,
-    /// Transaction-lifetime verb program cache for this task.
+    /// Program storage for this task's frames, with transaction-scoped executable lookups.
     pub(crate) program_cache: TaskProgramCache,
 }
 

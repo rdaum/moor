@@ -31,8 +31,8 @@ use moor_common::{
         BuiltinProxyCacheBits, CommitResult, DispatchFlagsSource, HasUuid, ObjAttrs, ObjFlag,
         ObjSet, ObjectKind, ObjectQuery, ObjectRef, PropAttrs, PropDef, PropDefs, PropFlag,
         PropPerms, TaskPermissions, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs,
-        VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup, VerbProgramKey, WorldState,
-        WorldStateError, WorldStatePerf, WorldStateTimerOp,
+        VerbDispatch, VerbDispatchResult, VerbFlag, VerbLookup, VerbProgramCacheToken,
+        VerbProgramKey, WorldState, WorldStateError, WorldStatePerf, WorldStateTimerOp,
     },
     util::BitEnum,
 };
@@ -1266,6 +1266,13 @@ impl WorldState for DbWorldState {
             ))?;
         let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
         Ok((binary, vh))
+    }
+
+    fn verb_program_cache_token(&self) -> VerbProgramCacheToken {
+        VerbProgramCacheToken {
+            transaction: self.tx.tx.ts.0,
+            revision: self.tx.verb_program_revision,
+        }
     }
 
     fn lookup_verb(

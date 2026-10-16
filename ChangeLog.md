@@ -351,6 +351,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Calls after `set_verb_code()` use the updated program, including later calls in the same task.
+  Active calls finish their original program. Program lookups also refresh after transaction
+  changes.
+
 - Meadow keeps showing new output after confirming an exit or command from the transcript.
   Successful submission no longer restores focus to an old link and pins the transcript there.
 

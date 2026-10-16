@@ -23,8 +23,8 @@ pub use crate::model::{
     verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string},
     world_state::{
         BUILTIN_PROXY_CACHE_WORDS, BuiltinProxyCacheBits, DispatchFlagsSource, ObjectKind,
-        VerbDispatch, VerbDispatchResult, VerbLookup, VerbProgramKey, WorldState, WorldStateSource,
-        command_verb_argspec,
+        VerbDispatch, VerbDispatchResult, VerbLookup, VerbProgramCacheToken, VerbProgramKey,
+        WorldState, WorldStateSource, command_verb_argspec,
     },
 };
 use serde::Serialize;

@@ -16,7 +16,9 @@ use std::sync::LazyLock;
 
 use ahash::AHasher;
 use fast_telemetry::{DeriveLabel, LabeledCounter};
-use moor_common::model::{TaskPermissions, VerbProgramKey, WorldState, WorldStateError};
+use moor_common::model::{
+    TaskPermissions, VerbProgramCacheToken, VerbProgramKey, WorldState, WorldStateError,
+};
 use moor_compiler::Program;
 use moor_var::{Obj, program::ProgramType};
 pub use moor_vm::{CachedProgramPtr, ProgramSlot};
@@ -99,6 +101,7 @@ pub fn program_cache_global_stats() -> ProgramCacheGlobalSnapshot {
 pub struct TaskProgramCache {
     slots: Vec<Option<Box<CachedProgramSlot>>>,
     cache: HashMap<VerbProgramKey, usize, std::hash::BuildHasherDefault<AHasher>>,
+    token: Option<VerbProgramCacheToken>,
     local_hits: i64,
     local_misses: i64,
     local_inserts: i64,
@@ -114,6 +117,13 @@ impl TaskProgramCache {
         verb_definer: &Obj,
         verb_uuid: uuid::Uuid,
     ) -> Result<ResolveVerbSlotResult, WorldStateError> {
+        let token = world_state.verb_program_cache_token();
+        if self.token != Some(token) {
+            // New calls must see the current transaction's programs. Active and retry frames
+            // still hold pointers into old slots, which remain allocated until reclamation.
+            self.cache.clear();
+            self.token = Some(token);
+        }
         let key = VerbProgramKey {
             verb_definer: *verb_definer,
             verb_uuid,
@@ -257,6 +267,7 @@ mod tests {
         let mut cache = TaskProgramCache {
             slots: vec![Some(p1_slot), Some(p2_slot)],
             cache: HashMap::default(),
+            token: None,
             local_hits: 0,
             local_misses: 0,
             local_inserts: 0,
