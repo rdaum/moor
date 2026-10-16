@@ -31,6 +31,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Updated rustls to 0.23.46 to address four upstream TLS security advisories.
+
 - Cowbell no longer requires a group for local edits or already-installed code just because the same
   review contains new additions. Explicitly declared groups still apply together.
 
