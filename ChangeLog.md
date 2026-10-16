@@ -37,6 +37,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated rustls to 0.23.46 to address four upstream TLS security advisories.
 
+- Cowbell LLM wearables isolate each interaction and keep prompts and private output on its
+  initiating connection. Stop and reset cancel pending input and model work. Interactions have a
+  total deadline. Visor approval applies only to one operation type and target within the current
+  interaction, and changed previews require another decision.
+
 - Cowbell no longer requires a group for local edits or already-installed code just because the same
   review contains new additions. Explicitly declared groups still apply together.
 
@@ -51,8 +56,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Drafts survive cancellation and reconnect. Commands also expose recovery, history, partial-review
   completion, and retry after a failed fetch.
 
-- Cowbell exposes guarded change management through both MCP hosts and its internal agents. Tools
-  return structured results, preserve edited source, and report compiler errors and committed
+- Cowbell exposes guarded change management through both MCP hosts and its internal LLM agents.
+  Tools return structured results, preserve edited source, and report compiler errors and committed
   outcomes. Native MCP no longer repeats dynamic calls automatically after a lost connection.
 
 - Cowbell change reviews can create objects at explicitly chosen IDs. Preview reserves no IDs, and

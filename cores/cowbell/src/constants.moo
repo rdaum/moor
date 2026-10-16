@@ -12,15 +12,10 @@ define PLAYER_ACTIVITY = #113;
 define CHANGE_MANAGER = #2000;
 define CHANGE_TOOLS = #2001;
 
-// agentic
-define AGENTIC = #119;
-define AGENTIC_TOOL = #120;
-define AGENTIC_LOOP = #121;
-define AGENTIC_AGENT = #122;
-define AGENTIC_EVENT_QUEUE = #123;
-define AGENTIC_RUNNER = #124;
-define AGENTIC_ROOM_OBSERVER = #125;
-define AGENTIC_CODING_ROOM = #126;
+// LLM frontends
+define LLM_RUNNER = #124;
+define LLM_PROMPT_OBSERVER = #125;
+define LLM_CODING_ROOM = #126;
 
 // auth
 define PASSWORD = #16;
@@ -101,6 +96,15 @@ define FOOD = #94;
 define DRINK = #95;
 
 // llm
+define LLM_INSPECTION_TOOLS = #2004;
+define LLM_PROGRAMMING_TOOLS = #2005;
+define LLM_BUILDING_TOOLS = #2006;
+define LLM_BEHAVIOR_TOOLS = #2007;
+define LLM_TOOL_PROVIDER = #2008;
+define LLM_HELP_TOOLS = #2009;
+define LLM_TOOL_CATALOG = #2010;
+define LLM_JOB = #2002;
+define LLM_TOOL_RESULT = #2003;
 define LLM_CLIENT = #40;
 define LLM_AGENT = #41;
 define LLM_AGENT_TOOL = #42;
@@ -114,7 +118,6 @@ define LLM_CHAT_OPTS = #68;
 define AGENT_BUILDING_TOOLS = #81;
 define AGENT_ROOM = #86;
 define LLM_RESPONSE = #99;
-define RLM_AGENT = #100;
 
 // messaging
 define MAILBOX = #73;
@@ -164,3 +167,35 @@ define EXAMPLE_HILLS = #3105;
 define EXAMPLE_OVERLOOK = #3106;
 define EXAMPLE_KEY = #3107;
 define EXAMPLE_LIFT_BUTTON = #3108;
+
+define LLM_ROOM_VIEW = #2011;
+define LLM_TOOL_SCHEMA = #2012;
+define LLM_ACCOUNT = #2013;
+define LLM_PROVIDER = #2014;
+define LLM_PRESENTER = #2015;
+define LLM_ROOM_RUNTIME = #2016;
+define LLM_MEMORY = #2017;
+define LLM_CONVERSATION = #2018;
+define LLM_WEARABLE_SESSION = #2019;
+
+define LLM_OBSERVER_POLICY = #2020;
+define LLM_OBSERVER_SPEECH = #2021;
+
+define LLM_OBSERVER_RUNTIME = #2022;
+define LLM_OBSERVER_JOB = #2023;
+define LLM_SOCIAL_TOOLS = #2024;
+
+define LLM_SUGGESTION = #2025;
+define LLM_DOC_SUGGESTION = #2026;
+define LLM_HELP_SUGGESTION = #2027;
+define LLM_ASSIST_CONTEXT = #2028;
+define LLM_COMMAND_CONTEXT = #2029;
+define LLM_COMMAND_SUGGESTION = #2030;
+define LLM_PROJECT = #2031;
+define LLM_VALUE = #2032;
+define LLM_OBSERVATION = #2033;
+define LLM_PROJECT_TOOLS = #2034;
+define LLM_PROMPTS = #2035;
+define LLM_VERB_SOURCE = #2036;
+define LLM_CODE_SEARCH = #2037;
+define LLM_TOOL_PROGRESS = #2038;

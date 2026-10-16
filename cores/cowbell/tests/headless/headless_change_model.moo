@@ -20,7 +20,7 @@ object #90030
 
   method chat owner: ARCH_WIZARD
     "Return deterministic model messages. Drive all changes through the advertised tools.";
-    const {context, ?opts, ?stream, ?reasoning, ?tools = {}} = args;
+    const {context, ?opts = false, ?model = false, ?stream = false, ?tools = {}, ?purpose = 'conversation} = args;
     let last = [];
     for message in (context)
       if (message["role"] == "tool" && index(`message["name"] ! E_RANGE => ""', "changes_") == 1)
@@ -114,12 +114,7 @@ object #90030
       this.recovered = true;
       this.phase = 3;
     else
-      if (this.backend == "rlm")
-        name = "report_finding";
-        input = ["subject" -> "Change review", "content" -> this.expect_denied ? "Change management denied. No updates applied." | this.inspect_only ? "Updates inspected. Live code remains unchanged." | "Edited program installed and result checked.", "final" -> true];
-      else
-        return ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "Change review finished."]]}];
-      endif
+      return ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "Change review finished."]]}];
     endif
     this.phase = this.phase + 1;
     return ["choices" -> {["message" -> ["role" -> "assistant", "tool_calls" -> {["id" -> tostr(phase), "type" -> "function", "function" -> ["name" -> name, "arguments" -> generate_json(input)]]}]]}];
@@ -130,7 +125,7 @@ object #90030
     const {backend, inspect_only, ?revoke = false, ?recover = false} = args;
     player.wizard || raise(E_PERM);
     set_task_perms(player);
-    const room = create(backend == "rlm" ? $agent_room | $agentic.coding_room, player, 2);
+    const room = create(backend == "base" ? $agent_room | $llm_coding_room, player, 2);
     const model = create(this, player, 2);
     const package = "agent_fixture";
     const source = {"object #9500", tostr("owner: ", player), tostr("verb probe (this none this) owner: ", player, " flags: \"rxd\""), "return 1;", "endverb", "endobject"};
@@ -184,7 +179,7 @@ object #90030
   method run_denied owner: ARCH_WIZARD
     "Room and model ownership must not grant their requester administrator permissions.";
     const {backend} = args;
-    const room = create(backend == "rlm" ? $agent_room | $agentic.coding_room, $arch_wizard, 2);
+    const room = create(backend == "base" ? $agent_room | $llm_coding_room, $arch_wizard, 2);
     const model = create(this, $arch_wizard, 2);
     try
       model.backend = backend;

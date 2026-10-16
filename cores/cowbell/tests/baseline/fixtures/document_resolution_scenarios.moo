@@ -248,39 +248,40 @@ object DOCUMENT_RESOLUTION_SCENARIOS
   endmethod
 
   method test_agent_report_documents owner: ARCH_WIZARD
-    "Agent report tools emit code, tables, and literal prose through the normal room event path.";
-    const room = create($agent_room, player, 2);
+    "Agent report tools emit code, tables, and literal prose through the captured connection event path.";
+    const recipient = create($root, player, 2);
+    const presenter = $llm_presenter:new(recipient, #1, #1);
     try
-      add_property(room, "captured_event", false, {player, "r"});
-      add_verb(room, {player, "rxd", "announce"}, {"this", "none", "this"});
-      $test_utils:assert_false(set_verb_code(room, "announce", {"this.captured_event = args[1];"}),
-        "Room capture compiles");
+      add_property(recipient, "captured_event", false, {player, "r"});
+      add_verb(recipient, {player, "rxd", "inform_connection"}, {"this", "none", "this"});
+      $test_utils:assert_false(set_verb_code(recipient, "inform_connection", {"this.captured_event = args[2];"}),
+        "Connection capture compiles");
       const source = "before\n```\n*opaque*";
-      room:_tool_present_code(["title" -> "Source", "code" -> source, "language" -> "moo"], player);
-      const code = room.captured_event:resolve(#90102);
+      presenter:present_code(["title" -> "Source", "code" -> source, "language" -> "moo"], recipient);
+      const code = recipient.captured_event:resolve(#90102);
       const blocks = $document:encode(code)["blocks"];
       $test_utils:assert_eq({blocks[1]["kind"], blocks[2]["kind"]}, {"heading", "code_block"},
         "Code presentation uses structural nodes");
       $test_utils:assert_eq(blocks[2]["text"], source, "Code delimiters stay inside the source buffer");
-      room:_tool_present_table(["title" -> "Cells", "headers" -> {"Left |", "Right"},
-        "rows" -> {{"First\nSecond", "<tag>"}}], player);
-      const table = room.captured_event:resolve(#90102);
+      presenter:present_table(["title" -> "Cells", "headers" -> {"Left |", "Right"},
+        "rows" -> {{"First\nSecond", "<tag>"}}], recipient);
+      const table = recipient.captured_event:resolve(#90102);
       const encoded = $document:encode(table)["blocks"][2];
       $test_utils:assert_eq(encoded["kind"], "table", "Table presentation uses a table node");
       $test_utils:assert_eq(length(encoded["rows"][1]["cells"]), 2, "Punctuation cannot add a column");
       $test_utils:assert_eq(encoded["rows"][1]["cells"][1]["blocks"][1]["children"][2]["kind"],
         "hard_break", "Cell newlines retain their structure");
-      const last_event = room.captured_event;
+      const last_event = recipient.captured_event;
       let rejected = false;
       try
-        room:_tool_present_table(["headers" -> {"Only"}, "rows" -> {{"valid"}, "invalid"}], player);
+        presenter:present_table(["headers" -> {"Only"}, "rows" -> {{"valid"}, "invalid"}], recipient);
       except (E_TYPE)
         rejected = true;
       endtry
       $test_utils:assert_true(rejected, "Malformed rows cannot silently disappear");
-      $test_utils:assert_eq(room.captured_event, last_event, "Invalid table publishes no partial report");
-      room:_tool_present_report(["title" -> "Report", "content" -> "*literal*\n\nSecond paragraph."], player);
-      const report = room.captured_event:resolve(#90102);
+      $test_utils:assert_eq(recipient.captured_event, last_event, "Invalid table publishes no partial report");
+      presenter:present_report(["title" -> "Report", "content" -> "*literal*\n\nSecond paragraph."], recipient);
+      const report = recipient.captured_event:resolve(#90102);
       $test_utils:assert_eq(length($document:encode(report)["blocks"]), 3, "Report paragraphs remain separate");
       for document in ({code, table, report})
         for format in ({'text_html, 'text_djot, 'text_plain})
@@ -288,14 +289,15 @@ object DOCUMENT_RESOLUTION_SCENARIOS
         endfor
       endfor
     finally
-      recycle(room);
+      presenter:close();
+      recycle(recipient);
     endtry
     return true;
   endmethod
 
   method test_programmatic_description_blocks owner: ARCH_WIZARD
     "Both agent room descriptions retain headings and lists through the ordinary look producer.";
-    for prototype in ({$agent_room, $agentic.coding_room})
+    for prototype in ({$agent_room, $llm_coding_room})
       const room = create(prototype, player, 2);
       try
         const document = $look:narrative(room:look_self():capture(player)):resolve(player);
@@ -316,28 +318,25 @@ object DOCUMENT_RESOLUTION_SCENARIOS
   endmethod
 
   method test_source_listing_documents owner: ARCH_WIZARD
-    "Visor ranges retain exact source and line origins; documentation display preserves explicit code blocks.";
-    const visor = create($data_visor, player, 2);
+    "Shared LLM source ranges retain exact text and line origins; documentation display preserves explicit code blocks.";
     const target = create($thing);
     try
       add_verb(target, {player, "rxd", "listing_probe"}, {"this", "none", "this"});
       $test_utils:assert_false(set_verb_code(target, "listing_probe",
         {"\"Source *literal*.\";", "let value = 1;", "value = value + 1;", "return value;"}), "Source compiles");
-      add_verb(visor, {player, "rxd", "listing_probe"}, {"this", "none", "this"});
-      $test_utils:assert_false(set_verb_code(visor, "listing_probe",
-        {"return this:_tool_build_present_verb_code_payload(@args);"}), "Presentation probe compiles");
       const source = verb_code(target, "listing_probe", false, true);
-      const request = ["object" -> tostr(target), "verb" -> "listing_probe", "start_line" -> 2, "end_line" -> 3];
-      const range = visor:listing_probe(request, player, true);
-      const document = $event:mk_info(player, range["content"]):resolve(player);
+      const range = $llm_verb_source:read(player, target, "listing_probe", 2, 3);
+      const document = $event:mk_info(player, range:document()):resolve(player);
       const code = $document:encode(document)["blocks"][2];
       $test_utils:assert_eq(code["first_line"], 2, "Range numbering uses its actual start");
       $test_utils:assert_eq(code["text"], source[2..3]:join("\n"), "Number gutters never enter source text");
       $test_utils:assert_true(index($document:render(document, 'text_plain)['body], "2 | " + source[2]),
         "Renderer applies the source origin");
-      const full = visor:listing_probe(request, player, false);
-      const full_code = $document:encode($event:mk_info(player, full["content"]):resolve(player))["blocks"][2];
+      const full = $llm_verb_source:read(player, target, "listing_probe");
+      const full_code = $document:encode($event:mk_info(player, full:document()):resolve(player))["blocks"][2];
       $test_utils:assert_eq(full_code["text"], source:join("\n"), "Whole listing preserves source");
+      const unnumbered = $document:encode($event:mk_info(player, full:document(false)):resolve(player))["blocks"][2];
+      $test_utils:assert_false(maphaskey(unnumbered, "first_line"), "Line numbers remain optional");
       const content = $help_utils:format_documentation_display(
         {"Source ", $format.code:inline("listing_probe")}, $format.code:mk(source, "moo", 1));
       const documentation = $document:encode($event:mk_info(player, content):resolve(player));
@@ -345,7 +344,6 @@ object DOCUMENT_RESOLUTION_SCENARIOS
       $test_utils:assert_eq(documentation["blocks"][2]["text"], source:join("\n"),
         "A flyweight code block is not mistaken for missing documentation");
     finally
-      recycle(visor);
       recycle(target);
     endtry
     return true;

@@ -710,8 +710,8 @@ removed. It identifies the accepted initial definition. It does not authorize re
 ### Review updates with an agent
 
 Cowbell publishes 25 `changes_*` tools through its MCP catalog. Both `moor-mcp-host` and
-`moor-web-mcp` use these tools. The RLM agent and agentic coding room use the same definitions and
-service checks. Tool discovery does not grant permission to change the MOO.
+`moor-web-mcp` use these tools. LLM coding rooms use the same definitions and service checks. Tool
+discovery does not grant permission to change the MOO.
 
 Connect with an administrator account. A delegated administrator needs the existing `@changes`
 allowlist entry. Git operations and new object creation require an actual wizard. With native MCP,

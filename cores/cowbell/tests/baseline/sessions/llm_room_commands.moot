@@ -1,0 +1,37 @@
+// All room commands use bounded admission and the captured command actor.
+@wizard
+; add_property(#90100, "room_probe", create($llm_coding_room, #90101, 2), {#90100, ""}); #90100.room_probe.max_pending_per_player = 1; #90100.room_probe.max_jobs = 2; move(#90101, #90100.room_probe); move(#90102, #90100.room_probe); return true;
+true
+; const client = create($root, #90100, 1); add_verb(client, {#90100, "rxd", "chat"}, {"this", "none", "this"}); set_verb_code(client, "chat", {"suspend(30);", "return [\"choices\" -> {[\"message\" -> [\"role\" -> \"assistant\", \"content\" -> \"done\"]]}];"}); #90100.room_probe.llm_client = client; return true;
+true
+@nonprogrammer
+% do first request
+@text Queued: first request
+% do another request
+@text Requester task limit reached
+@programmer
+% do second request
+@text Queued: second request
+@wizard
+; const room = #90100.room_probe; return {length(room.jobs), room.jobs[1].requester == #90102, room.jobs[1].reply_connection == connections(#90102)[1][1], room.jobs[2].requester == #90101};
+{2, true, true, true}
+; #90100.room_probe.history = {['requester -> #90102, 'query -> "previous", 'status -> 'failed, 'context -> {["role" -> "user", "content" -> "previous"]}, 'recovery_required -> false]}; return true;
+true
+@nonprogrammer
+% fix revise previous
+@text Room task queue is full
+% resume continue previous
+@text Room task queue is full
+% halt
+@text Cancelled 1 task(s).
+@wizard
+; return {length(#90100.room_probe.jobs), #90100.room_probe.jobs[1].requester == #90101};
+{1, true}
+@programmer
+% reset
+@text Room jobs and history cleared.
+@wizard
+; return {#90100.room_probe.jobs, #90100.room_probe.history, #90100.room_probe.loop_task};
+{{}, {}, 0}
+; move(#90101, #90103); move(#90102, #90103); recycle(#90100.room_probe); delete_property(#90100, "room_probe"); return true;
+true

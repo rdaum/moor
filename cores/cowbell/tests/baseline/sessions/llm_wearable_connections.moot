@@ -1,0 +1,95 @@
+// Wearable input, model work, and output retain one connection for the complete interaction.
+@attach second programmer
+@wizard
+; add_property(#90100, "wearable_probe", #90031:wearable_fixture(#90101), {#90100, ""}); return true;
+true
+@programmer
+>> first query
+% use interaction probe
+@text Query received: first query
+@text private interaction result
+~~[TOKENS]
+~~[CONTEXT]
+@second
+@quiet
+@noevents
+// A model-requested prompt also uses the captured connection and shared tool loop.
+@wizard
+; #90100.wearable_probe.agent.client.replies = {["choices" -> {["message" -> ["role" -> "assistant", "tool_calls" -> {["id" -> "label", "type" -> "function", "function" -> ["name" -> "ask_user", "arguments" -> ["question" -> "Provide a label.", "input_type" -> "text"]]]}]]}], ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "private interaction result"]]}]}; return true;
+true
+@programmer
+>> query with question
+>> private label
+% use interaction probe
+@text Query received: query with question
+@text [QUESTION] Asking: Provide a label. [text]
+@text ask_user: User response: private label
+@text private interaction result
+~~[TOKENS]
+~~[CONTEXT]
+@second
+@quiet
+@noevents
+// Input queued on another connection must not answer a captured read.
+>> wrong connection answer
+@wizard
+; add_property(#90100, "wearable_worker", #90100.wearable_probe:start_probe(connections(#90101)[2][1]), {#90100, ""}); suspend(0.1); return true;
+true
+; return {#90100.wearable_probe.interaction.active, length(#90100.wearable_probe.agent.client.requests)};
+{true, 3}
+@programmer
+>> second query
+@text-within 5 Query received: second query
+@text-within 5 private interaction result
+~~[TOKENS]
+~~[CONTEXT]
+// The unused answer is still queued on its original connection.
+@wizard
+; return read(connections(#90101)[1][1]);
+"wrong connection answer"
+// The owner can stop a pending read from another connection.
+@wizard
+; #90100.wearable_worker = #90100.wearable_probe:start_probe(connections(#90101)[2][1]); suspend(0.1); return true;
+true
+@second
+% stop interaction probe
+@text Interaction stopped.
+@event text/plain utility
+@wizard
+; return {#90100.wearable_probe.interaction, valid_task(#90100.wearable_worker), #90100.wearable_probe.agent.running};
+{#-1, false, false}
+// A cancelled read does not consume the next interaction's answer.
+@programmer
+>> after cancellation
+% use interaction probe
+@text Query received: after cancellation
+@text private interaction result
+~~[TOKENS]
+~~[CONTEXT]
+@wizard
+// Removal cancels the pending interaction immediately, before the monitor's next poll.
+; #90100.wearable_worker = #90100.wearable_probe:start_probe(connections(#90101)[2][1]); suspend(0.1); return true;
+true
+; const device = #90100.wearable_probe; return {device:remove_probe(), device.interaction, valid_task(#90100.wearable_worker)};
+{true, #-1, false}
+; #90101.wearing = setadd(#90101.wearing, #90100.wearable_probe); return true;
+true
+// Reassignment revokes the captured interaction and never redirects its output.
+; #90100.wearable_worker = #90100.wearable_probe:start_probe(connections(#90101)[1][1]); suspend(0.1); return true;
+true
+@reassign second nonprogrammer
+; suspend(1.2); return {#90100.wearable_probe.interaction, valid_task(#90100.wearable_worker)};
+{#-1, false}
+@second
+@quiet
+@noevents
+@wizard
+// A detached connection also retires its pending read.
+@attach detached programmer
+; #90100.wearable_worker = #90100.wearable_probe:start_probe(connections(#90101)[1][1]); suspend(0.1); return true;
+true
+@detach detached
+; suspend(1.2); return {#90100.wearable_probe.interaction, valid_task(#90100.wearable_worker)};
+{#-1, false}
+; const device = #90100.wearable_probe; #90101.wearing = setremove(#90101.wearing, device); recycle(device.agent.client); recycle(device); delete_property(#90100, "wearable_probe"); delete_property(#90100, "wearable_worker"); return true;
+true

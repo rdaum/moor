@@ -15,271 +15,355 @@ object LLM_AGENT [
   property compaction_callback (owner: HACKER, flags: "rc") = #-1;
   property compaction_threshold (owner: ARCH_WIZARD, flags: "r") = 0.7;
   property consecutive_tool_failures (owner: HACKER, flags: "rc") = [];
-  property context (owner: HACKER, flags: "c") = {};
+  property project_state (owner: ARCH_WIZARD, flags: "") = #-1;
+  property conversation (owner: ARCH_WIZARD, flags: "") = #-1;
   property current_continuation (owner: HACKER, flags: "rc") = 0;
   property current_iteration (owner: HACKER, flags: "rc") = 0;
-  property current_tasks (owner: HACKER, flags: "rc") = [];
-  property knowledge_base (owner: HACKER, flags: "rc") = #-1;
   property last_token_usage (owner: HACKER, flags: "c") = [];
   property max_consecutive_failures (owner: ARCH_WIZARD, flags: "r") = 3;
   property max_iterations (owner: ARCH_WIZARD, flags: "r") = 50;
   property min_messages_to_keep (owner: HACKER, flags: "c") = 15;
-  property next_task_id (owner: HACKER, flags: "rc") = 1;
-  property next_todo_id (owner: HACKER, flags: "rc") = 1;
   property system_prompt (owner: HACKER, flags: "rc") = "";
-  property todos (owner: HACKER, flags: "rc") = {};
   property token_limit (owner: ARCH_WIZARD, flags: "r") = 128000;
-  property token_owner (owner: HACKER, flags: "rc") = #-1;
+  property model_override (owner: HACKER, flags: "rc") = false;
   property tool_callback (owner: HACKER, flags: "rc") = #-1;
+  property execution_status (owner: ARCH_WIZARD, flags: "c") = 'idle;
+  property running (owner: ARCH_WIZARD, flags: "c") = false;
+  property pending_tools (owner: ARCH_WIZARD, flags: "c") = [];
+  property tool_outcomes (owner: ARCH_WIZARD, flags: "c") = [];
+  property max_tools_per_turn (owner: ARCH_WIZARD, flags: "rc") = 32;
   property tools (owner: HACKER, flags: "c") = [];
   property total_tokens_used (owner: HACKER, flags: "rc") = 0;
 
   override description (owner: HACKER, flags: "rc") = "Prototype for LLM-powered agents. Maintains conversation context and executes tool calls.";
 
   method initialize owner: ARCH_WIZARD
-    "Called automatically on creation. Creates anonymous client.";
+    "Create independent conversation state once, under the new agent's owner's authority.";
+    $llm_agent:_challenge_permissions(this, caller_perms());
+    is_clear_property(this, "conversation") || raise(E_INVARG, "Agent is already initialized");
     pass();
-    this.client = $llm_client:create(true);
-    this.client.name = "Client for " + this.name;
-  endmethod
-
-  method log_tool_error owner: ARCH_WIZARD
-    "Log tool execution errors to server_log. Accessible by agent, owner, or wizard.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {tool_name, tool_args, error_msg} = args;
-    const safe_args = typeof(tool_args) == TYPE_STR ? tool_args | toliteral(tool_args);
-    set_task_perms(this.owner, {{"builtin_call", "server_log"}});
-    server_log("LLM tool error [" + toliteral(tool_name) + "]: " + toliteral(error_msg) + " args=" + toliteral(safe_args));
-    return true;
+    this.client = $llm_client;
+    this.conversation = $llm_conversation:new(this);
+    this.project_state = $llm_project:new(this);
   endmethod
 
   method add_tool owner: ARCH_WIZARD
-    "Register a tool for this agent to use";
-    $llm_agent:_challenge_permissions(this, caller_perms());
-    const {tool_name, tool_flyweight} = args;
-    typeof(tool_name) != TYPE_STR && raise(E_TYPE);
-    typeof(tool_flyweight) != TYPE_FLYWEIGHT && raise(E_TYPE);
-    let tools = this.tools;
-    tools[tool_name] = tool_flyweight;
-    this.tools = tools;
+    "Register one canonical descriptor; replacing a different definition requires explicit removal.";
+    const {tool_name, definition} = args;
+    const principal = caller_perms();
+    $llm_agent:_challenge_permissions(this, principal);
+    set_task_perms(principal);
+    const tool = $llm_tool_catalog:normalize(definition);
+    typeof(tool_name) == TYPE_STR && strcmp(tool_name, tool.name) == 0 || raise(E_INVARG, "Tool name must match its descriptor");
+    if (maphaskey(this.tools, tool_name))
+      strcmp(toliteral(this.tools[tool_name]), toliteral(tool)) == 0 || raise(E_INVARG, "Conflicting tool: " + tool_name);
+    endif
+    this.tools[tool_name] = tool;
   endmethod
 
   method remove_tool owner: ARCH_WIZARD
-    "Unregister a tool.";
+    "Unregister a tool and release its consecutive-failure counter.";
     $llm_agent:_challenge_permissions(this, caller_perms());
     const {tool_name} = args;
     typeof(tool_name) != TYPE_STR && raise(E_TYPE, "tool_name must be string");
     this.tools = mapdelete(this.tools, tool_name);
+    this.consecutive_tool_failures = mapdelete(this.consecutive_tool_failures, tool_name);
+  endmethod
+
+  method get_context owner: ARCH_WIZARD
+    "Return the conversation snapshot under the caller's current authority.";
+    set_task_perms(caller_perms());
+    return $llm_agent:context_snapshot(this);
+  endmethod
+
+  method context_snapshot owner: ARCH_WIZARD
+    "Read canonical conversation state without running agent hooks during job cancellation.";
+    const {agent} = args;
+    $llm_agent:_challenge_permissions(agent, caller_perms());
+    return agent.conversation:snapshot();
+  endmethod
+
+  method set_context owner: ARCH_WIZARD
+    "Install a validated conversation while idle; active or unresolved work cannot be replaced.";
+    $llm_agent:_challenge_permissions(this, caller_perms());
+    !this.running && length(this.pending_tools) == 0 || raise(E_INVARG, "Conversation is active or needs recovery");
+    const {messages} = args;
+    return this.conversation:replace(messages);
   endmethod
 
   method add_message owner: ARCH_WIZARD
-    "Add a message to context";
+    "Append a validated message to this agent's conversation.";
     $llm_agent:_challenge_permissions(this, caller_perms());
-    const {role, content} = args;
-    this.context = {@this.context, ["role" -> role, "content" -> content]};
+    return this.conversation:append(@args);
   endmethod
 
   method _get_tool_schemas owner: ARCH_WIZARD
     "Get OpenAI-format tool schemas from registered tools. Internal only.";
     caller == this || raise(E_PERM);
-    return { this.tools[k]:to_schema() for k in (mapkeys(this.tools)) };
+    return {$llm_tool_catalog:normalize(this.tools[k]):to_schema() for k in (mapkeys(this.tools))};
   endmethod
 
   method _find_tool owner: ARCH_WIZARD
     "Find a registered tool by name. Returns flyweight or #-1 if not found. Internal only.";
     caller == this || raise(E_PERM);
     const {tool_name} = args;
-    maphaskey(this.tools, tool_name) && return this.tools[tool_name];
+    if (maphaskey(this.tools, tool_name) && strcmp(this.tools[tool_name].name, tool_name) == 0)
+      return this.tools[tool_name];
+    endif
     return #-1;
   endmethod
 
-  method _call_llm_with_retry owner: ARCH_WIZARD
-    "Call LLM API with retry logic. Returns $llm_response flyweight.";
-    "Optional second arg: opts flyweight to override this.chat_opts.";
-    let response = 0;
+  method _request_model owner: ARCH_WIZARD
+    "Request one captured conversation snapshot; the provider owns bounded retries and accounting.";
     caller == this || raise(E_PERM);
-    let {tool_schemas, ?opts = false} = args;
-    opts = typeof(opts) == TYPE_FLYWEIGHT ? opts | this.chat_opts;
-    const max_retries = 3;
-    for retry_count in [0..max_retries]
-      try
-        response = this.client:chat(this.context, opts, false, false, tool_schemas);
-        suspend(0);
-        return $llm_response:mk(response);
-      except e (ANY)
-        this:_log("ERROR: " + toliteral(e));
-        if (retry_count >= max_retries)
-          if (typeof(tool_schemas) == TYPE_LIST && length(tool_schemas) > 0)
-            this:_log("Final retry failed with tools; attempting one fallback request without tools");
-            try
-              response = this.client:chat(this.context, opts, false, false, false);
-              suspend(0);
-              return $llm_response:mk(response);
-            except fallback_err (ANY)
-              this:_log("ERROR(no-tools fallback): " + toliteral(fallback_err));
-              raise(E_INVARG, "LLM API call failed after retries (with and without tools): " + toliteral(e) + " ; fallback: " + toliteral(fallback_err));
-            endtry
-          endif
-          raise(E_INVARG, "LLM API call failed after retries: " + toliteral(e));
-        endif
-        suspend(retry_count + 1);
-      endtry
-    endfor
+    const principal = caller_perms();
+    const {schemas, opts, actor} = args;
+    typeof(actor) == TYPE_OBJ && valid(actor) && (actor == principal || principal.wizard) || raise(E_PERM);
+    const options = typeof(opts) == TYPE_FLYWEIGHT ? opts | this.chat_opts;
+    return $llm_response:mk($llm_provider:chat_as(this.client, actor, 'conversation,
+      this.conversation:snapshot(), options, this.model_override, false, schemas));
   endmethod
 
   method _track_token_usage owner: ARCH_WIZARD
-    "Track token usage from response flyweight and trigger compaction if needed.";
+    "Keep conversation diagnostics. Only the provider boundary charges the actor's account.";
     caller == this || raise(E_PERM);
-    const principal = caller_perms();
-    const {response, ?request_principal = principal} = args;
-    typeof(request_principal) == TYPE_OBJ && valid(request_principal) || raise(E_PERM);
-    request_principal == principal || principal.wizard || raise(E_PERM);
-    const usage = response:usage();
-    typeof(usage) != TYPE_MAP && return;
+    const {response, @rest} = args;
+    const usage = $llm_account:usage(response:usage());
+    if (typeof(usage) != TYPE_MAP)
+      this.last_token_usage = [];
+      return;
+    endif
     this.last_token_usage = usage;
-    maphaskey(usage, "total_tokens") || return;
-    const tokens_this_call = usage["total_tokens"];
-    this.total_tokens_used = this.total_tokens_used + tokens_this_call;
-    this:_update_token_usage(this.token_owner, tokens_this_call);
-    this:needs_compaction() && this:compact_context(request_principal);
+    this.total_tokens_used = this.total_tokens_used + usage["total_tokens"];
   endmethod
 
   method _execute_tool_call owner: ARCH_WIZARD
-    "Execute a single tool call. Returns result map for context.";
-    let content_out = 0;
-    let error_msg = 0;
-    let is_error_response = 0;
-    let result = 0;
+    "Execute a declared call and retain its typed outcome separately from provider text.";
     caller == this || raise(E_PERM);
     const principal = caller_perms();
-    const {tool_call, request_principal} = args;
-    typeof(request_principal) == TYPE_OBJ && valid(request_principal) || raise(E_PERM);
-    principal == request_principal || principal.wizard || raise(E_PERM);
-    const tool_name = tool_call["function"]["name"];
-    const tool_args = tool_call["function"]["arguments"];
-    const tool_call_id = tool_call["id"];
-    "Check consecutive failures - return early if blocked";
-    let failures = typeof(this.consecutive_tool_failures) == TYPE_MAP ? this.consecutive_tool_failures | [];
-    const tool_failure_count = maphaskey(failures, tool_name) ? failures[tool_name] | 0;
-    if (tool_failure_count >= this.max_consecutive_failures)
-      error_msg = "TOOL BLOCKED: This tool has failed " + tostr(tool_failure_count) + " times in a row. STOP trying to use it and move on. Do NOT retry.";
-      this:log_tool_error(tool_name, tool_args, error_msg);
-      valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_error) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_tool_error", {tool_name, tool_args, error_msg}) ! ANY';
-      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> error_msg];
-    endif
-    "Find tool - return early if not found";
-    const tool = this:_find_tool(tool_name);
-    if (typeof(tool) != TYPE_FLYWEIGHT)
-      this:log_tool_error(tool_name, tool_args, "Tool not found");
-      valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_error) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_tool_error", {tool_name, tool_args, "Tool not found"}) ! ANY';
-      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> "Error: tool not found"];
-    endif
-    "Execute the tool";
-    try
-      valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_call) && $llm_agent:_invoke_request_callback(this, request_principal, "on_tool_call", {tool_name, tool_args});
-      result = $llm_agent:_dispatch_tool(this, tool, tool_args, request_principal);
-      suspend(0);
-      content_out = typeof(result) == TYPE_STR ? result | toliteral(result);
-      valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_complete) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_tool_complete", {tool_name, tool_args, content_out}) ! ANY';
-      "Track failures - increment on error response, clear on success";
-      is_error_response = typeof(result) == TYPE_STR && (result:starts_with("ERROR:") || result:starts_with("TOOL BLOCKED:"));
-      if (is_error_response)
-        failures[tool_name] = tool_failure_count + 1;
-        this.consecutive_tool_failures = failures;
-      elseif (tool_failure_count > 0)
-        this.consecutive_tool_failures = mapdelete(failures, tool_name);
+    const {call, actor} = args;
+    typeof(actor) == TYPE_OBJ && valid(actor) && (actor == principal || principal.wizard) || raise(E_PERM);
+    const name = call["function"]["name"];
+    const parameters = call["function"]["arguments"];
+    const id = call["id"];
+    const tool = this:_find_tool(name);
+    const registered = typeof(tool) == TYPE_FLYWEIGHT;
+    const failures = registered && maphaskey(this.consecutive_tool_failures, name)
+      ? this.consecutive_tool_failures[name] | 0;
+    let outcome = false;
+    if (this.cancel_requested)
+      outcome = $llm_tool_result:mk('cancelled, "Operation cancelled.", "cancelled");
+    elseif (failures >= this.max_consecutive_failures)
+      outcome = $llm_tool_result:mk('failure, "Repeated tool failure; inspect the error before retrying.", "tool_blocked");
+    else
+      if (!registered)
+        outcome = $llm_tool_result:mk('failure, "Tool not found.", "unknown_tool");
+      else
+        let started = false;
+        try
+          const validated = $llm_tool_schema:arguments(parameters, tool.parameters);
+          if (valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_call))
+            $llm_agent:_invoke_request_callback(this, actor, "on_tool_call", {name, parameters});
+          endif
+          if (this.cancel_requested)
+            outcome = $llm_tool_result:mk('cancelled, "Operation cancelled.", "cancelled");
+          else
+            started = true;
+            outcome = $llm_tool_result:normalize($llm_agent:_dispatch_tool(this, tool, validated, actor));
+          endif
+        except e (ANY)
+          "A throwing handler may already have committed effects across a suspension.";
+          const effect = `tool.effect ! E_PROPNF => 'unknown';
+          const detail = tostr(e[2]);
+          const code = tostr(e[1]);
+          outcome = $llm_tool_result:mk(started && effect != 'inspection ? 'unknown | 'failure,
+            detail[1..min(length(detail), 2048)], code[1..min(length(code), 256)]);
+        endtry
       endif
-      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> content_out];
-    except e (ANY)
-      error_msg = "ERROR: " + tostr(e[1]) + " - " + tostr(e[2]);
-      length(e) > 2 && typeof(e[3]) == TYPE_LIST && (error_msg = error_msg + "\nTraceback: " + toliteral(e[3]));
-      this:log_tool_error(tool_name, tool_args, error_msg);
-      valid(this.tool_callback) && respond_to(this.tool_callback, 'on_tool_error) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_tool_error", {tool_name, tool_args, error_msg}) ! ANY';
-      failures[tool_name] = tool_failure_count + 1;
-      this.consecutive_tool_failures = failures;
-      return ["tool_call_id" -> tool_call_id, "role" -> "tool", "name" -> tool_name, "content" -> error_msg];
+    endif
+    this.tool_outcomes[id] = outcome;
+    const index = this.pending_tools[id];
+    this.conversation:record_tool(index, id, outcome:message(id, name));
+    if (!(outcome.status in {'unknown, 'waiting}))
+      this.pending_tools = mapdelete(this.pending_tools, id);
+    endif
+    if (outcome:is_success())
+      if (maphaskey(this.consecutive_tool_failures, name))
+        this.consecutive_tool_failures = mapdelete(this.consecutive_tool_failures, name);
+      endif
+    elseif (registered && outcome.status in {'failure, 'unknown} && this:_find_tool(name) == tool)
+      this.consecutive_tool_failures[name] = min(failures + 1, this.max_consecutive_failures);
+    elseif (outcome.status == 'cancelled)
+      this.cancel_requested = true;
+    endif
+    const message = outcome:message(id, name);
+    const callback_name = outcome:is_success() ? "on_tool_complete" | "on_tool_error";
+    if (valid(this.tool_callback) && respond_to(this.tool_callback, callback_name))
+      try
+        $llm_agent:_invoke_request_callback(this, actor, callback_name, {name, parameters, message["content"]});
+      except (ANY)
+        this:_log("Tool result callback failed: " + callback_name);
+      endtry
+    endif
+    return message;
+  endmethod
+
+  method run_turn owner: ARCH_WIZARD
+    "Expose one conversation turn while preventing concurrent conversation execution.";
+    const principal = caller_perms();
+    const {?opts = false, ?actor = principal} = args;
+    $llm_agent:_challenge_permissions(this, principal);
+    typeof(actor) == TYPE_OBJ && valid(actor) || raise(E_PERM);
+    actor == principal || principal.wizard || raise(E_PERM);
+    const external = caller != this;
+    !external || !this.running || raise(E_INVARG, "Conversation already running");
+    if (external)
+      length(this.pending_tools) == 0 || raise(E_INVARG, "Unresolved tool outcomes require recovery");
+      this.running = true;
+    endif
+    try
+      return this:_run_turn(opts, actor);
+    finally
+      if (external)
+        this.running = false;
+      endif
     endtry
   endmethod
 
-  method send_message owner: ARCH_WIZARD
-    "Main entry point: send a message and get response, executing tools as needed.";
-    "Optional second arg: opts flyweight to override this.chat_opts for this call.";
-    let all_blocked = 0;
-    let all_failed_count = 0;
-    let budget_check = 0;
-    let content = 0;
-    let guidance = 0;
-    let response = 0;
-    let result = 0;
-    let tc_content = 0;
-    let tool_results = 0;
+  method _run_turn owner: ARCH_WIZARD
+    "Record the assistant call and pending outcomes before invoking any tool that can commit.";
+    caller == this || raise(E_PERM);
     const principal = caller_perms();
-    const {user_input, ?opts = false, ?request_principal = principal} = args;
-    typeof(request_principal) == TYPE_OBJ && valid(request_principal) || raise(E_PERM);
-    request_principal == principal || principal.wizard || raise(E_PERM, "Cannot impersonate request principal");
-    $llm_agent:_challenge_permissions(this, caller_perms());
-    "Repair any context corruption before proceeding";
-    const repairs = this:_repair_context();
-    repairs > 0 && this:_log("Auto-repaired " + tostr(repairs) + " context issues before processing new message");
-    this:add_message("user", user_input);
-    this.cancel_requested = false;
-    this.current_iteration = 0;
-    for iteration in [1..this.max_iterations]
-      this.current_iteration = iteration;
-      "Check for cancellation - fixed: use if statement instead of broken && chain";
-      if (this.cancel_requested)
-        this.cancel_requested = false;
-        this.current_iteration = 0;
-        return "Operation cancelled.";
-      endif
-      "Check token budget";
-      budget_check = this:_check_token_budget(this.token_owner);
-      typeof(budget_check) == TYPE_STR && return budget_check;
-      "Call LLM - returns $llm_response flyweight";
-      response = this:_call_llm_with_retry(this:_get_tool_schemas(), opts);
-      this:_track_token_usage(response, request_principal);
-      "Validate response";
-      !response:is_valid() && (this.current_iteration = 0) && return tostr(response.raw);
-      "No tool calls = final response";
-      if (!response:has_tool_calls())
-        content = response:content();
-        this:add_message("assistant", content);
-        this.current_iteration = 0;
-        return content;
-      endif
-      "Execute all tool calls";
-      tool_results = {};
-      all_blocked = true;
-      for tool_call in (response:tool_calls())
-        result = this:_execute_tool_call(tool_call, request_principal);
-        tool_results = {@tool_results, result};
-        tc_content = result["content"];
-        !(tc_content:starts_with("TOOL BLOCKED:") || tc_content:starts_with("ERROR:")) && (all_blocked = false);
-      endfor
-      this.context = {@this.context, response:message(), @tool_results};
-      "Handle all-failed iterations";
-      if (all_blocked && length(tool_results) > 0)
-        all_failed_count = this.all_failed_iterations + 1;
-        this.all_failed_iterations = all_failed_count;
-        if (all_failed_count >= 3)
-          this.current_iteration = 0;
-          this.all_failed_iterations = 0;
-          return "Agent stopped after 3 consecutive iterations where all tools failed. Last errors: " + tool_results[1]["content"];
-        endif
-        guidance = ["role" -> "system", "content" -> "All tool calls in the previous response failed. Review the error messages above and either: (1) try a different approach, (2) use the ask_user tool to request help, or (3) use the explain tool to tell the user what's blocking you."];
-        this.context = {@this.context, guidance};
+    const {opts, actor} = args;
+    typeof(actor) == TYPE_OBJ && valid(actor) && (actor == principal || principal.wizard) || raise(E_PERM);
+    const response = this:_request_model(this:_get_tool_schemas(), opts, actor);
+    this:_track_token_usage(response, actor);
+    this.cancel_requested && return ["status" -> "cancelled"];
+    response:is_valid() || return ["status" -> "invalid"];
+    if (!response:has_tool_calls())
+      const content = response:content();
+      typeof(content) == TYPE_STR && length(content:trim()) > 0 || return ["status" -> "invalid"];
+      this:add_message("assistant", content);
+      return ["status" -> "complete", "content" -> content];
+    endif
+    const calls = response:tool_calls();
+    length(calls) <= this.max_tools_per_turn || raise(E_QUOTA, "Too many tools in one turn");
+    this.tool_outcomes = [];
+    const pending = this.conversation:begin_exchange(response:message());
+    this.pending_tools = pending;
+    let results = {};
+    let all_failed = true;
+    let waiting = false;
+    let halted = false;
+    for call in (calls)
+      let message = [];
+      if (halted)
+        const outcome = $llm_tool_result:mk('cancelled, "Not executed because an earlier tool requires recovery.", "recovery_required");
+        this.tool_outcomes[call["id"]] = outcome;
+        this.pending_tools = mapdelete(this.pending_tools, call["id"]);
+        message = outcome:message(call["id"], call["function"]["name"]);
       else
-        this.all_failed_iterations = 0;
+        message = this:_execute_tool_call(call, actor);
+        halted = this.tool_outcomes[call["id"]].status in {'unknown, 'waiting};
       endif
-      suspend(0);
+      if (this.tool_outcomes[call["id"]].status == 'waiting)
+        waiting = true;
+      endif
+      const index = pending[call["id"]];
+      this.conversation:record_tool(index, call["id"], message);
+      results = {@results, message};
+      if (this.tool_outcomes[call["id"]]:is_success())
+        all_failed = false;
+      endif
     endfor
-    return E_QUOTA("Maximum iterations exceeded");
+    this.cancel_requested && return ["status" -> "cancelled", "tool_results" -> results];
+    waiting && return ["status" -> "waiting", "tool_results" -> results];
+    length(this.pending_tools) > 0 && return ["status" -> "unknown", "tool_results" -> results];
+    return ["status" -> all_failed ? "all_failed" | "tool_calls", "tool_results" -> results];
+  endmethod
+
+  method send_message owner: ARCH_WIZARD
+    "Run the common bounded turn protocol and always clear execution status on exit.";
+    const principal = caller_perms();
+    const {input, ?opts = false, ?actor = principal} = args;
+    $llm_agent:_challenge_permissions(this, principal);
+    typeof(actor) == TYPE_OBJ && valid(actor) || raise(E_PERM);
+    actor == principal || principal.wizard || raise(E_PERM);
+    typeof(input) == TYPE_STR || raise(E_TYPE);
+    !this.running || raise(E_INVARG, "Conversation already running");
+    length(this.pending_tools) == 0 || raise(E_INVARG, "Unresolved tool outcomes require recovery");
+    const limit = this.max_iterations;
+    typeof(limit) == TYPE_INT && limit > 0 && limit <= 1000 || raise(E_INVARG, "max_iterations must be between 1 and 1000");
+    this.running = true;
+    this.execution_status = 'running;
+    this.cancel_requested = false;
+    this.all_failed_iterations = 0;
+    try
+      this:needs_compaction() && this:compact_context(actor);
+      this:add_message("user", input);
+      for iteration in [1..limit]
+        this.current_iteration = iteration;
+        if (this.cancel_requested)
+          this.execution_status = 'cancelled;
+          return "Operation cancelled.";
+        endif
+        const budget = this:_check_token_budget(actor);
+        if (typeof(budget) == TYPE_STR)
+          this.execution_status = 'budget_exhausted;
+          return budget;
+        endif
+        if (iteration > 1 && this:needs_compaction())
+          this:compact_context(actor);
+        endif
+        const turn = this:run_turn(opts, actor);
+        const status = turn["status"];
+        if (status == "complete")
+          this.execution_status = 'complete;
+          return turn["content"];
+        elseif (status == "cancelled")
+          this.execution_status = 'cancelled;
+          return "Operation cancelled.";
+        elseif (status == "invalid")
+          this.execution_status = 'failed;
+          return "Error: Invalid model response.";
+        elseif (status == "unknown")
+          this.execution_status = 'unknown;
+          return "Error: Tool outcome is unknown. Inspect committed work before retrying.";
+        elseif (status == "waiting")
+          this.execution_status = 'waiting;
+          return "Operation is waiting. Inspect its status before continuing.";
+        endif
+        if (status == "all_failed")
+          this.all_failed_iterations = this.all_failed_iterations + 1;
+          if (this.all_failed_iterations >= 3)
+            this.execution_status = 'failed;
+            return "Error: Three consecutive turns failed.";
+          endif
+          this:add_message("system", "The tools failed. Inspect their errors and explain the blocker; do not repeat an unchanged failing call.");
+        else
+          this.all_failed_iterations = 0;
+        endif
+      endfor
+      this.execution_status = 'limit_exceeded;
+      return E_QUOTA("Maximum iterations exceeded");
+    finally
+      if (this.execution_status == 'running)
+        this.execution_status = length(this.pending_tools) > 0 ? 'unknown | 'failed;
+      endif
+      this.current_iteration = 0;
+      this.running = false;
+      this.cancel_requested = false;
+    endtry
   endmethod
 
   method reset_context owner: ARCH_WIZARD
     "Clear context and rebuild from system prompt";
     $llm_agent:_challenge_permissions(this, caller_perms());
-    this.context = this.system_prompt ? {["role" -> "system", "content" -> this.system_prompt]} | {};
+    !this.running || raise(E_INVARG, "Cancel execution before resetting context");
+    this.conversation:replace(this.system_prompt ? {["role" -> "system", "content" -> this.system_prompt]} | {});
+    this.pending_tools = [];
+    this.tool_outcomes = [];
+    this.last_token_usage = [];
     this.total_tokens_used = 0;
     this.consecutive_tool_failures = [];
     this.all_failed_iterations = 0;
@@ -288,60 +372,50 @@ object LLM_AGENT [
   method needs_compaction owner: ARCH_WIZARD
     "Check if context needs compaction based on token usage";
     $llm_agent:_challenge_permissions(this, caller_perms());
+    this.conversation:needs_compaction() && return true;
     typeof(this.last_token_usage) != TYPE_MAP && return false;
     !maphaskey(this.last_token_usage, "prompt_tokens") && return false;
     return tofloat(this.last_token_usage["prompt_tokens"]) > tofloat(this.token_limit) * this.compaction_threshold;
   endmethod
 
   method compact_context owner: ARCH_WIZARD
-    "Compact context by summarizing old messages and keeping recent ones.";
-    "Respects tool_call boundaries - won't split assistant+tool_responses.";
-    let msg = 0;
-    let role = 0;
-    let summary_text = 0;
-    $llm_agent:_challenge_permissions(this, caller_perms());
+    "Summarize complete turns without replacing a conversation changed during suspension.";
     const principal = caller_perms();
+    $llm_agent:_challenge_permissions(this, principal);
     const {?request_principal = principal} = args;
     typeof(request_principal) == TYPE_OBJ && valid(request_principal) || raise(E_PERM);
     request_principal == principal || principal.wizard || raise(E_PERM);
-    length(this.context) <= this.min_messages_to_keep + 1 && return;
-    valid(this.compaction_callback) && respond_to(this.compaction_callback, 'on_compaction_start) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_compaction_start", {}, this.compaction_callback) ! ANY';
-    const system_msg = this.context[1];
-    const target_split = length(this.context) - this.min_messages_to_keep;
-    "Find safe split point walking backwards";
-    let split_point = target_split;
-    for i in [target_split..2]
-      msg = this.context[i];
-      "Check if safe to split before this message";
-      if (typeof(msg) == TYPE_MAP && maphaskey(msg, "role"))
-        role = msg["role"];
-        "Safe before user/system, or assistant without tool_calls";
-        if (role == "user" || role == "system")
-          split_point = i;
-          break;
-        elseif (role == "assistant" && !(maphaskey(msg, "tool_calls") && msg["tool_calls"]))
-          split_point = i;
-          break;
-        endif
-      endif
-    endfor
-    const old_messages = this.context[2..split_point - 1];
-    const recent_messages = this.context[split_point..$];
-    length(old_messages) == 0 && return;
-    "Try to summarize, fall back to sliding window on failure";
-    const summary_prompt = "Summarize the following conversation history in 3-4 concise sentences, preserving the most important information:\n\n" + toliteral(old_messages);
-    const summary_context = {system_msg, ["role" -> "user", "content" -> summary_prompt]};
-    const raw_resp = `this.client:chat(summary_context) ! ANY => []';
-    const response = $llm_response:mk(raw_resp);
-    if (response:is_valid())
-      summary_text = response:content();
-      this.context = {system_msg, ["role" -> "assistant", "content" -> "Previous conversation summary: " + summary_text], @recent_messages};
-      this:_log("LLM agent context compacted: " + tostr(length(old_messages)) + " messages summarized, " + tostr(length(recent_messages)) + " kept");
-    else
-      this.context = {system_msg, @recent_messages};
-      this:_log("LLM agent context compacted: summary failed, using sliding window");
+    length(this.pending_tools) == 0 || raise(E_INVARG, "Cannot compact unresolved tool outcomes");
+    const conversation = this.conversation;
+    const plan = conversation:prepare_compaction(this.min_messages_to_keep);
+    typeof(plan) == TYPE_MAP || return false;
+    const callback = this.compaction_callback;
+    if (valid(callback) && respond_to(callback, 'on_compaction_start))
+      `$llm_agent:_invoke_request_callback(this, request_principal,
+        "on_compaction_start", {}, callback) ! ANY';
     endif
-    valid(this.compaction_callback) && respond_to(this.compaction_callback, 'on_compaction_end) && `$llm_agent:_invoke_request_callback(this, request_principal, "on_compaction_end", {}, this.compaction_callback) ! ANY';
+    try
+      const prompt = "Summarize this conversation, preserving decisions, completed actions, "
+        + "unresolved work, and relevant references:\n\n" + toliteral(plan['old]);
+      const raw = $llm_provider:chat_as(this.client, request_principal, 'compaction,
+        {@plan['prefix], ["role" -> "user", "content" -> prompt]}, this.chat_opts, this.model_override, false, false);
+      const response = $llm_response:mk(raw);
+      this:_track_token_usage(response);
+      if (!response:is_valid() || !response:content())
+        this:_log("Context summary was invalid; original conversation retained");
+        return;
+      endif
+      $llm_agent:_challenge_permissions(this, principal);
+      this.conversation == conversation || return false;
+      const applied = conversation:apply_summary(plan, response:content());
+      !applied && this:_log("Conversation changed during compaction; stale summary discarded");
+      return applied;
+    finally
+      if (valid(callback) && respond_to(callback, 'on_compaction_end))
+        `$llm_agent:_invoke_request_callback(this, request_principal,
+          "on_compaction_end", {}, callback) ! ANY';
+      endif
+    endtry
   endmethod
 
   method _challenge_permissions owner: ARCH_WIZARD
@@ -361,215 +435,20 @@ object LLM_AGENT [
   endmethod
 
   method _check_token_budget owner: ARCH_WIZARD
-    "Check if token owner is within budget. Returns true if okay, error string if exceeded. Internal only.";
+    "Check the captured actor's remaining capacity, including NPC accounts and reservations.";
     caller == this || raise(E_PERM);
-    const {player_obj} = args;
-    !valid(player_obj) || !is_player(player_obj) && return true;
-    const budget = player_obj.llm_token_budget;
-    const used = player_obj.llm_tokens_used;
-    used >= budget && return "Error: LLM token budget exceeded. You have used " + tostr(used) + " of " + tostr(budget) + " tokens. Contact a wizard to increase your budget.";
-    return true;
+    const principal = caller_perms();
+    const {actor} = args;
+    typeof(actor) == TYPE_OBJ && valid(actor) && (actor == principal || principal.wizard) || raise(E_PERM);
+    $llm_account:available(actor) > 0 && return true;
+    return "Error: LLM token budget exceeded.";
   endmethod
 
-  method _update_token_usage owner: ARCH_WIZARD
-    "Update player's token usage. Runs with wizard perms to write ARCH_WIZARD-owned properties. Internal only.";
-    caller == this || raise(E_PERM);
-    const {player_obj, tokens_used} = args;
-    !valid(player_obj) || !is_player(player_obj) && return;
-    typeof(tokens_used) == TYPE_INT || raise(E_INVARG, "tokens_used must be an integer");
-    tokens_used >= 0 || raise(E_INVARG, "tokens_used cannot be negative");
-    tokens_used <= 1000000 || raise(E_INVARG, "tokens_used suspiciously large");
-    player_obj.llm_tokens_used = player_obj.llm_tokens_used + tokens_used;
-    player_obj.llm_usage_log = {@player_obj.llm_usage_log, ["timestamp" -> time(), "tokens" -> tokens_used, "usage" -> this.last_token_usage]};
-  endmethod
-
-  method _ensure_knowledge_base owner: ARCH_WIZARD
-    "Lazily create knowledge base if not already created. Internal only.";
-    "Uses anonymous object so it's garbage collected when agent is recycled.";
-    caller == this || raise(E_PERM);
-    if (!valid(this.knowledge_base))
-      set_task_perms(this.owner);
-      this.knowledge_base = $relation:create(true);
-    endif
-    return this.knowledge_base;
-  endmethod
-
-  method add_todo owner: ARCH_WIZARD
-    "Add a todo item. Returns the new todo's id.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {content} = args;
-    typeof(content) != TYPE_STR && raise(E_TYPE, "content must be string");
-    const todo_id = this.next_todo_id;
-    this.next_todo_id = todo_id + 1;
-    this.todos = {@this.todos, ["id" -> todo_id, "content" -> content, "status" -> 'pending]};
-    return todo_id;
-  endmethod
-
-  method update_todo owner: ARCH_WIZARD
-    "Update a todo's status. Status must be 'pending, 'in_progress, or 'completed.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {todo_id, new_status} = args;
-    typeof(todo_id) != TYPE_INT && raise(E_TYPE, "todo_id must be integer");
-    !(new_status in {'pending, 'in_progress, 'completed}) && raise(E_INVARG, "status must be 'pending, 'in_progress, or 'completed");
-    !this.todos:find({t} => t["id"] == todo_id) && raise(E_INVARG, "todo not found: " + tostr(todo_id));
-    this.todos = this.todos:map(fn (t) begin
-      t["id"] == todo_id && return ["id" -> t["id"], "content" -> t["content"], "status" -> new_status];
-      return t;
-    end endfn);
-    return true;
-  endmethod
-
-  method remove_todo owner: ARCH_WIZARD
-    "Remove a specific todo by id.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {todo_id} = args;
-    typeof(todo_id) != TYPE_INT && raise(E_TYPE, "todo_id must be integer");
-    !this.todos:find({t} => t["id"] == todo_id) && return false;
-    this.todos = this.todos:filter({t} => t["id"] != todo_id);
-    return true;
-  endmethod
-
-  method get_todos owner: ARCH_WIZARD
-    "Get all todos, optionally filtered by status.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {?status_filter = false} = args;
-    !status_filter && return this.todos;
-    return this.todos:filter({t} => t["status"] == status_filter);
-  endmethod
-
-  method clear_completed_todos owner: ARCH_WIZARD
-    "Remove all completed todos.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    this.todos = this.todos:filter({t} => t["status"] != 'completed);
-    return true;
-  endmethod
-
-  method set_todos owner: ARCH_WIZARD
-    "Replace entire todo list. Each item must have content and status.";
-    let todo_id = 0;
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {todo_list} = args;
-    typeof(todo_list) != TYPE_LIST && raise(E_TYPE, "todo_list must be a list");
-    let new_todos = {};
-    for item in (todo_list)
-      typeof(item) != TYPE_MAP && raise(E_TYPE, "each todo must be a map");
-      !maphaskey(item, "content") && raise(E_INVARG, "todo missing content");
-      !maphaskey(item, "status") && raise(E_INVARG, "todo missing status");
-      !(item["status"] in {'pending, 'in_progress, 'completed}) && raise(E_INVARG, "invalid status");
-      todo_id = maphaskey(item, "id") ? item["id"] | this.next_todo_id;
-      todo_id >= this.next_todo_id && (this.next_todo_id = todo_id + 1);
-      new_todos = {@new_todos, ["id" -> todo_id, "content" -> item["content"], "status" -> item["status"]]};
-    endfor
-    this.todos = new_todos;
-    return true;
-  endmethod
-
-  method format_todos owner: ARCH_WIZARD
-    "Format todos as human-readable string for display.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    !this.todos && return "No todos.";
-    return this.todos:map(fn (t) begin
-      const status_str = t["status"] == 'completed ? "[x]" | t["status"] == 'in_progress ? "[>]" | "[ ]";
-      return status_str + " " + t["content"];
-    end endfn):join("\n");
-  endmethod
-
-  method create_task owner: ARCH_WIZARD
-    "Create a new task. If task_id not provided, auto-generates one. Returns task object.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {description, ?parent_task_id = 0} = args;
-    typeof(description) != TYPE_STR && raise(E_TYPE);
-    const task_id = this.next_task_id;
-    this.next_task_id = task_id + 1;
-    const kb = this:_ensure_knowledge_base();
-    "Use anonymous task - garbage collected with the agent";
-    set_task_perms(this.owner);
-    const task = $llm_task:create(true);
-    task:mk(task_id, description, this, kb, parent_task_id);
-    this.current_tasks[task_id] = task;
-    return task;
-  endmethod
-
-  method remove_task owner: ARCH_WIZARD
-    "Remove a task from tracking. Task object will be garbage collected if anonymous.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    const {task_id} = args;
-    typeof(task_id) != TYPE_INT && raise(E_TYPE);
-    !maphaskey(this.current_tasks, task_id) && return false;
-    this.current_tasks = mapdelete(this.current_tasks, task_id);
-    return true;
-  endmethod
-
-  method get_task_status owner: ARCH_WIZARD
-    "Get status of all current tasks as a list of maps. For external reporting.";
-    let task_obj = 0;
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    let task_statuses = {};
-    for task_id in (mapkeys(this.current_tasks))
-      task_obj = this.current_tasks[task_id];
-      valid(task_obj) && (task_statuses = {@task_statuses, task_obj:get_status()});
-    endfor
-    return task_statuses;
-  endmethod
-
-  method cleanup_tasks owner: ARCH_WIZARD
-    "Destroy all task objects and knowledge base. Called on agent destruction.";
-    caller == this || caller_perms().wizard || caller_perms() == this.owner || raise(E_PERM);
-    if (valid(this.knowledge_base))
-      this.knowledge_base:destroy();
-      this.knowledge_base = #-1;
-    endif
-    this.current_tasks = [];
-  endmethod
-
-  method test_todo_lifecycle owner: HACKER
-    "Test basic todo operations.";
-    const agent = $llm_agent:create(true);
-    "Add todos";
-    const id1 = agent:add_todo("First task");
-    const id2 = agent:add_todo("Second task");
-    let todos = agent:get_todos();
-    length(todos) != 2 && raise(E_ASSERT, "Should have 2 todos");
-    todos[1]["status"] != 'pending && raise(E_ASSERT, "New todo should be pending");
-    "Update status";
-    agent:update_todo(id1, 'in_progress);
-    todos = agent:get_todos();
-    todos[1]["status"] != 'in_progress && raise(E_ASSERT, "Should be in_progress");
-    "Complete and clear";
-    agent:update_todo(id1, 'completed);
-    agent:clear_completed_todos();
-    todos = agent:get_todos();
-    length(todos) != 1 && raise(E_ASSERT, "Should have 1 todo after clear");
-    todos[1]["id"] != id2 && raise(E_ASSERT, "Remaining todo should be id2");
-    "Remove";
-    agent:remove_todo(id2);
-    todos = agent:get_todos();
-    length(todos) != 0 && raise(E_ASSERT, "Should have 0 todos");
-    return true;
-  endmethod
-
-  method test_todo_filter owner: HACKER
-    "Test todo filtering by status.";
-    const agent = $llm_agent:create(true);
-    agent:add_todo("Pending 1");
-    const id2 = agent:add_todo("In progress");
-    agent:add_todo("Pending 2");
-    agent:update_todo(id2, 'in_progress);
-    const pending = agent:get_todos('pending);
-    length(pending) != 2 && raise(E_ASSERT, "Should have 2 pending");
-    const in_prog = agent:get_todos('in_progress);
-    length(in_prog) != 1 && raise(E_ASSERT, "Should have 1 in_progress");
-    return true;
-  endmethod
-
-  method test_set_todos owner: HACKER
-    "Test replacing entire todo list.";
-    const agent = $llm_agent:create(true);
-    agent:set_todos({["content" -> "Task A", "status" -> 'pending], ["content" -> "Task B", "status" -> 'in_progress], ["content" -> "Task C", "status" -> 'completed]});
-    const todos = agent:get_todos();
-    length(todos) != 3 && raise(E_ASSERT, "Should have 3 todos");
-    todos[2]["status"] != 'in_progress && raise(E_ASSERT, "Second should be in_progress");
-    return true;
+  method get_project owner: ARCH_WIZARD
+    "Return this agent's private project collaborator under current owner authority.";
+    $llm_agent:_challenge_permissions(this, caller_perms());
+    !is_clear_property(this, "project_state") && valid(this.project_state) || raise(E_INVARG, "Agent has no project state.");
+    return this.project_state;
   endmethod
 
   method reset_tool_failures owner: ARCH_WIZARD
@@ -585,89 +464,26 @@ object LLM_AGENT [
     endif
   endmethod
 
-  method _repair_context owner: ARCH_WIZARD
-    "Detect and repair context corruption (orphaned tool_calls without responses).";
-    "Returns number of repairs made.";
-    let expected_ids = 0;
-    let found_ids = 0;
-    let j = 0;
-    let msg = 0;
-    let next_msg = 0;
-    let synthetic = 0;
-    let tc_id = 0;
-    let tc_name = 0;
-    let tool_calls = 0;
-    caller == this || raise(E_PERM);
-    const ctx = this.context;
-    let repairs = 0;
-    let new_ctx = {};
-    let i = 1;
-    while (i <= length(ctx))
-      msg = ctx[i];
-      new_ctx = {@new_ctx, msg};
-      "Check if this is an assistant message with tool_calls";
-      if (typeof(msg) == TYPE_MAP && maphaskey(msg, "tool_calls") && msg["tool_calls"])
-        tool_calls = msg["tool_calls"];
-        expected_ids = { tc["id"] for tc in (tool_calls) };
-        "Collect tool responses that follow";
-        found_ids = {};
-        j = i + 1;
-        while (j <= length(ctx))
-          next_msg = ctx[j];
-          if (typeof(next_msg) == TYPE_MAP && maphaskey(next_msg, "role"))
-            if (next_msg["role"] == "tool" && maphaskey(next_msg, "tool_call_id"))
-              found_ids = {@found_ids, next_msg["tool_call_id"]};
-              new_ctx = {@new_ctx, next_msg};
-              j = j + 1;
-            else
-              "Hit a non-tool message, stop looking for responses";
-              break;
-            endif
-          else
-            break;
-          endif
-        endwhile
-        "Add synthetic responses for any missing tool_call_ids";
-        for tc in (tool_calls)
-          tc_id = tc["id"];
-          if (!(tc_id in found_ids))
-            tc_name = tc["function"]["name"];
-            synthetic = ["role" -> "tool", "tool_call_id" -> tc_id, "name" -> tc_name, "content" -> "Tool call interrupted or response lost."];
-            new_ctx = {@new_ctx, synthetic};
-            repairs = repairs + 1;
-            this:_log("Repaired orphaned tool_call: " + tc_id + " (" + tc_name + ")");
-          endif
-        endfor
-        i = j;
-      else
-        i = i + 1;
-      endif
-    endwhile
-    if (repairs > 0)
-      this.context = new_ctx;
-    endif
-    return repairs;
-  endmethod
-
   method send_message_no_tools owner: ARCH_WIZARD
-    "Send a message and get response WITHOUT tool execution.";
-    "Useful for simple prompts where tools aren't needed.";
-    let raw_response = 0;
-    let {user_input, ?opts = false} = args;
-    $llm_agent:_challenge_permissions(this, caller_perms());
-    this:add_message("user", user_input);
-    opts = typeof(opts) == TYPE_FLYWEIGHT ? opts | this.chat_opts;
+    "Run a text-only request with the same actor, accounting, and conversation exclusion rules.";
+    const actor = caller_perms();
+    $llm_agent:_challenge_permissions(this, actor);
+    !this.running && length(this.pending_tools) == 0 || raise(E_INVARG, "Conversation is active or needs recovery.");
+    const {input, ?opts = false} = args;
+    this.running = true;
     try
-      raw_response = this.client:chat(this.context, opts, false, false, {});
-    except e (ANY)
-      raise(E_INVARG, "LLM API call failed: " + toliteral(e));
+      this:needs_compaction() && this:compact_context(actor);
+      this:add_message("user", input);
+      const options = typeof(opts) == TYPE_FLYWEIGHT ? opts | this.chat_opts;
+      const response = $llm_response:mk($llm_provider:chat_as(this.client, actor, 'no_tools,
+        this.conversation:snapshot(), options, this.model_override, false, false));
+      this:_track_token_usage(response);
+      response:is_valid() && !response:has_tool_calls() || raise(E_INVARG, "Invalid text-only LLM response.");
+      this:add_message("assistant", response:content());
+      return response:content();
+    finally
+      this.running = false;
     endtry
-    const response = $llm_response:mk(raw_response);
-    this:_track_token_usage(response);
-    !response:is_valid() && return tostr(raw_response);
-    const content = response:content();
-    this:add_message("assistant", content);
-    return content;
   endmethod
 
   verb test_internal_permissions (none none none) owner: ARCH_WIZARD flags: "rxd"
@@ -678,7 +494,7 @@ object LLM_AGENT [
     agent.owner = $hacker;
     "List of internal methods to test with their args";
     const llm_resp = $llm_response;
-    const tests = {{"_log", {"test"}}, {"_ensure_knowledge_base", {}}, {"_get_tool_schemas", {}}, {"_find_tool", {"nonexistent"}}, {"_check_token_budget", {$hacker}}, {"_update_token_usage", {$hacker, 100}}, {"_call_llm_with_retry", {{}}}, {"_execute_tool_call", {["id" -> "x", "function" -> ["name" -> "x", "arguments" -> []]]}}, {"_track_token_usage", {llm_resp:mk([])}}, {"_repair_context", {}}};
+    const tests = {{"_log", {"test"}}, {"_get_tool_schemas", {}}, {"_find_tool", {"nonexistent"}}, {"_check_token_budget", {$hacker}}, {"_request_model", {{}, false, $hacker}}, {"_execute_tool_call", {["id" -> "x", "function" -> ["name" -> "x", "arguments" -> []]]}}, {"_track_token_usage", {llm_resp:mk([])}}};
     for test in (tests)
       {verb_name, test_args} = test;
       try
@@ -694,12 +510,12 @@ object LLM_AGENT [
   endverb
 
   verb test_public_method_wizard_access (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Wizard callers can read public task and todo state and reset tool failures.";
+    "Wizard callers can read guarded LLM project state and reset tool failures.";
     const agent = $llm_agent:create(true);
     agent.owner = $hacker;
-    const status = agent:get_task_status();
+    const status = agent:get_project():get_task_status();
     typeof(status) != TYPE_LIST && raise(E_ASSERT, "get_task_status should return list");
-    const todos = agent:get_todos();
+    const todos = agent:get_project():get_todos();
     typeof(todos) != TYPE_LIST && raise(E_ASSERT, "get_todos should return list");
     agent.consecutive_tool_failures = ["test_tool" -> 1];
     agent:reset_tool_failures();
@@ -724,6 +540,9 @@ object LLM_AGENT [
     const incoming = caller_perms();
     incoming == principal || incoming.wizard || raise(E_PERM);
     set_task_perms(principal);
+    if (typeof(callback) == TYPE_OBJ && isa(callback, $llm_job))
+      return $llm_job:deliver_callback(callback, subject, callback_verb, callback_args);
+    endif
     return callback:(callback_verb)(@callback_args);
   endmethod
 endobject

@@ -69,7 +69,7 @@ exist and accept a fetch request, then report that no worker is available. Read 
 changing the package membership or replacing objects.
 
 Enabling a worker does not configure the model tools. See
-[language models](../language-models/index.md) for the remaining documentation work in that area.
+[language models](../language-models/index.md) for client setup, access, and token accounting.
 
 ## Move beyond a local experiment
 

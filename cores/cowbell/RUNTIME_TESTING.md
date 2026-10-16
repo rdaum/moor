@@ -1,17 +1,24 @@
 # Cowbell runtime tests
 
-Run the same check as CI from the repository root:
+For ordinary source changes, run the style and method checks:
 
 ```sh
 make -C cores/cowbell check
 ```
 
-The check builds all required Rust binaries together, then runs them directly. The test tools use
-the main workspace and lockfile. CI caches Rust dependencies between runs. The check runs the style
-audit, method tests, headless scenarios, session scenarios, harness checks, export roundtrip, real
-telnet/restart checks, Git worker checks, and source inventory checks. Targets run in order because
-they share generated directories. Style details stay in `gen.style.log` and `gen.style-strict.log`;
-a failed audit prints its log.
+For the complete integration suite used by CI, run:
+
+```sh
+make -C cores/cowbell check-full
+```
+
+`check-full` adds connected sessions, executable tutorials, harness checks, export roundtrip,
+telnet/restart tests, Git worker tests, and source inventory checks. Session scenarios create fresh
+worlds, so this suite takes several minutes. Run it when integration behavior changes.
+
+The test tools use the main workspace and lockfile. Targets run in order because they share
+generated directories. Style details stay in `gen.style.log` and `gen.style-strict.log`; failures
+print the log.
 
 `make -C cores/cowbell test-git-worker` checks Git access through the daemon, telnet host, and Git
 worker. It uses a temporary local HTTP repository and requires the Git CLI for the fixture. It
@@ -25,6 +32,35 @@ wizard-only dispatch, forged descriptors, local lookup, and malformed responses.
 `make -C cores/cowbell` exports the shipped core. `make rebuild` first checks export stability, then
 copies the exported sources into `src/`. Export removes source comments. Use this target only when
 you intend to replace working sources.
+
+## LLM tests
+
+Run the focused regression methods without a model provider:
+
+```sh
+make -C cores/cowbell test-llm MOORC_TYPE=direct
+```
+
+The methods cover concrete failures in limits, cancellation, tool outcomes, permissions, compaction,
+concurrent requests, and frontend configuration. Connected scenarios in `check-full` cover command
+routing, connection ownership, confirmations, suggestions, project commands, and room commands.
+Avoid repeating those contracts with tests that inspect collaborator layout or every internal limit.
+
+Use the local HTTP fixture when changing provider or worker integration:
+
+```sh
+make -C cores/cowbell test-llm-provider MOORC_TYPE=direct
+```
+
+It checks real curl requests, retries, malformed replies, accounting, and persistent restart. The
+restart case waits for reservation expiry and can take over a minute. Run it alone with
+`test-llm-restart`. Neither target belongs to ordinary `check`.
+
+`test-llm-live` is an optional smoke test using `OPENROUTER_API_KEY` and
+`deepseek/deepseek-v4.1-flash`. It permits at most 12 requests, 768 output tokens per request, and
+240 seconds. A loopback proxy holds the real key; the temporary world receives only a fixture token.
+Live requests are excluded from `check`, `check-full`, and CI. The harness reports numeric usage and
+results without logging prompts, replies, or credentials. There is no benchmark gate.
 
 ## Fixtures and permissions
 
@@ -299,12 +335,12 @@ Use `--web-only` for a focused run of the TypeScript host. The full acceptance r
 hosts.
 
 The `change_tools.moot` scenario checks the shared provider and requester permissions.
-`change_agents.moot` uses a deterministic model to exercise actual RLM and agentic room execution.
-Its inspection request leaves live code unchanged. Its update request validates and applies a
-multiline edited program through the shared tools. The session runner creates an ephemeral signing
-key so room authorization uses the normal capability checks. Both room paths also test a denied
-programmer, authority loss between preview and apply, and draft recovery after a live edit. Model
-responses are deterministic; no external model account is required.
+`change_agents.moot` uses a deterministic model to exercise base and coding room execution through
+the shared LLM agent. Its inspection request leaves live code unchanged. Its update request
+validates and applies a multiline edited program through the shared tools. The session runner
+creates an ephemeral signing key so room authorization uses the normal capability checks. Both room
+paths also test a denied programmer, authority loss between preview and apply, and draft recovery
+after a live edit. Model responses are deterministic; no external model account is required.
 
 ## Plain-telnet change reviews
 

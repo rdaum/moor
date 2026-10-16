@@ -1,0 +1,29 @@
+// Shared programming tools confirm on the captured connection before changing world state.
+@attach second programmer
+@wizard
+; add_property(#90100, "programming_device", #90031:wearable_fixture(#90101), {#90100, ""}); add_property(#90100, "programming_target", create($thing, #90101, 2), {#90100, ""}); add_property(#90100.programming_target, "probe", "original", {#90101, ""}); for tool in ($llm_programming_tools:get_tools()) #90100.programming_device.agent:add_tool(tool.name, tool); endfor return true;
+true
+; #90100.programming_device.agent.client.replies = {["choices" -> {["message" -> ["role" -> "assistant", "tool_calls" -> {["id" -> "write", "type" -> "function", "function" -> ["name" -> "set_property", "arguments" -> ["object" -> tostr(#90100.programming_target), "property" -> "probe", "value" -> "approved"]]]}]]}], ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "property updated"]]}]}; return true;
+true
+@programmer
+>> change the probe
+@wizard
+; #90100.programming_device:start_probe(connections(#90101)[2][1]); suspend(0.2); return {#90100.programming_target.probe, #90100.programming_device.agent.running};
+{"original", true}
+// Another connection cannot supply the confirmation.
+@second
+>> yes
+@quiet
+@noevents
+@wizard
+; suspend(0.2); return {#90100.programming_target.probe, #90100.programming_device.agent.running};
+{"original", true}
+@programmer
+>> yes
+@wizard
+; for attempt in [1..50] if (!valid(#90100.programming_device.interaction)) break; endif suspend(0.1); endfor return {#90100.programming_target.probe, #90100.programming_device.agent.tools["set_property"].target_obj};
+{"approved", #2005}
+; return read(connections(#90101)[1][1]);
+"yes"
+; const device = #90100.programming_device; #90101.wearing = setremove(#90101.wearing, device); recycle(device.agent.client); recycle(device); recycle(#90100.programming_target); delete_property(#90100, "programming_device"); delete_property(#90100, "programming_target"); return true;
+true

@@ -10,7 +10,7 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
-HEADLESS_FILTERS ?= 90104 90000 90001 90002 90003 90004 90005 90006 90007 90010 90011 90012 90013 90014 90015 90016 90017 90018 90019
+HEADLESS_FILTERS ?= 90104 90000 90001 90002 90003 90004 90005 90006 90007 90010 90011 90012 90013 90014 90015 90016 90017 90018 90019 90031 90032
 HEADLESS_PLAYER_FILTERS ?= 90008:test_headless_builder_commands_use_stored_grants 90008:test_headless_builder_commands_missing_grants_deny_cleanly 90008:test_headless_builder_message_commands_dispatch_as_player 90014:test_inspection_transfer_reachability 90014:test_inspection_transfers_recheck_after_acceptance_yield 90014:test_exit_command_annotations 90014:test_travel_rechecks_after_pre_exit_yield 90014:test_contextual_suggestions
 HEADLESS_WIZARD_FILTERS ?= 90008:test_headless_builder_commands_wizard_builds_without_grants
 HEADLESS_TASK_PLAYER ?= 90102
@@ -38,14 +38,20 @@ TEST_MODE = methods
 TEST_TIMEOUT = $(HEADLESS_TIMEOUT)
 TEST_PREREQUISITES = runtime-test-src
 EXPORT_FORBIDDEN_IDS = = \#(900[0-9]+|901[0-9]+);
-CHECK_TARGETS = check-style test test-headless test-session test-harness roundtrip test-wire test-git-worker test-build-inventory
+CHECK_TARGETS = check-style test test-headless
+INTEGRATION_TARGETS = test-session test-harness roundtrip test-wire test-git-worker test-build-inventory
 CLEAN_EXTRA = $(HEADLESS_SRC_DIRECTORY) $(TEST_SRC_DIRECTORY) gen.empty.log gen.exception.log gen.event-control.log gen.style.log gen.style-strict.log
-CORE_HELP = 'make test-headless      Run headless methods (alias: runtime-headless).' \
+CORE_HELP = 'make check-full        Run check plus session, restart, export, and worker integration.' \
+            'make test-llm          Run the focused LLM regression methods.' \
+            'make test-headless      Run headless methods (alias: runtime-headless).' \
             'make test-session       Run session scenarios (alias: runtime-session).' \
             'make test-tutorial      Run the executable authoring tutorials.' \
             'make book               Build the Cowbell Book (requires mdbook).' \
             'make book-serve         Preview the Cowbell Book locally.' \
             'make test-wire          Run TCP and restart tests.' \
+            'make test-llm-provider  Run agent scenarios with a local HTTP provider fixture.' \
+            'make test-llm-restart   Check LLM jobs and accounting across persistent restarts.' \
+            'make test-llm-live      Run bounded OpenRouter scenarios using OPENROUTER_API_KEY.' \
             'make test-git-worker    Run Git worker integration tests.'
 include ../make/core.mk
 
@@ -73,11 +79,19 @@ book-serve:
 build-test-tools:
 	$(CARGO) build --locked --manifest-path $(MOOR_ROOT)/Cargo.toml --profile $(MOORC_PROFILE) $(foreach package,$(TEST_TOOL_PACKAGES),-p $(package)) --bins
 
-RUNTIME_CHECK_TARGETS = $(filter-out roundtrip test-headless test-session,$(CHECK_TARGETS)) runtime-headless runtime-session test-tutorial
+RUNTIME_CHECK_TARGETS = $(filter-out roundtrip test-headless test-session,$(CHECK_TARGETS) $(INTEGRATION_TARGETS)) runtime-headless runtime-session test-tutorial
 $(RUNTIME_CHECK_TARGETS): build-test-tools
 ifeq ($(MOORC_TYPE),cargo)
-check $(RUNTIME_CHECK_TARGETS): MOORC = $(MOORC_BIN_DIR)/moorc
+check check-full $(RUNTIME_CHECK_TARGETS): MOORC = $(MOORC_BIN_DIR)/moorc
 endif
+
+.PHONY: check-full test-llm
+check-full: check $(INTEGRATION_TARGETS)
+
+test-llm: HEADLESS_FILTERS = 90012 90031 90032
+test-llm: HEADLESS_PLAYER_FILTERS =
+test-llm: HEADLESS_WIZARD_FILTERS =
+test-llm: runtime-headless
 
 test-headless: runtime-headless
 test-session: runtime-session
@@ -166,6 +180,20 @@ test-build-inventory:
 test-wire:
 	python3 -m unittest discover -s tests -p test_wire.py
 	python3 tests/wire.py --server $(TEST_BIN_DIR)/moor --core-dir src
+
+# Live requests are opt-in and are never part of check or CI.
+.PHONY: test-llm-provider test-llm-live test-llm-restart
+test-llm-provider test-llm-live test-llm-restart: build-test-tools
+
+test-llm-provider:
+	python3 -m unittest discover -s tests -p test_llm_provider.py
+	python3 tests/llm_provider.py --server $(TEST_BIN_DIR)/moor --core-dir src
+
+test-llm-live:
+	python3 tests/llm_provider.py --server $(TEST_BIN_DIR)/moor --core-dir src --live
+
+test-llm-restart:
+	python3 tests/llm_provider.py --server $(TEST_BIN_DIR)/moor --core-dir src --restart-only
 
 # Exercise the Cowbell wrapper through the standalone worker and a local Git HTTP fixture.
 test-git-worker:

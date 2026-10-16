@@ -254,6 +254,9 @@ The baseline check rejects new findings or increased counts.
 findings need no replacement allowance. Do not regenerate the baseline to accept new debt. Reduce
 its entries after verified cleanup.
 
+The complete `llm` directory requires zero findings. New LLM prototypes and methods are included
+automatically; do not add individual LLM entries to the converted list or baseline allowances.
+
 Use `--strict --check relative/file.moo:method_name` to require zero findings in a converted method.
 Repeat `--check` for several methods. A directory or file selection checks all its methods. The
 checker still compiles the whole source tree for constant resolution and body coverage.

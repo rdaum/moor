@@ -1918,151 +1918,17 @@ object PROG_FEATURES [
     player:inform_current(event);
   endmethod
 
-  verb suggest_doc_topic (this none none) owner: ARCH_WIZARD flags: "rxd"
-    "Suggest @doc targets when lookup fails, using LLM.";
-    "Args: failure_type ('object, 'verb, 'property, 'builtin), target_spec, ?target_obj, ?item_name";
-    "Returns true if handled (placeholder sent), false if LLM not available.";
-    {failure_type, target_spec, ?target_obj = #-1, ?item_name = ""} = args;
-    "Check if LLM is available";
-    llm_client = $player.suggestions_llm_client;
-    if (typeof(llm_client) != TYPE_OBJ || !valid(llm_client))
-      return false;
-    endif
-    "Capture current connection BEFORE forking";
-    all_conns = connections();
-    if (!all_conns || length(all_conns) == 0)
-      return false;
-    endif
-    current_conn = all_conns[1][1];
-    "Get display name for target_obj - find sysref name (e.g. #13 -> '$str_proto')";
-    obj_display = target_spec;
-    if (valid(target_obj))
-      obj_display = tostr(target_obj);
-      for prop in (properties(#0))
-        val = #0.(prop);
-        if (val == target_obj)
-          obj_display = "$" + prop;
-          break;
-        endif
-      endfor
-    endif
-    "Build error message based on failure type";
-    if (failure_type == 'object)
-      error_msg = "Could not find object: " + target_spec;
-    elseif (failure_type == 'verb)
-      error_msg = "Verb " + item_name + " not found on " + obj_display + ".";
-    elseif (failure_type == 'builtin)
-      error_msg = target_spec + " is not a recognized builtin function or object.";
-    else
-      error_msg = "Property " + item_name + " not found on " + obj_display + ".";
-    endif
-    "Send immediate placeholder with rewritable event";
-    rewrite_id = uuid();
-    placeholder = $event:mk_error(player, error_msg + " (Finding suggestions...)"):with_rewritable(rewrite_id, 30, error_msg):with_presentation_hint('processing):with_audience('utility);
-    player:inform_current(placeholder);
-    "Fork the LLM query so we return immediately";
-    fork (0)
-      "Build context based on failure type";
-      prompt = "You help programmers find documentation in a MOO (text-based virtual world). ";
-      prompt = prompt + "A programmer tried '@doc " + target_spec + "' but it failed.\n\n";
-      if (failure_type == 'builtin)
-        "Builtin function not found - provide list of builtins";
-        prompt = prompt + "They tried to look up a builtin function.\n\n";
-        prompt = prompt + "AVAILABLE BUILTIN FUNCTIONS:\n";
-        builtin_names = {};
-        for fn_info in (function_info())
-          builtin_names = {@builtin_names, fn_info[1]};
-        endfor
-        prompt = prompt + builtin_names:join(", ") + "\n\n";
-      elseif (failure_type == 'object)
-        "Object not found - provide list of sysref objects if they used $ prefix";
-        if (target_spec[1] == "$")
-          prompt = prompt + "They tried to look up a system object starting with '$'.\n\n";
-          prompt = prompt + "AVAILABLE SYSTEM OBJECTS ($name format):\n";
-          "Get all properties on #0 that point to valid objects";
-          sysrefs = {};
-          for prop in (properties(#0))
-            val = #0.(prop);
-            if (typeof(val) == TYPE_OBJ && valid(val))
-              sysrefs = {@sysrefs, "$" + prop};
-            endif
-          endfor
-          prompt = prompt + sysrefs:join(", ") + "\n\n";
-        else
-          prompt = prompt + "They tried to look up an object but it wasn't found.\n";
-          prompt = prompt + "Suggest they use an object number (#123) or system object ($name).\n";
-          prompt = prompt + "They might also have meant a builtin function.\n\n";
-          prompt = prompt + "AVAILABLE BUILTIN FUNCTIONS:\n";
-          builtin_names = {};
-          for fn_info in (function_info())
-            builtin_names = {@builtin_names, fn_info[1]};
-          endfor
-          prompt = prompt + builtin_names:join(", ") + "\n\n";
-        endif
-      elseif (failure_type == 'verb)
-        "Verb not found - provide list of verbs on the object";
-        prompt = prompt + "They tried to look up verb '" + item_name + "' on " + obj_display + ".\n\n";
-        prompt = prompt + "VERBS ON " + obj_display + ":\n";
-        verb_list = verbs(target_obj);
-        if (length(verb_list) > 50)
-          verb_list = verb_list[1..50];
-          prompt = prompt + verb_list:join(", ") + " ... (and more)\n\n";
-        else
-          prompt = prompt + verb_list:join(", ") + "\n\n";
-        endif
-        "Also check ancestors for inherited verbs";
-        inherited = {};
-        for anc in (ancestors(target_obj))
-          for v in (verbs(anc))
-            if (!(v in verb_list) && !(v in inherited) && length(inherited) < 20)
-              inherited = {@inherited, v};
-            endif
-          endfor
-        endfor
-        if (length(inherited) > 0)
-          prompt = prompt + "INHERITED VERBS (from ancestors):\n";
-          prompt = prompt + inherited:join(", ") + "\n\n";
-        endif
-      else
-        "Property not found - provide list of properties on the object";
-        prompt = prompt + "They tried to look up property '" + item_name + "' on " + obj_display + ".\n\n";
-        prompt = prompt + "PROPERTIES ON " + obj_display + ":\n";
-        prop_list = properties(target_obj);
-        if (length(prop_list) > 50)
-          prop_list = prop_list[1..50];
-          prompt = prompt + prop_list:join(", ") + " ... (and more)\n\n";
-        else
-          prompt = prompt + prop_list:join(", ") + "\n\n";
-        endif
-      endif
-      prompt = prompt + "INSTRUCTIONS:\n";
-      prompt = prompt + "1. Suggest 1-3 likely matches based on what they typed\n";
-      if (failure_type == 'verb)
-        prompt = prompt + "2. Format suggestions as '@doc " + obj_display + ":VERBNAME'\n";
-      elseif (failure_type == 'property)
-        prompt = prompt + "2. Format suggestions as '@doc " + obj_display + ".PROPNAME'\n";
-      elseif (failure_type == 'builtin)
-        prompt = prompt + "2. Format suggestions as '@doc FUNCTION_NAME'\n";
-      else
-        prompt = prompt + "2. Format suggestions as '@doc <target>'\n";
-      endif
-      prompt = prompt + "3. Keep response under 60 words\n";
-      prompt = prompt + "4. Use plain text without markup\n";
-      "Call LLM and rewrite the placeholder";
-      try
-        response = llm_client:simple_query(prompt);
-        if (typeof(response) == TYPE_STR && length(response) > 0)
-          result_event = $event:mk_info(player, $format.block:mk(error_msg + "\n", response)):as_inset();
-          player:rewrite_event(rewrite_id, result_event, current_conn);
-        else
-          player:rewrite_event(rewrite_id, error_msg, current_conn);
-        endif
-      except e (ANY)
-        player:rewrite_event(rewrite_id, error_msg, current_conn);
-      endtry
-    endfork
-    return true;
-  endverb
+  method suggest_doc_topic owner: ARCH_WIZARD
+    "Start a bounded LLM documentation suggestion on the invoking programmer connection.";
+    const actor = caller_perms();
+    valid(actor) && actor == player && (actor.programmer || actor.wizard) || raise(E_PERM);
+    const {kind, spec, ?target = #-1, ?member = ""} = args;
+    const destination = `connection() ! E_INVARG => 0';
+    typeof(destination) == TYPE_OBJ || return false;
+    set_task_perms(actor);
+    return $llm_doc_suggestion:offer(actor, destination,
+      ['kind -> kind, 'spec -> spec, 'target -> target, 'member -> member]);
+  endmethod
 
   method _do_resolve_verb_name owner: HACKER
     "Resolve space-separated verb names to a single verb name.";

@@ -83,8 +83,8 @@ object EVENT_RECEIVER [
   endmethod
 
   method _can_inform_as owner: HACKER
-    "Return whether actor/perms may send utility output for this receiver.";
-    {actor, actor_perms} = args;
+    "Authorize utility output for the receiver's principal or its trusted event sources.";
+    const {actor, actor_perms} = args;
     if (player == this)
       return true;
     endif
@@ -97,7 +97,7 @@ object EVENT_RECEIVER [
     if (typeof(actor) == TYPE_OBJ && valid(actor) && actor.wizard)
       return true;
     endif
-    if (typeof(actor_perms) == TYPE_OBJ && valid(actor_perms) && actor_perms.wizard)
+    if (typeof(actor_perms) == TYPE_OBJ && valid(actor_perms) && (actor_perms == this || actor_perms.wizard))
       return true;
     endif
     return false;

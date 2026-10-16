@@ -12,34 +12,6 @@ object HEADLESS_COLLECTION_SCENARIOS
     return target:(name)(@arguments);
   endmethod
 
-  method test_queue_permissions_and_order owner: ARCH_WIZARD
-    "Owners can use their queues. Foreign callers cannot bypass property permissions.";
-    const own = create($agentic.event_queue, $hacker);
-    const foreign = create($agentic.event_queue, $arch_wizard);
-    try
-      foreign.queue = {"private"};
-      set_property_info(foreign, "queue", {$arch_wizard, ""});
-      for operation in ({{"push", "injected"}, {"pop"}, {"clear"}, {"size"}})
-        $test_utils:assert_raises(E_PERM, this, "_as_hacker", {foreign, @operation},
-          "Foreign queue operation must fail");
-      endfor
-      $test_utils:assert_eq(foreign.queue, {"private"}, "Denied calls preserve the queue");
-      $test_utils:assert_eq(this:_as_hacker(own, "push", 0), 1, "First append");
-      $test_utils:assert_eq(this:_as_hacker(own, "push", "second"), 2, "Second append");
-      $test_utils:assert_eq(this:_as_hacker(own, "pop"), 0, "Zero is a valid entry");
-      $test_utils:assert_eq(this:_as_hacker(own, "size"), 1, "Pop removes one entry");
-      $test_utils:assert_eq(this:_as_hacker(own, "pop"), "second", "FIFO order");
-      $test_utils:assert_eq(this:_as_hacker(own, "pop"), 0, "Empty queue sentinel");
-      this:_as_hacker(own, "push", "discard");
-      $test_utils:assert_eq(this:_as_hacker(own, "clear"), 1, "Clear result");
-      $test_utils:assert_eq(this:_as_hacker(own, "size"), 0, "Clear removes all entries");
-    finally
-      recycle(own);
-      recycle(foreign);
-    endtry
-    return true;
-  endmethod
-
   method test_message_bag_permissions_and_values owner: ARCH_WIZARD
     "Object bags enforce property permissions. Flyweight updates preserve the original.";
     const own = create($msg_bag, $hacker);

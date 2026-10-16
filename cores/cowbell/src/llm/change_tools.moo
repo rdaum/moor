@@ -47,48 +47,6 @@ object CHANGE_TOOLS [
     return tools;
   endmethod
 
-  method _validate owner: ARCH_WIZARD
-    "Validate the published schema before dispatch, including nested fields and unknown arguments.";
-    caller == this || raise(E_PERM);
-    const {value, schema, path} = args;
-    const kind = typeof(value);
-    const type_name = kind == TYPE_MAP ? "object" | kind == TYPE_LIST ? "array" | kind == TYPE_STR ? "string" | kind == TYPE_INT ? "integer" | kind == TYPE_BOOL ? "boolean" | kind == TYPE_FLOAT ? "number" | "unsupported";
-    const types = typeof(schema["type"]) == TYPE_LIST ? schema["type"] | {schema["type"]};
-    type_name in types || raise(E_INVARG, path + " has the wrong type.");
-    if (maphaskey(schema, "enum"))
-      value in schema["enum"] || raise(E_INVARG, path + " has an unsupported value.");
-    endif
-    if (kind == TYPE_STR)
-      length(value) <= `schema["maxLength"] ! E_RANGE => 4194304' || raise(E_QUOTA, path + " is too long.");
-    elseif (kind == TYPE_INT)
-      !maphaskey(schema, "minimum") || value >= schema["minimum"] || raise(E_INVARG, path + " is out of range.");
-    elseif (kind == TYPE_LIST)
-      length(value) <= `schema["maxItems"] ! E_RANGE => 4096' || raise(E_QUOTA, path + " has too many entries.");
-      if (maphaskey(schema, "items"))
-        for item in (value)
-          this:_validate(item, schema["items"], path + "[]");
-        endfor
-      endif
-    elseif (kind == TYPE_MAP)
-      const properties = `schema["properties"] ! E_RANGE => []';
-      for required in (`schema["required"] ! E_RANGE => {}')
-        maphaskey(value, required) || raise(E_INVARG, path + "." + required + " is required.");
-      endfor
-      for key in (mapkeys(value))
-        typeof(key) == TYPE_STR || raise(E_INVARG, "Argument keys must be strings.");
-        if (maphaskey(properties, key))
-          this:_validate(value[key], properties[key], path + "." + key);
-        else
-          const extra = `schema["additionalProperties"] ! E_RANGE => true';
-          extra || raise(E_INVARG, path + "." + key + " is not a supported argument.");
-          if (typeof(extra) == TYPE_MAP)
-            this:_validate(value[key], extra, path + "." + key);
-          endif
-        endif
-      endfor
-    endif
-  endmethod
-
   method _integer owner: ARCH_WIZARD
     "Decode nonnegative IDs without rounding large decimal strings.";
     caller == this || raise(E_PERM);
@@ -164,7 +122,7 @@ object CHANGE_TOOLS [
       const capabilities = $change_manager:capabilities();
       const spec = this.definitions[name];
       value_bytes(input) <= 5242880 || raise(E_QUOTA, "Tool arguments exceed 5 MiB.");
-      this:_validate(input, spec["schema"], "arguments");
+      $llm_tool_schema:validate(input, spec["schema"]);
       if (name == "resolve")
         if (input["choice"] == "edited")
           maphaskey(input, "program") || raise(E_INVARG, "An edited decision requires program text.");

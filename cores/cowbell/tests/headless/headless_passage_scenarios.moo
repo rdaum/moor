@@ -244,7 +244,7 @@ object HEADLESS_PASSAGE_SCENARIOS
     let destination = #-1;
     try
       move(area, holder);
-      const tools = $agent_building_tools;
+      const tools = $llm_building_tools;
       const build = ["name" -> "tool entrance", "area" -> tostr(area)];
       this:_as_programmer(tools, "build_room", build, #90101);
       source = area.contents[1];
@@ -297,7 +297,7 @@ object HEADLESS_PASSAGE_SCENARIOS
         $test_utils:assert_eq(`this:_as_programmer(area, "create_passage", source, other, conflicting, false, preview)
           ! E_INVARG => E_INVARG', E_INVARG, "Both paths reject the expanded alias collision");
       endfor
-      const moved = `this:_as_programmer($agent_building_tools, "move_object",
+      const moved = `this:_as_programmer($llm_building_tools, "move_object",
         ["object" -> tostr(source), "destination" -> tostr(foreign_area)], #90101) ! E_NACC => E_NACC';
       $test_utils:assert_eq(moved, E_NACC, "A denied move is an error, not a successful tool response");
       $test_utils:assert_eq(source.location, #-1, "Denied area admission does not relocate the room");

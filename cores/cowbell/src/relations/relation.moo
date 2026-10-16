@@ -261,6 +261,34 @@ object RELATION [
     return {row['Tuple] for row in (matched)};
   endmethod
 
+  method replace_snapshot owner: ARCH_WIZARD
+    "Replace a captured tuple set atomically. Return false if another writer changed it.";
+    const principal = caller_perms();
+    const {relation, snapshot, replacement} = args;
+    typeof(relation) == TYPE_OBJ && valid(relation) && isa(relation, $relation) || raise(E_TYPE);
+    principal == relation.owner || principal.wizard || raise(E_PERM);
+    set_task_perms(principal);
+    typeof(snapshot) == TYPE_LIST && typeof(replacement) == TYPE_LIST || raise(E_TYPE);
+    length(replacement) <= 1000 || raise(E_QUOTA, "Too many replacement facts");
+    for tuple in (replacement)
+      typeof(tuple) == TYPE_LIST && length(tuple) > 0 || raise(E_TYPE);
+      $relation:_check_tuple(tuple, relation.fact_schema);
+    endfor
+    strcmp(toliteral($relation:tuples(relation)), toliteral(snapshot)) == 0 || return false;
+    "No callbacks or suspension between removing old tuples and installing validated replacements.";
+    for property in (properties(relation))
+      const name = tostr(property);
+      if (name:starts_with("tuple_") || name:starts_with("index_"))
+        delete_property(relation, property);
+      endif
+    endfor
+    relation.set_version = 1;
+    for tuple in (replacement)
+      $relation:assert(tuple, relation);
+    endfor
+    return true;
+  endmethod
+
   method clear owner: ARCH_WIZARD
     "Remove all tuples and indexes under the caller's write permissions.";
     const principal = caller_perms();

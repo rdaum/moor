@@ -1,0 +1,89 @@
+// Real project commands keep output on the invoking connection and share guarded task state.
+@attach second programmer
+@wizard
+; add_property(#90101, "project_devices", {create($data_visor, #90101, 2), create($architects_compass, #90101, 2)}, {#90101, ""}); const devices = #90101.project_devices; devices[1].name = "project visor"; devices[2].name = "project compass"; for device in (devices) move(device, #90101); #90101.wearing = setadd(#90101.wearing, device); endfor #90101.is_builder = true; return true;
+true
+@programmer
+% plan_investigation project visor with Audit room permissions
+@text Task #1: Audit room permissions
+@text Status: in_progress
+@text Findings: 0
+@text Subtasks: 0
+@event text/plain utility
+@second
+@quiet
+@noevents
+// The second connection can explicitly request status, but receives no first-connection output.
+% get_investigation_status project visor
+@text Task #1: Audit room permissions
+@text Status: in_progress
+@text Findings: 0
+@text Subtasks: 0
+@event text/plain utility
+@programmer
+@quiet
+@noevents
+; return player.project_devices[1]:complete_investigation("Reviewed permissions");
+"Task #1 completed."
+% get_investigation_status project visor
+@text No active task.
+@event text/plain utility
+// A descendant of a configured wearable must create its own agent and project.
+@wizard
+; const child = create(#90101.project_devices[1], #90101, 2); child.name = "child visor"; move(child, #90101); #90101.wearing = setadd(#90101.wearing, child); #90101.project_devices = {@#90101.project_devices, child}; return true;
+true
+@programmer
+% plan_investigation child visor with Inspect inherited configuration
+@text Task #1: Inspect inherited configuration
+@text Status: in_progress
+@text Findings: 0
+@text Subtasks: 0
+@event text/plain utility
+; return length(player.project_devices[1]:get_project():get_task_status());
+1
+% plan_building project compass with Build a reading room
+@text Task #1: Build a reading room
+@text Status: in_progress
+@text Findings: 0
+@text Subtasks: 0
+@event text/plain utility
+; const project = player.project_devices[2]:get_project(); project:active_task():add_finding("rooms", "planned", "reading room"); return true;
+true
+% get_building_progress project compass
+@text Task #1: Build a reading room
+@text Status: in_progress
+@text Findings: 1
+@text Subtasks: 0
+@event text/plain utility
+; return player.project_devices[2]:complete_building("Construction recorded");
+"Task #1 completed."
+// A new owner gets a fresh project rather than the previous owner's selected work.
+@wizard
+; const compass = #90101.project_devices[2]; #90101.wearing = setremove(#90101.wearing, compass); compass.owner = #90102; move(compass, #90102); #90102.wearing = setadd(#90102.wearing, compass); #90102.is_builder = true; return true;
+true
+@nonprogrammer
+% plan_building project compass with Build for the new owner
+@text Task #1: Build for the new owner
+@text Status: in_progress
+@text Findings: 0
+@text Subtasks: 0
+@event text/plain utility
+% clear_project project compass
+@text LLM project cleared.
+@event text/plain utility
+% get_building_progress project compass
+@text No active task.
+@event text/plain utility
+@wizard
+; return #90101.project_devices[2].agent.owner;
+#90102
+@programmer
+// Reconfiguration creates fresh project selection; old task IDs cannot select new work.
+; player.project_devices[1]:reconfigure(); return true;
+true
+% get_investigation_status project visor
+@text No active task.
+@event text/plain utility
+@wizard
+; for device in (#90101.project_devices) #90101.wearing = setremove(#90101.wearing, device); #90102.wearing = setremove(#90102.wearing, device); recycle(device); endfor delete_property(#90101, "project_devices"); return true;
+true

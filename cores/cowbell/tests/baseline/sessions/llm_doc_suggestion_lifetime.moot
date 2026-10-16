@@ -1,0 +1,59 @@
+// Admission, stop, deadlines, worker loss, and client changes own the whole suggestion lifetime.
+@wizard
+; const client = #90032:fixture(); client.blocked = true; add_property(#90100, "doc_jobs", {}, {#90100, ""}); add_property(#90100, "doc_tasks", {}, {#90100, ""}); for spec in ({"firstMissing", "secondMissing"}) const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'object, 'spec -> spec, 'target -> #-1, 'member -> ""]); #90100.doc_jobs = {@#90100.doc_jobs, job}; #90100.doc_tasks = {@#90100.doc_tasks, {job.worker_task, job.monitor_task}}; endfor return #90032:wait_requests(client, 2);
+true
+; try $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'object, 'spec -> "thirdMissing", 'target -> #-1, 'member -> ""]); except (E_QUOTA) return true; endtry return false;
+true
+@programmer
+~~Could not find object:
+@event text/plain utility
+~~Could not find object:
+@event text/plain utility
+% stop
+@text You stop LLM suggestions.
+@event text/plain utility
+@wizard
+; return {#90032:wait_closed(#90100.doc_jobs[1], #90100.doc_tasks[1]), #90032:wait_closed(#90100.doc_jobs[2], #90100.doc_tasks[2]), length(#90101.llm_suggestions)};
+{'cancelled, 'cancelled, 0}
+// The deadline includes a suspended provider, not just admission or output expiry.
+; const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'builtin, 'spec -> "timedMissing", 'target -> #-1, 'member -> ""]); #90100.doc_jobs = {job}; #90100.doc_tasks = {{job.worker_task, job.monitor_task}}; #90032:wait_requests($player.suggestions_llm_client, 3); job.deadline = time() + 1; return #90032:wait_closed(job, #90100.doc_tasks[1]);
+'timed_out
+@programmer
+@text timedMissing is not a recognized builtin function or object. (Finding suggestions...)
+@event text/plain utility
+@quiet
+@noevents
+// A dead worker cannot leave an anonymous job or monitoring task retained.
+@wizard
+; const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'builtin, 'spec -> "lostWorker", 'target -> #-1, 'member -> ""]); #90032:wait_requests($player.suggestions_llm_client, 4); const tasks = {job.worker_task, job.monitor_task}; kill_task(job.worker_task); return #90032:wait_closed(job, tasks);
+'cancelled
+@programmer
+@text lostWorker is not a recognized builtin function or object. (Finding suggestions...)
+@event text/plain utility
+@quiet
+@noevents
+// Replacing the selected client revokes pending work.
+@wizard
+; const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'builtin, 'spec -> "changedClient", 'target -> #-1, 'member -> ""]); #90032:wait_requests($player.suggestions_llm_client, 5); const tasks = {job.worker_task, job.monitor_task}; $player.suggestions_llm_client = #-1; return #90032:wait_closed(job, tasks);
+'cancelled
+@programmer
+@text changedClient is not a recognized builtin function or object. (Finding suggestions...)
+@event text/plain utility
+@quiet
+@noevents
+// Invalid provider output produces a fallback and releases the same job graph.
+@wizard
+; const client = #90032:fixture(); client.response = 42; const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'builtin, 'spec -> "invalidReply", 'target -> #-1, 'member -> ""]); const state = #90032:wait_closed(job); return {state, index(job.failure, "E_INVARG") > 0};
+{'failed, true}
+@programmer
+@text invalidReply is not a recognized builtin function or object. (Finding suggestions...)
+@event text/plain utility
+@text invalidReply is not a recognized builtin function or object.
+@event text/plain utility
+// Cancellation from the worker's own output hook must kill that worker after cleanup commits.
+@wizard
+; const client = #90032:fixture(); add_property(#90101, "doc_cancel_task", 0, {#90101, ""}); add_verb(#90101, {#90101, "rxd", "inform_connection"}, {"this", "none", "this"}); set_verb_code(#90101, "inform_connection", {"this.doc_cancel_task = task_id(); $llm_suggestion:cancel_all(this); while (true) suspend(1); endwhile"}); const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'builtin, 'spec -> "selfStop", 'target -> #-1, 'member -> ""]); for i in [1..30] if (#90101.doc_cancel_task > 0) break; endif suspend(0.1); endfor const state = #90032:wait_closed(job, {#90101.doc_cancel_task, job.monitor_task}); delete_verb(#90101, "inform_connection"); delete_property(#90101, "doc_cancel_task"); return {state, length(client.requests), length(#90101.llm_suggestions)};
+{'cancelled, 0, 0}
+@wizard
+; delete_property(#90100, "doc_jobs"); delete_property(#90100, "doc_tasks"); return true;
+true

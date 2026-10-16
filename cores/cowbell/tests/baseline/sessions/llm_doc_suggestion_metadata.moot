@@ -1,0 +1,45 @@
+// Only metadata readable by the actual requester may enter the suggestion prompt.
+@wizard
+; const client = #90032:fixture(); client.blocked = true; const ancestor = create($root, #90102, 2); add_verb(ancestor, {#90102, "", "secret_guide_ancestor"}, {"this", "none", "this"}); const target = create(ancestor, #90101, 2); target.r = 1; add_verb(target, {#90101, "rxd", "visible_guide_command"}, {"this", "none", "this"}); add_property(#90100, "doc_target", target, {#90100, ""}); add_property(#90100, "doc_ancestor", ancestor, {#90100, ""}); const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'verb, 'spec -> tostr(target) + ":missing", 'target -> target, 'member -> "missing"]); add_property(#90100, "doc_job", job, {#90100, ""}); #90032:wait_requests(client, 1); return {index(client.requests[1], "visible_guide_command") > 0, index(client.requests[1], "secret_guide_ancestor") == 0, client.principals, client.purposes};
+{true, true, {#90101}, {'suggestion}}
+; $player.suggestions_llm_client.blocked = false; return #90032:wait_closed(#90100.doc_job);
+'complete
+@programmer
+~~Verb missing not found on
+@event text/plain utility
+~~Verb missing not found on
+@text Try @doc properties.
+@event text/plain utility
+// A foreign private target never reaches the provider at all.
+@wizard
+; const target = #90100.doc_ancestor; const job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'verb, 'spec -> tostr(target) + ":missing", 'target -> target, 'member -> "missing"]); return {#90032:wait_closed(job), length($player.suggestions_llm_client.requests)};
+{'failed, 1}
+@programmer
+~~Verb missing not found on
+@event text/plain utility
+~~Verb missing not found on
+@event text/plain utility
+// Revoked read access suppresses a response built from a formerly readable target.
+@wizard
+; const client = $player.suggestions_llm_client; client.blocked = true; client.response = "Do not publish stale names."; const target = #90100.doc_target; #90100.doc_job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'verb, 'spec -> tostr(target) + ":missing", 'target -> target, 'member -> "missing"]); #90032:wait_requests(client, 2); target.owner = #90102; target.r = 0; client.blocked = false; return #90032:wait_closed(#90100.doc_job);
+'failed
+@programmer
+~~Verb missing not found on
+@event text/plain utility
+~~Verb missing not found on
+@event text/plain utility
+@quiet
+@noevents
+// Private system references also stay out of the transmitted namespace list.
+@wizard
+; add_property($sysobj, "llm_secret_namespace", #90100.doc_ancestor, {#90100, ""}); add_property($sysobj, "llm_public_namespace", #90100.doc_target, {#90100, "r"}); const client = $player.suggestions_llm_client; client.response = "Try @doc $llm_public_namespace."; #90100.doc_job = $llm_doc_suggestion:start(#90101, connections(#90101)[1][1], ['kind -> 'object, 'spec -> "$missingNamespace", 'target -> #-1, 'member -> ""]); #90032:wait_requests(client, 3); return {index(client.requests[3], "llm_public_namespace") > 0, index(client.requests[3], "llm_secret_namespace") == 0, #90032:wait_closed(#90100.doc_job)};
+{true, true, 'complete}
+@programmer
+@text Could not find object: $missingNamespace (Finding suggestions...)
+@event text/plain utility
+@text Could not find object: $missingNamespace
+@text Try @doc $llm_public_namespace.
+@event text/plain utility
+@wizard
+; delete_property($sysobj, "llm_secret_namespace"); delete_property($sysobj, "llm_public_namespace"); recycle(#90100.doc_target); recycle(#90100.doc_ancestor); delete_property(#90100, "doc_target"); delete_property(#90100, "doc_ancestor"); delete_property(#90100, "doc_job"); $player.suggestions_llm_client = #-1; return true;
+true
