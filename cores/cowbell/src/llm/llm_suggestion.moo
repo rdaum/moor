@@ -246,7 +246,8 @@ object LLM_SUGGESTION [
     this.rewrite_id = "";
     this.fallback = "";
     this:release();
-    worker == task_id() && this:_end_caller(worker);
+    // Finished workers return normally so their pending output can commit.
+    worker == task_id() && state in {'cancelled, 'timed_out} && this:_end_caller(worker);
     return true;
   endmethod
 
