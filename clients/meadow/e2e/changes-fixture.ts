@@ -77,7 +77,6 @@ export class ChangesFixture {
     private extraMembers = 0;
     private additions = false;
     httpFailure = false;
-    rpcArgs: string[] = [];
     telnetPort = 0;
     private vite?: ChildProcess;
     private log = "";
@@ -279,7 +278,6 @@ export class ChangesFixture {
                 token,
                 ...sockets.flatMap(name => [`--${name}-address`, address(name)]),
             ];
-            this.rpcArgs = common;
             this.world = this.launch(resolve(workspace, "target/debug/moor-daemon"), [
                 resolve(this.directory, "data"),
                 "--config-file",

@@ -709,14 +709,14 @@ removed. It identifies the accepted initial definition. It does not authorize re
 
 ### Review updates with an agent
 
-Cowbell publishes 25 `changes_*` tools through its MCP catalog. Both `moor-mcp-host` and
-`moor-web-mcp` use these tools. LLM coding rooms use the same definitions and service checks. Tool
-discovery does not grant permission to change the MOO.
+Cowbell publishes 25 `changes_*` tools through its MCP catalog. `moor-web-mcp` exposes these tools
+through web-host. LLM coding rooms use the same definitions and service checks. Tool discovery does
+not grant permission to change the MOO.
 
 Connect with an administrator account. A delegated administrator needs the existing `@changes`
-allowlist entry. Git operations and new object creation require an actual wizard. With native MCP,
-`wizard: true` selects the configured wizard connection. With web MCP, select the configured MOO and
-character. These options select credentials; they do not elevate an ordinary account.
+allowlist entry. Git operations and new object creation require an actual wizard. Select the
+configured MOO and character, or use `wizard: true` to select a configured wizard account. These
+options select credentials; they do not elevate an ordinary account.
 
 The resource `moor://changes-guide` explains the workflow and each decision. Internal agents receive
 the same guide. For example, ask:
@@ -759,7 +759,6 @@ JSON string. To configure an object constant, use `{"$object":"#9500"}`; a plain
 string constant. Returned absent object references use `"#-1"`.
 
 Use returned generation numbers, not guessed values. After a lost response, read status before
-repeating a mutation. The native MCP host reconnects without automatically repeating dynamic tool
-calls. A duplicate apply request returns the committed status when its generation already applied.
-An active review prevents a second check from silently replacing it. There is no general rollback
-operation.
+repeating a mutation. A duplicate apply request returns the committed status when its generation
+already applied. An active review prevents a second check from silently replacing it. There is no
+general rollback operation.

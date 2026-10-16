@@ -11,6 +11,9 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import { ErrorCode } from "@moor/schema/generated/moor-common/error-code";
+import { SchedulerErrorUnion } from "@moor/schema/generated/moor-rpc/scheduler-error-union";
+import { TaskAbortedException } from "@moor/schema/generated/moor-rpc/task-aborted-exception";
 import {
     buildWsAttach,
     bytesFromWebSocketMessage,
@@ -22,6 +25,7 @@ import {
     parseWsNarrativeEventMessage,
     schedulerErrorToNarrative,
 } from "@moor/web-sdk";
+import { VerbCallFailure } from "@moor/web-sdk/verb";
 import WebSocket from "ws";
 
 import type { CharacterRef, MooConfig, MoorWebMcpConfig, PlayerConfig } from "./config.js";
@@ -195,9 +199,20 @@ export class MoorWebClient {
         );
 
         const bytes = new Uint8Array(await response.arrayBuffer());
-        const resultVar = parseEvalResultVar(bytes);
-        const decoded = new MoorVar(resultVar);
-        return { js: decoded.toJS(), literal: decoded.toLiteral() };
+        try {
+            const decoded = new MoorVar(parseEvalResultVar(bytes));
+            return { js: decoded.toJS(), literal: decoded.toLiteral() };
+        } catch (error) {
+            if (error instanceof VerbCallFailure) {
+                const scheduler = error.failure.error();
+                if (scheduler?.errorType() === SchedulerErrorUnion.TaskAbortedException) {
+                    const aborted = scheduler.error(new TaskAbortedException()) as TaskAbortedException;
+                    const detail = aborted.exception()?.error();
+                    if (detail) error.message = `Eval: ${ErrorCode[detail.errType()]} (${detail.msg() ?? ""})`;
+                }
+            }
+            throw error;
+        }
     }
 
     async command(character: CharacterRef, command: string): Promise<CommandResult> {
@@ -377,7 +392,7 @@ export class MoorWebClient {
         args: unknown,
     ): Promise<{ js: unknown; literal: string }> {
         // Decode actual JSON in the world so booleans, strings and multiline
-        // programs use the same mapping as native MCP and internal agents.
+        // programs use the same mapping as internal agents.
         const mooArgs = `parse_json(${jsonToMooLiteral(JSON.stringify(args ?? {}))})`;
         const expression = `return ${tool.targetObj}:${tool.targetVerb}(${mooArgs}, player);`;
         return this.evalExpression(character, expression);

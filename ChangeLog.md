@@ -37,6 +37,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated rustls to 0.23.46 to address four upstream TLS security advisories.
 
+- Removed the native `moor-mcp-host` binary. MCP clients use `moor-web-mcp` through web-host with
+  configured MOO accounts.
+
 - Cowbell LLM wearables isolate each interaction and keep prompts and private output on its
   initiating connection. Stop and reset cancel pending input and model work. Interactions have a
   total deadline. Visor approval applies only to one operation type and target within the current
@@ -56,9 +59,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Drafts survive cancellation and reconnect. Commands also expose recovery, history, partial-review
   completion, and retry after a failed fetch.
 
-- Cowbell exposes guarded change management through both MCP hosts and its internal LLM agents.
-  Tools return structured results, preserve edited source, and report compiler errors and committed
-  outcomes. Native MCP no longer repeats dynamic calls automatically after a lost connection.
+- Cowbell exposes guarded change management through web MCP and its internal LLM agents. Tools
+  return structured results, preserve edited source, and report compiler errors and committed
+  outcomes.
 
 - Cowbell change reviews can create objects at explicitly chosen IDs. Preview reserves no IDs, and
   apply rejects occupied addresses. New objects and their initial contents commit with their change

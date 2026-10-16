@@ -207,6 +207,10 @@ Cowbell entries.
 
 ### Fixed
 
+- MCP calls to shared LLM tools validate their published arguments and report failed operations as
+  errors. Compiler failures retain their diagnostics instead of exposing an internal flyweight as a
+  successful result. MCP also preserves MOO error codes and messages for rejected calls.
+
 - LLM observers use their configured client's model when no observer preference is set. Ordinary
   room conversations no longer fail with an invalid model name under the default configuration.
 

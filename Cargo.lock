@@ -1487,15 +1487,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 
 [[package]]
-name = "diffy"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e3dc2f773b6aaa63b1a7684b8589f670a8a0146a510b74d23a401c882364b49"
-dependencies = [
- "hashbrown 0.17.1",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4587,31 +4578,6 @@ dependencies = [
  "triomphe",
  "uuid 1.26.1",
  "xml-rs",
-]
-
-[[package]]
-name = "moor-mcp-host"
-version = "2.0.0-dev"
-dependencies = [
- "clap",
- "clap_derive",
- "color-eyre",
- "diffy",
- "eyre",
- "moor-common",
- "moor-compiler",
- "moor-runtime-api",
- "moor-schema",
- "moor-var",
- "moor-zmq-client",
- "r0z-async",
- "serde",
- "serde_derive",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid 1.26.1",
 ]
 
 [[package]]

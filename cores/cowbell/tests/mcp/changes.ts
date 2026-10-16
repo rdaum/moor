@@ -72,7 +72,7 @@ class Mcp {
     }
 }
 
-async function run(host: "native" | "web", transport: "http" | "git") {
+async function run(transport: "http" | "git") {
     const fixture = new ChangesFixture();
     let client: Mcp | undefined;
     let assertions: MoorWebClient | undefined;
@@ -96,36 +96,24 @@ async function run(host: "native" | "web", transport: "http" | "git") {
         assertions = new MoorWebClient(connection);
         const actor = { mooId: "test", playerId: "wizard" };
         async function connect() {
-            if (host === "native") {
-                client = new Mcp(resolve(workspace, "target/debug/moor-mcp-host"), [
-                    ...fixture.rpcArgs,
-                    "--username",
-                    "AcceptanceAdmin",
-                    "--password",
-                    "test",
-                    "--data-dir",
-                    resolve(fixture.directory, "mcp-identity"),
-                ], fixture.directory);
-            } else {
-                const config = resolve(fixture.directory, "mcp.json");
-                await writeFile(
-                    config,
-                    JSON.stringify({
-                        ...connection,
-                        moos: [{
-                            ...connection.moos[0],
-                            players: [{ ...connection.moos[0].players[0], username: "AcceptanceAdmin" }],
-                        }],
-                    }),
-                );
-                client = new Mcp(process.execPath, [
-                    "--import",
-                    "tsx",
-                    "clients/moor-web-mcp/src/index.ts",
-                    "--config",
-                    config,
-                ], workspace);
-            }
+            const config = resolve(fixture.directory, "mcp.json");
+            await writeFile(
+                config,
+                JSON.stringify({
+                    ...connection,
+                    moos: [{
+                        ...connection.moos[0],
+                        players: [{ ...connection.moos[0].players[0], username: "AcceptanceAdmin" }],
+                    }],
+                }),
+            );
+            client = new Mcp(process.execPath, [
+                "--import",
+                "tsx",
+                "clients/moor-web-mcp/src/index.ts",
+                "--config",
+                config,
+            ], workspace);
             await client.rpc("initialize", {
                 protocolVersion: "2024-11-05",
                 capabilities: {},
@@ -137,6 +125,54 @@ async function run(host: "native" | "web", transport: "http" | "git") {
         assert.ok(client);
         const catalog = await client.rpc("tools/list");
         assert.equal(catalog.tools.filter((tool: Json) => tool.name.startsWith("changes_")).length, 25);
+        if (transport === "http") {
+            // Exercise the domain providers moved by the LLM refactor through web MCP.
+            const registry = (await assertions.evalExpression(actor, "return #0:external_agent_tools();")).js;
+            assert.ok(Array.isArray(registry));
+            for (const tool of registry) {
+                assert.ok(catalog.tools.some((listed: Json) => listed.name === tool.name), tool.name);
+            }
+            async function tool(name: string, args: Json = {}, error = false) {
+                const response = await client!.rpc("tools/call", { name, arguments: args });
+                assert.equal(response.isError ?? false, error, JSON.stringify(response));
+                assert.ok(response.structuredContent, JSON.stringify(response));
+                assert.deepEqual(JSON.parse(response.content[0].text), response.structuredContent);
+                return response.structuredContent;
+            }
+            await assertions.evalExpression(actor, "#9502.wizard = false; return true;");
+            assert.match((await tool("list_prototypes")).value, /\$thing/);
+            assert.match(
+                (await tool("doc_lookup", { target: "$llm_programming_tools:program_verb" })).value,
+                /Compile code/,
+            );
+            const created = await tool("create_object", { parent: "$thing", name: "MCP tool probe" });
+            const object = created.value.match(/\((#[^)]+)\)/)?.[1];
+            assert.ok(object, JSON.stringify(created));
+            assert.equal((await assertions.evalExpression(actor, `return ${object}.owner == #9502;`)).js, true);
+            assert.match((await tool("inspect_object", { object })).value, /MCP tool probe/);
+            assert.match((await tool("list_rules", { object })).value, /Rules on/);
+            await tool("add_verb", { object, verb: "probe", permissions: "rxd" });
+            await tool("program_verb", { object, verb: "probe", code: "const value = \"#123\";\nreturn value;" });
+            assert.equal((await assertions.evalExpression(actor, `return ${object}:probe();`)).js, "#123");
+            await client.rpc("tools/call", {
+                name: "program_verb",
+                arguments: { object, verb: "probe", code: "return 0;", actor: "#2" },
+            }, /not a supported argument/);
+            await client.rpc("tools/call", {
+                name: "program_verb",
+                arguments: { object: "#9500", verb: "upstream", code: "return 0;" },
+            }, /E_PERM/);
+            const failure = await tool("program_verb", { object, verb: "probe", code: "return (;" }, true);
+            assert.equal(failure.ok, false);
+            assert.equal(failure.code, "compile_error");
+            assert.equal((await assertions.evalExpression(actor, `return ${object}:probe();`)).js, "#123");
+            await tool("recycle_object", { object });
+            assert.equal((await assertions.evalExpression(actor, `return valid(${object});`)).js, false);
+            await assertions.evalExpression(actor, "#9502.wizard = true; return true;");
+            const buildingGuide = await client.rpc("resources/read", { uri: "moor://building-guide" });
+            assert.match(buildingGuide.contents[0].text, /list_prototypes/);
+            console.log(`PASS web MCP / shared LLM tools (${registry.length} registered)`);
+        }
         const resources = await client.rpc("resources/list");
         assert.ok(resources.resources.some((resource: Json) => resource.uri === "moor://changes-guide"));
         const guide = await client.rpc("resources/read", { uri: "moor://changes-guide" });
@@ -220,11 +256,7 @@ async function run(host: "native" | "web", transport: "http" | "git") {
             "invalid_request",
         );
         const oversized = { package: "acceptance", sources: [{ label: "oversized.moo", text: " ".repeat(4194305) }] };
-        if (host === "web") {
-            await client.rpc("tools/call", { name: "changes_check", arguments: oversized }, /413 Payload Too Large/);
-        } else {
-            await client.call("check", oversized, "limit_exceeded");
-        }
+        await client.rpc("tools/call", { name: "changes_check", arguments: oversized }, /413 Payload Too Large/);
         const before = await assertions.evalExpression(
             actor,
             "return {#9500:upstream(), #9500:conflict(), #9500:edited(), #9500:deferred()};",
@@ -484,42 +516,11 @@ async function run(host: "native" | "web", transport: "http" | "git") {
         assert.equal((await settled(objectStatus.review_id)).status, "complete");
         assert.equal((await assertions.evalExpression(actor, "return #9600:run();")).js, 42);
 
-        if (host === "native" && transport === "http") {
-            // A write commits at suspend, then its reply arrives after the host timeout.
-            // The host must reconnect without executing the unknown mutation again.
-            const probeCode = [
-                "#0.mcp_probe_count = #0.mcp_probe_count + 1;",
-                "suspend(61);",
-                "return [\"ok\" -> true];",
-            ];
-            const catalogLine =
-                "tools = {@tools, [\"name\" -> \"changes_reply_probe\", \"description\" -> \"Acceptance timeout fixture\", \"input_schema\" -> [\"type\" -> \"object\"], \"target_obj\" -> #0, \"target_verb\" -> \"mcp_probe\"]};";
-            await assertions.evalExpression(
-                actor,
-                `
-                add_property(#0, "mcp_probe_count", 0, {player, ""});
-                add_verb(#0, {player, "xd", "mcp_probe"}, {"this", "none", "this"});
-                set_verb_code(#0, "mcp_probe", {${probeCode.map(line => JSON.stringify(line)).join(",")}});
-                const catalog = verb_code(#0, "external_agent_tools");
-                return set_verb_code(#0, "external_agent_tools", {@catalog[1..$ - 1], ${
-                    JSON.stringify(catalogLine)
-                }, "return tools;"});
-            `,
-            );
-            await client.rpc("tools/call", { name: "moo_refresh_dynamic_tools", arguments: {} });
-            console.log("Checking lost reply without automatic mutation retry (60 seconds).");
-            await client.call("reply_probe", {}, "outcome_unknown");
-            const count = await assertions.evalExpression(actor, "return #0.mcp_probe_count;");
-            assert.equal(count.js, 1);
-            await client.call("packages");
-        }
-        console.log(`PASS ${host} MCP / ${transport} upstream`);
+        console.log(`PASS web MCP / ${transport} upstream`);
     } finally {
         await assertions?.close();
         await client?.close();
         await fixture.close();
     }
 }
-for (const host of (process.argv.includes("--web-only") ? ["web"] : ["native", "web"]) as ("native" | "web")[]) {
-    for (const transport of ["http", "git"] as const) await run(host, transport);
-}
+for (const transport of ["http", "git"] as const) await run(transport);
