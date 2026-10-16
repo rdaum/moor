@@ -31,8 +31,14 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use moor_common::model::ObjectRef;
-use moor_runtime_api::api::{ClientRequest, EntityType, InvocationMode};
+use moor_common::{
+    model::ObjectRef,
+    tasks::{SchedulerError, VerbProgramError},
+};
+use moor_runtime_api::{
+    api::{ClientReply, ClientRequest, EntityType, InvocationMode, VerbProgramResponse},
+    api_codec::encode_client_success_bytes,
+};
 use moor_schema::{
     convert::{var_from_flatbuffer, var_from_flatbuffer_ref},
     var as moor_var_schema,
@@ -302,17 +308,47 @@ pub async fn verb_program_handler(
         code,
     };
 
-    let reply_bytes = match web_host::rpc_call(client_id, &rpc_client, program_msg).await {
-        Ok(bytes) => bytes,
-        Err(status) => return status.into_response(),
+    let reply = match rpc_client.client_call(client_id, program_msg).await {
+        Ok(reply) => reply,
+        Err(error) => return super::captured_rpc_error_status(&error).into_response(),
     };
+    verb_program_response(reply, format)
+}
 
-    match format {
-        ResponseFormat::FlatBuffers => flatbuffer_response(reply_bytes),
-        ResponseFormat::Json => {
-            reply_result_to_json(&reply_bytes).unwrap_or_else(|status| status.into_response())
+fn verb_program_response(reply: ClientReply, format: ResponseFormat) -> Response {
+    let status = match &reply {
+        ClientReply::VerbProgramResponseReply {
+            response: VerbProgramResponse::Success { .. },
+        } => StatusCode::OK,
+        ClientReply::VerbProgramResponseReply {
+            response:
+                VerbProgramResponse::Failure {
+                    error: SchedulerError::VerbProgramFailed(error),
+                },
+        } => match error {
+            VerbProgramError::CompilationError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            VerbProgramError::PermissionDenied => StatusCode::FORBIDDEN,
+            VerbProgramError::NoVerbToProgram => StatusCode::NOT_FOUND,
+            VerbProgramError::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
+        },
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let bytes = match encode_client_success_bytes(reply) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            error!("Failed to encode verb programming response: {error:?}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-    }
+    };
+    let mut response = match format {
+        ResponseFormat::FlatBuffers => flatbuffer_response(bytes),
+        ResponseFormat::Json => match reply_result_to_json(&bytes) {
+            Ok(response) => response,
+            Err(status) => return status.into_response(),
+        },
+    };
+    *response.status_mut() = status;
+    response
 }
 
 #[cfg(test)]
@@ -323,6 +359,64 @@ mod tests {
     use moor_runtime_api::api::{ClientReply, InvocationOutcome, InvocationResponse};
     use moor_schema::rpc as moor_rpc;
     use moor_var::{Obj, v_int, v_obj, v_str};
+
+    #[tokio::test]
+    async fn programming_failures_keep_diagnostics_with_error_statuses() {
+        let compile_error = moor_compiler::compile("return (;", Default::default()).unwrap_err();
+        let cases = [
+            (
+                VerbProgramError::CompilationError(compile_error),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "VerbCompilationError",
+            ),
+            (
+                VerbProgramError::PermissionDenied,
+                StatusCode::FORBIDDEN,
+                "VerbPermissionDenied",
+            ),
+            (
+                VerbProgramError::NoVerbToProgram,
+                StatusCode::NOT_FOUND,
+                "NoVerbToProgram",
+            ),
+            (
+                VerbProgramError::DatabaseError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "VerbDatabaseError",
+            ),
+        ];
+        for (error, status, diagnostic) in cases {
+            for format in [ResponseFormat::Json, ResponseFormat::FlatBuffers] {
+                let response = verb_program_response(
+                    ClientReply::VerbProgramResponseReply {
+                        response: VerbProgramResponse::Failure {
+                            error: SchedulerError::VerbProgramFailed(error.clone()),
+                        },
+                    },
+                    format,
+                );
+                assert_eq!(response.status(), status);
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                let json = match format {
+                    ResponseFormat::Json => body.to_vec(),
+                    ResponseFormat::FlatBuffers => {
+                        let decoded = reply_result_to_json(&body).unwrap();
+                        axum::body::to_bytes(decoded.into_body(), usize::MAX)
+                            .await
+                            .unwrap()
+                            .to_vec()
+                    }
+                };
+                let text = String::from_utf8(json).unwrap();
+                assert!(text.contains(diagnostic), "{text}");
+                if status == StatusCode::UNPROCESSABLE_ENTITY {
+                    assert!(text.contains("error_position"), "{text}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn json_verb_arguments_decode_losslessly() {

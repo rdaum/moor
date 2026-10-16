@@ -11,19 +11,21 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import type { CharacterRef, MooConfig } from "./config.js";
-import type {
-    JsonRpcError,
-    JsonRpcNotification,
-    JsonRpcRequest,
-    RequestId,
-    ResourceDefinition,
-    ToolCallResult,
-    ToolDefinition,
-} from "./mcp-types.js";
-import type { DynamicResource, DynamicTool, MoorWebClient } from "./moor-service.js";
-
-const JSONRPC_VERSION = "2.0";
+import {
+    type CallToolResult,
+    type JsonSchemaType,
+    ProtocolError,
+    type ReadResourceResult,
+    type Resource,
+    Server,
+    type Tool,
+} from "@modelcontextprotocol/server";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/server/validators/ajv";
+import { readFileSync } from "node:fs";
+import { type CharacterRef, type MooConfig, resolveDefaultCharacter } from "./config.js";
+import { type MoorWebClient } from "./moor-service.js";
+import { staticTools, withCharacter } from "./static-tools.js";
+import { ToolCatalog } from "./tool-catalog.js";
 
 interface ToolArgs extends Record<string, unknown> {
     moo?: string;
@@ -32,11 +34,11 @@ interface ToolArgs extends Record<string, unknown> {
     include_metadata?: boolean;
 }
 
-function makeTextResult(text: string): ToolCallResult {
+function makeTextResult(text: string): CallToolResult {
     return { content: [{ type: "text", text }] };
 }
 
-function makeErrorResult(text: string): ToolCallResult {
+function makeErrorResult(text: string): CallToolResult {
     return { content: [{ type: "text", text }], isError: true };
 }
 
@@ -48,7 +50,7 @@ function parseObjectRef(raw: unknown): string {
 }
 
 function simpleToCurie(value: string): string | null {
-    if (value.startsWith("oid:") || value.startsWith("uuid:")) {
+    if (/^(oid:-?\d+|uuid:[0-9a-f]{6}-[0-9a-f]{10})$/i.test(value)) {
         return value;
     }
     if (value.startsWith("#")) {
@@ -57,7 +59,7 @@ function simpleToCurie(value: string): string | null {
         if (/^[0-9A-F]{6}-[0-9A-F]{10}$/.test(upper)) {
             return `uuid:${upper}`;
         }
-        return `oid:${raw}`;
+        return /^-?\d+$/.test(raw) ? `oid:${raw}` : null;
     }
     if (/^[0-9A-Fa-f]{6}-[0-9A-Fa-f]{10}$/.test(value)) {
         return `uuid:${value.toUpperCase()}`;
@@ -91,263 +93,94 @@ function isSystemObjectRef(value: string): boolean {
     return /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
-export class McpServer {
-    private readonly moor: MoorWebClient;
-    private readonly moos: MooConfig[];
-    private readonly defaultCharacter: CharacterRef;
-    private dynamicTools: DynamicTool[] = [];
-    private dynamicResources?: DynamicResource[];
-    private dynamicLoaded = false;
+export class McpServer extends Server {
+    private readonly catalog: ToolCatalog;
+    private readonly validator = new AjvJsonSchemaValidator();
 
-    constructor(moor: MoorWebClient, moos: MooConfig[], defaultCharacter: CharacterRef) {
-        this.moor = moor;
-        this.moos = moos;
-        this.defaultCharacter = defaultCharacter;
+    constructor(
+        private readonly moor: MoorWebClient,
+        private readonly moos: MooConfig[],
+        private readonly defaultCharacter: CharacterRef,
+    ) {
+        const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+        super({ name: "moor-web-mcp", version }, { capabilities: { tools: {}, resources: {} } });
+        this.catalog = new ToolCatalog(moor);
+        this.setRequestHandler("tools/list", async () => ({ tools: await this.listTools() }));
+        this.setRequestHandler("tools/call", async (request, ctx) => this.callTool(request.params, ctx.mcpReq.signal));
+        this.setRequestHandler("resources/list", async () => ({ resources: await this.listResources() }));
+        this.setRequestHandler("resources/read", async request => this.readResource(request.params));
     }
 
-    async handleLine(line: string, write: (line: string) => void): Promise<void> {
-        if (!line.trim()) {
-            return;
-        }
+    private characters(): CharacterRef[] {
+        return this.moos.map(moo =>
+            moo.id === this.defaultCharacter.mooId
+                ? this.defaultCharacter
+                : resolveDefaultCharacter({ moos: [moo] })
+        );
+    }
 
-        let message: JsonRpcRequest | JsonRpcNotification;
+    private async listTools(): Promise<Tool[]> {
+        const tools = new Map<string, Tool>();
+        for (const character of this.characters()) {
+            for (const tool of await this.catalog.tools(character)) {
+                if (staticTools.some(entry => entry.name === tool.name)) {
+                    throw new Error(`Reserved tool name: ${tool.name}`);
+                }
+                const schema = withCharacter(tool.inputSchema);
+                schema.properties = { ...schema.properties, moo: { type: "string", const: character.mooId } };
+                if (character.mooId !== this.defaultCharacter.mooId) {
+                    schema.required = [...(schema.required ?? []), "moo"];
+                }
+                const previous = tools.get(tool.name);
+                if (previous) (previous.inputSchema.anyOf as unknown[]).push(schema);
+                else {tools.set(tool.name, {
+                        name: tool.name,
+                        description: tool.description,
+                        inputSchema: { type: "object", anyOf: [schema] },
+                    });}
+            }
+        }
+        return [...staticTools, ...tools.values()];
+    }
+
+    private async callTool(
+        params: { name: string; arguments?: Record<string, unknown> },
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
+        const { name } = params;
         try {
-            message = JSON.parse(line);
-        } catch {
-            return;
-        }
-
-        if (!("id" in message)) {
-            return;
-        }
-
-        try {
-            const result = await this.dispatch(message);
-            write(JSON.stringify({
-                jsonrpc: JSONRPC_VERSION,
-                id: message.id,
-                result,
-            }));
+            const argumentsObj = params.arguments ?? {};
+            const character = this.resolveCharacter(argumentsObj);
+            const builtIn = staticTools.find(tool => tool.name === name);
+            const dynamic = builtIn
+                ? undefined
+                : (await this.catalog.tools(character)).find(tool => tool.name === name);
+            if (!builtIn && !dynamic) throw new ProtocolError(-32602, `Unknown tool: ${name}`);
+            const schema = builtIn?.inputSchema ?? withCharacter(dynamic!.inputSchema);
+            const checked = this.validator.getValidator(schema as JsonSchemaType)(argumentsObj);
+            if (!checked.valid) {
+                const content = { ok: false, error: { code: "invalid_request", message: checked.errorMessage } };
+                return { ...makeErrorResult(JSON.stringify(content)), structuredContent: content };
+            }
+            return await this.executeTool(name, argumentsObj, character, signal);
         } catch (error) {
-            const err = this.toJsonRpcError(error);
-            write(JSON.stringify({
-                jsonrpc: JSONRPC_VERSION,
-                id: message.id,
-                error: err,
-            }));
+            if (error instanceof ProtocolError) throw error;
+            return makeErrorResult(error instanceof Error ? error.message : String(error));
         }
     }
 
-    private async dispatch(request: JsonRpcRequest): Promise<unknown> {
-        switch (request.method) {
-            case "initialize":
-                return {
-                    protocolVersion: "2024-11-05",
-                    capabilities: {
-                        tools: {},
-                        resources: {},
-                    },
-                    serverInfo: {
-                        name: "moor-web-mcp",
-                        version: "0.1.0",
-                    },
-                };
-            case "tools/list":
-                return { tools: await this.listTools() };
-            case "tools/call":
-                return await this.callTool(request.params as Record<string, unknown>);
-            case "resources/list":
-                return { resources: await this.listResources() };
-            case "resources/read":
-                return this.readResource(request.params as Record<string, unknown>);
-            default:
-                throw this.methodNotFound(request.method);
-        }
-    }
-
-    private async listTools(): Promise<ToolDefinition[]> {
-        if (!this.dynamicLoaded) {
-            await this.refreshDynamicTools();
-        }
-
-        const staticTools: ToolDefinition[] = [
-            {
-                name: "moo_eval",
-                description: "Evaluate MOO code and return result.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        expression: { type: "string" },
-                    },
-                    required: ["expression"],
-                }),
-            },
-            {
-                name: "moo_command",
-                description: "Execute a command through the websocket session and return captured narrative output.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        command: { type: "string" },
-                        include_metadata: {
-                            type: "boolean",
-                            description: "Include parsed websocket event metadata JSON in the response.",
-                            default: false,
-                        },
-                    },
-                    required: ["command"],
-                }),
-            },
-            {
-                name: "moo_function_help",
-                description: "Get documentation for a MOO builtin function.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        function_name: { type: "string" },
-                    },
-                    required: ["function_name"],
-                }),
-            },
-            {
-                name: "moo_invoke_verb",
-                description: "Invoke an object verb using eval-based call semantics.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        verb: { type: "string" },
-                        args: { type: "array", items: {} },
-                    },
-                    required: ["object", "verb"],
-                }),
-            },
-            {
-                name: "moo_list_objects",
-                description: "List objects visible to the selected character.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {},
-                }),
-            },
-            {
-                name: "moo_resolve",
-                description: "Resolve an object reference.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                    },
-                    required: ["object"],
-                }),
-            },
-            {
-                name: "moo_list_verbs",
-                description: "List verbs on an object.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        inherited: { type: "boolean" },
-                    },
-                    required: ["object"],
-                }),
-            },
-            {
-                name: "moo_get_verb",
-                description: "Get a specific verb.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        name: { type: "string" },
-                    },
-                    required: ["object", "name"],
-                }),
-            },
-            {
-                name: "moo_program_verb",
-                description: "Program verb source code.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        name: { type: "string" },
-                        code: { type: "string" },
-                    },
-                    required: ["object", "name", "code"],
-                }),
-            },
-            {
-                name: "moo_list_properties",
-                description: "List properties on an object.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        inherited: { type: "boolean" },
-                    },
-                    required: ["object"],
-                }),
-            },
-            {
-                name: "moo_get_property",
-                description: "Get one property value.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        name: { type: "string" },
-                    },
-                    required: ["object", "name"],
-                }),
-            },
-            {
-                name: "moo_set_property",
-                description: "Set property value using MOO literal syntax.",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {
-                        object: { type: "string" },
-                        name: { type: "string" },
-                        valueLiteral: { type: "string" },
-                    },
-                    required: ["object", "name", "valueLiteral"],
-                }),
-            },
-            {
-                name: "moo_refresh_dynamic_tools",
-                description: "Refresh dynamic tools from #0:external_agent_tools().",
-                inputSchema: this.withCharacter({
-                    type: "object",
-                    properties: {},
-                }),
-            },
-        ];
-
-        const dynamic = this.dynamicTools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: this.withCharacter(tool.inputSchema),
-        }));
-
-        return [...staticTools, ...dynamic];
-    }
-
-    private async callTool(params: Record<string, unknown>): Promise<ToolCallResult> {
-        const name = params.name;
-        if (typeof name !== "string") {
-            throw new Error("tools/call params.name must be a string");
-        }
-        const argumentsObj = (params.arguments ?? {}) as ToolArgs;
-        const character = this.resolveCharacter(argumentsObj);
-
+    private async executeTool(
+        name: string,
+        argumentsObj: ToolArgs,
+        character: CharacterRef,
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
         if (name === "moo_eval") {
             const expression = argumentsObj.expression;
             if (typeof expression !== "string") {
                 return makeErrorResult("expression is required");
             }
-            const result = await this.moor.evalExpression(character, expression);
+            const result = await this.moor.evalExpression(character, expression, signal);
             return makeTextResult(`${result.literal}\n\n${JSON.stringify(result.js, null, 2)}`);
         }
 
@@ -357,7 +190,7 @@ export class McpServer {
                 return makeErrorResult("command is required");
             }
             const includeMetadata = argumentsObj.include_metadata === true;
-            const result = await this.moor.command(character, command);
+            const result = await this.moor.command(character, command, signal);
             const output = includeMetadata
                 ? `${result.lines.join("\n")}\n\n--- events ---\n${JSON.stringify(result.events, null, 2)}`
                 : result.lines.join("\n");
@@ -367,13 +200,13 @@ export class McpServer {
         }
 
         if (name === "moo_invoke_verb") {
-            const object = await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object));
+            const object = await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal);
             const verb = argumentsObj.verb;
             const args = Array.isArray(argumentsObj.args) ? argumentsObj.args : [];
             if (typeof verb !== "string") {
                 return makeErrorResult("verb is required");
             }
-            const result = await this.moor.invokeVerbViaEval(character, object, verb, args);
+            const result = await this.moor.invokeVerbViaEval(character, object, verb, args, signal);
             return makeTextResult(`${result.literal}\n\n${JSON.stringify(result.js, null, 2)}`);
         }
 
@@ -382,35 +215,35 @@ export class McpServer {
             if (typeof functionName !== "string") {
                 return makeErrorResult("function_name is required");
             }
-            const result = await this.moor.functionHelp(character, functionName);
+            const result = await this.moor.functionHelp(character, functionName, signal);
             return makeTextResult(`${result.literal}\n\n${JSON.stringify(result.js, null, 2)}`);
         }
 
         if (name === "moo_list_objects") {
-            const result = await this.moor.requestJson(character, "/v1/objects");
+            const result = await this.moor.requestJson(character, "/v1/objects", undefined, signal);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_resolve") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
-            const result = await this.moor.requestJson(character, `/v1/objects/${object}`);
+            const result = await this.moor.requestJson(character, `/v1/objects/${object}`, undefined, signal);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_list_verbs") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
             const inherited = argumentsObj.inherited === true ? "?inherited=true" : "";
-            const result = await this.moor.requestJson(character, `/v1/verbs/${object}${inherited}`);
+            const result = await this.moor.requestJson(character, `/v1/verbs/${object}${inherited}`, undefined, signal);
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_get_verb") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
             const verbName = argumentsObj.name;
             if (typeof verbName !== "string") {
@@ -419,13 +252,15 @@ export class McpServer {
             const result = await this.moor.requestJson(
                 character,
                 `/v1/verbs/${object}/${encodeURIComponent(verbName)}`,
+                undefined,
+                signal,
             );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_program_verb") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
             const verbName = argumentsObj.name;
             const code = argumentsObj.code;
@@ -440,37 +275,34 @@ export class McpServer {
                     headers: { "Content-Type": "text/plain" },
                     body: code,
                 },
+                signal,
             );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_list_properties") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
             const inherited = argumentsObj.inherited === true ? "?inherited=true" : "";
-            const result = await this.moor.requestJson(character, `/v1/properties/${object}${inherited}`);
+            const result = await this.moor.requestJson(
+                character,
+                `/v1/properties/${object}${inherited}`,
+                undefined,
+                signal,
+            );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_get_property") {
-            const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
-            );
-            const propertyName = argumentsObj.name;
-            if (typeof propertyName !== "string") {
-                return makeErrorResult("name is required");
-            }
-            const result = await this.moor.requestJson(
-                character,
-                `/v1/properties/${object}/${encodeURIComponent(propertyName)}`,
-            );
-            return makeTextResult(JSON.stringify(result, null, 2));
+            const object = await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal);
+            const result = await this.moor.propertyValue(character, object, argumentsObj.name as string, signal);
+            return makeTextResult(`${result.literal}\n\n${JSON.stringify(result.js, null, 2)}`);
         }
 
         if (name === "moo_set_property") {
             const object = encodeURIComponent(
-                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object)),
+                await this.normalizeObjectRef(character, parseObjectRef(argumentsObj.object), signal),
             );
             const propertyName = argumentsObj.name;
             const valueLiteral = argumentsObj.valueLiteral;
@@ -485,22 +317,23 @@ export class McpServer {
                     headers: { "Content-Type": "text/plain" },
                     body: valueLiteral,
                 },
+                signal,
             );
             return makeTextResult(JSON.stringify(result, null, 2));
         }
 
         if (name === "moo_refresh_dynamic_tools") {
-            const count = await this.refreshDynamicTools(character);
+            const count = await this.catalog.refresh(character);
             return makeTextResult(`Loaded ${count} dynamic tools`);
         }
 
-        const dynamic = this.dynamicTools.find((tool) => tool.name === name);
+        const dynamic = (await this.catalog.tools(character)).find((tool) => tool.name === name);
         if (dynamic) {
             const input = { ...argumentsObj };
             delete input.moo;
             delete input.character;
             delete input.wizard;
-            const dynamicResult = await this.moor.executeDynamicTool(character, dynamic, input);
+            const dynamicResult = await this.moor.executeDynamicTool(character, dynamic, input, signal);
             const structured = dynamicResult.js !== null && typeof dynamicResult.js === "object"
                     && !Array.isArray(dynamicResult.js)
                 ? dynamicResult.js as Record<string, unknown>
@@ -515,15 +348,10 @@ export class McpServer {
         return makeErrorResult(`Unknown tool: ${name}`);
     }
 
-    private async loadResources(): Promise<DynamicResource[]> {
-        this.dynamicResources ??= await this.moor.refreshDynamicResources(this.defaultCharacter);
-        return this.dynamicResources;
-    }
-
-    private async listResources(): Promise<ResourceDefinition[]> {
+    private async listResources(): Promise<Resource[]> {
         const eventResources = this.moos.flatMap((moo) => {
             return moo.players.map((player) => ({
-                uri: `moor://events/${moo.id}/${player.id}`,
+                uri: `moor://events/${encodeURIComponent(moo.id)}/${encodeURIComponent(player.id)}`,
                 name: `Recent events for ${moo.id}/${player.id}`,
                 description: "Recent websocket narrative events captured by the MCP process.",
                 mimeType: "application/json",
@@ -537,11 +365,11 @@ export class McpServer {
                 mimeType: "application/json",
             },
             ...eventResources,
-            ...(await this.loadResources()).map(({ content: _content, ...resource }) => resource),
+            ...await this.catalog.listResources(this.characters(), this.defaultCharacter),
         ];
     }
 
-    private async readResource(params: Record<string, unknown>): Promise<{ contents: Array<Record<string, string>> }> {
+    private async readResource(params: Record<string, unknown>): Promise<ReadResourceResult> {
         const uri = params.uri;
         if (typeof uri !== "string") {
             throw new Error("resources/read params.uri must be string");
@@ -551,23 +379,27 @@ export class McpServer {
                 contents: [{
                     uri,
                     mimeType: "application/json",
-                    text: JSON.stringify(this.moos, null, 2),
+                    text: JSON.stringify(
+                        this.moos.map(({ players, ...moo }) => ({
+                            ...moo,
+                            players: players.map(({ password: _password, ...player }) => player),
+                        })),
+                        null,
+                        2,
+                    ),
                 }],
             };
         }
 
-        const dynamic = (await this.loadResources()).find(resource => resource.uri === uri);
-        if (dynamic) {
-            return { contents: [{ uri, mimeType: dynamic.mimeType, text: dynamic.content }] };
-        }
-
         const match = /^moor:\/\/events\/([^/]+)\/([^/]+)$/.exec(uri);
         if (!match) {
-            throw new Error(`Unknown resource URI: ${uri}`);
+            const dynamic = await this.catalog.readResource(uri, this.defaultCharacter);
+            if (dynamic) return { contents: [{ uri, mimeType: dynamic.mimeType, text: dynamic.content }] };
+            throw new ProtocolError(-32602, `Unknown resource URI: ${uri}`);
         }
         const character: CharacterRef = {
-            mooId: match[1],
-            playerId: match[2],
+            mooId: decodeURIComponent(match[1]),
+            playerId: decodeURIComponent(match[2]),
         };
         this.moor.findCharacter(character);
         const events = this.moor.getRecentEvents(character);
@@ -585,31 +417,6 @@ export class McpServer {
                     2,
                 ),
             }],
-        };
-    }
-
-    private withCharacter(schema: Record<string, unknown>): Record<string, unknown> {
-        const source = schema as {
-            properties?: Record<string, unknown>;
-            required?: string[];
-        };
-        const properties = { ...(source.properties ?? {}) };
-        properties.moo = {
-            type: "string",
-            description: "Configured moo id. Defaults to config.defaultMoo.",
-        };
-        properties.character = {
-            type: "string",
-            description: "Configured player id inside the selected moo.",
-        };
-        properties.wizard = {
-            type: "boolean",
-            description: "Use a player marked isWizard=true in the selected moo.",
-            default: false,
-        };
-        return {
-            ...source,
-            properties,
         };
     }
 
@@ -634,6 +441,7 @@ export class McpServer {
                     playerId: wizard.id,
                 };
             }
+            throw new Error(`No wizard account configured for ${moo.id}`);
         }
 
         if (moo.id === this.defaultCharacter.mooId) {
@@ -659,36 +467,21 @@ export class McpServer {
     }
 
     private defaultCharacterForMoo(moo: MooConfig): CharacterRef {
-        if (moo.defaultPlayer) {
-            const byId = moo.players.find((player) => player.id === moo.defaultPlayer);
-            if (byId) {
-                return {
-                    mooId: moo.id,
-                    playerId: byId.id,
-                };
-            }
-        }
-        const programmer = moo.players.find((player) => player.isProgrammer);
-        if (programmer) {
-            return {
-                mooId: moo.id,
-                playerId: programmer.id,
-            };
-        }
-        return {
-            mooId: moo.id,
-            playerId: moo.players[0].id,
-        };
+        return resolveDefaultCharacter({ moos: [moo] });
     }
 
-    private async normalizeObjectRef(character: CharacterRef, objectRef: string): Promise<string> {
+    private async normalizeObjectRef(
+        character: CharacterRef,
+        objectRef: string,
+        signal?: AbortSignal,
+    ): Promise<string> {
         const quick = simpleToCurie(objectRef);
         if (quick) {
             return quick;
         }
 
         if (isSystemObjectRef(objectRef)) {
-            const systemObj = await this.moor.evalExpression(character, `tostr(${objectRef})`);
+            const systemObj = await this.moor.evalExpression(character, `tostr(${objectRef})`, signal);
             const systemCurie = toCurieFromMooString(systemObj.js);
             if (systemCurie) {
                 return systemCurie;
@@ -696,12 +489,12 @@ export class McpServer {
         }
 
         if (objectRef === "me" || objectRef === "player") {
-            const strPlayer = await this.moor.evalExpression(character, "tostr(player)");
+            const strPlayer = await this.moor.evalExpression(character, "tostr(player)", signal);
             const playerCurie = toCurieFromMooString(strPlayer.js);
             if (playerCurie) {
                 return playerCurie;
             }
-            const player = await this.moor.evalExpression(character, "player");
+            const player = await this.moor.evalExpression(character, "player", signal);
             const fromEval = jsObjToCurie(player.js);
             if (fromEval) {
                 return fromEval;
@@ -709,43 +502,18 @@ export class McpServer {
         }
 
         if (objectRef === "here" || objectRef === "location") {
-            const strLocation = await this.moor.evalExpression(character, "tostr(player.location)");
+            const strLocation = await this.moor.evalExpression(character, "tostr(player.location)", signal);
             const locationCurie = toCurieFromMooString(strLocation.js);
             if (locationCurie) {
                 return locationCurie;
             }
-            const location = await this.moor.evalExpression(character, "player.location");
+            const location = await this.moor.evalExpression(character, "player.location", signal);
             const fromEval = jsObjToCurie(location.js);
             if (fromEval) {
                 return fromEval;
             }
         }
 
-        return objectRef;
-    }
-
-    private async refreshDynamicTools(characterId?: CharacterRef): Promise<number> {
-        const sourceCharacter = characterId ?? this.defaultCharacter;
-        this.dynamicTools = await this.moor.refreshDynamicTools(sourceCharacter);
-        this.dynamicResources = undefined;
-        this.dynamicLoaded = true;
-        return this.dynamicTools.length;
-    }
-
-    private methodNotFound(method: string): JsonRpcError {
-        return {
-            code: -32601,
-            message: `Method not found: ${method}`,
-        };
-    }
-
-    private toJsonRpcError(error: unknown): JsonRpcError {
-        if (typeof error === "object" && error !== null && "code" in error && "message" in error) {
-            return error as JsonRpcError;
-        }
-        return {
-            code: -32000,
-            message: error instanceof Error ? error.message : String(error),
-        };
+        throw new Error(`Invalid object reference: ${objectRef}`);
     }
 }

@@ -23,6 +23,7 @@ import { VerbsReply } from "@moor/schema/generated/moor-rpc/verbs-reply";
 import type { NarrativeContentType, ParsedNarrativeEvent } from "@moor/web-sdk";
 import {
     extractWelcomeMessage,
+    MoorApiError,
     parseClientReplyAs,
     parseClientReplyUnion,
     parseNarrativeEvent,
@@ -182,11 +183,21 @@ export async function compileVerbFlatBuffer(
     code: string,
 ): Promise<{ success: true } | { success: false; error: CompileError | string }> {
     const headers = authHeaders(authToken);
-    const bytes = await moorApi.getFlatBuffer(`/v1/verbs/${objectCurie}/${verbName}`, {
+    const response = await moorApi.request(`/v1/verbs/${objectCurie}/${encodeURIComponent(verbName)}`, {
         method: "POST",
         headers,
         body: code,
     });
+    // Programming failures retain the typed diagnostic body on non-2xx responses.
+    const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim();
+    if (
+        !response.ok && !(contentType === "application/x-flatbuffers" && [403, 404, 422, 500].includes(response.status))
+    ) {
+        throw new MoorApiError("transport", `Compile verb failed: ${response.status} ${response.statusText}`, {
+            status: response.status,
+        });
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
     const replyUnion = parseClientReplyUnion(bytes, "Compile verb");
 
     const compileResult = parseVerbProgramCompileOutcome(replyUnion, "Compile verb");

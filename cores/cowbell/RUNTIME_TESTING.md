@@ -312,11 +312,8 @@ serves a local Git repository with a nested source directory and an HTTP bundle.
 or Git hosting account is required.
 
 ```sh
-cargo build -p moor-daemon -p moor-web-host -p moor-telnet-host \
-  -p moor-git-worker -p moor-curl-worker
-npm run web:prepare
-node tools/tsc.mjs --noEmit -p cores/cowbell/tests/tsconfig.json
-node --import tsx cores/cowbell/tests/mcp/changes.ts
+npm run test:mcp
+npm run test:mcp:integration
 ```
 
 Run these commands from the repository root. The test drives review changes through real MCP stdio

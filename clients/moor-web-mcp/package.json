@@ -13,18 +13,23 @@
   ],
   "scripts": {
     "start": "node --import tsx src/index.ts",
-    "build": "node ../../tools/tsc.mjs -p tsconfig.json",
-    "typecheck": "node ../../tools/tsc.mjs --noEmit -p tsconfig.json"
+    "build": "node ../../tools/tsc.mjs -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --external:@modelcontextprotocol/* --external:ws --outfile=dist/index.js",
+    "typecheck": "node ../../tools/tsc.mjs --noEmit -p tsconfig.json",
+    "test": "node ../../tools/tsc.mjs -p tsconfig.test.json && node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
     "@moor/schema": "2.0.0-dev",
     "@moor/web-sdk": "2.0.0-dev",
     "tsx": "^4.20.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/node": "^24.3.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
+    "flatbuffers": "^25.9.23",
     "typescript": "^7.0.2"
   },
   "license": "GPL-3.0"

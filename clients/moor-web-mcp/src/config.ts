@@ -38,6 +38,7 @@ export interface CharacterRef {
 }
 
 export interface MoorWebMcpConfig {
+    timeoutMs?: number;
     defaultMoo?: string;
     defaultCharacter?: string;
     moos: MooConfig[];
@@ -49,6 +50,17 @@ function assertConfig(config: unknown, path: string): asserts config is MoorWebM
     }
 
     const candidate = config as Partial<MoorWebMcpConfig>;
+    for (const key of ["defaultMoo", "defaultCharacter"] as const) {
+        if (candidate[key] !== undefined && (typeof candidate[key] !== "string" || !candidate[key])) {
+            throw new Error(`Invalid config: ${key} must be a non-empty string`);
+        }
+    }
+    if (
+        candidate.timeoutMs !== undefined
+        && (!Number.isInteger(candidate.timeoutMs) || candidate.timeoutMs < 1 || candidate.timeoutMs > 300000)
+    ) {
+        throw new Error("timeoutMs must be an integer between 1 and 300000");
+    }
     if (!Array.isArray(candidate.moos) || candidate.moos.length === 0) {
         throw new Error(`Invalid config in ${path}: moos must be a non-empty array`);
     }
@@ -73,6 +85,21 @@ function assertConfig(config: unknown, path: string): asserts config is MoorWebM
         if (!asMoo.connectAddress || typeof asMoo.connectAddress !== "string") {
             throw new Error(`Invalid config in ${path}: moo ${asMoo.id} needs connectAddress`);
         }
+        for (
+            const [address, protocols] of [[asMoo.connectAddress, ["http:", "https:"]], [asMoo.wsConnectAddress, [
+                "ws:",
+                "wss:",
+            ]]] as const
+        ) {
+            if (address === undefined) continue;
+            const url = new URL(address);
+            if (
+                !(protocols as readonly string[]).includes(url.protocol) || url.username || url.password || url.search
+                || url.hash
+            ) {
+                throw new Error(`Invalid service URL for moo ${asMoo.id}`);
+            }
+        }
         if (!Array.isArray(asMoo.players) || asMoo.players.length === 0) {
             throw new Error(`Invalid config in ${path}: moo ${asMoo.id} players must be a non-empty array`);
         }
@@ -83,13 +110,23 @@ function assertConfig(config: unknown, path: string): asserts config is MoorWebM
                 throw new Error(`Invalid config in ${path}: moo ${asMoo.id} player must be object`);
             }
             const asPlayer = player as Partial<PlayerConfig>;
-            if (!asPlayer.id || !asPlayer.username || !asPlayer.password) {
+            if (
+                ![asPlayer.id, asPlayer.username, asPlayer.password].every(value =>
+                    typeof value === "string" && value.length > 0
+                )
+            ) {
                 throw new Error(`Invalid config in ${path}: moo ${asMoo.id} each player needs id, username, password`);
             }
-            if (playerIds.has(asPlayer.id)) {
+            for (const flag of [asPlayer.isWizard, asPlayer.isProgrammer]) {
+                if (flag !== undefined && typeof flag !== "boolean") throw new Error("Account flags must be booleans");
+            }
+            if (playerIds.has(asPlayer.id!)) {
                 throw new Error(`Invalid config in ${path}: moo ${asMoo.id} duplicate player id ${asPlayer.id}`);
             }
-            playerIds.add(asPlayer.id);
+            playerIds.add(asPlayer.id!);
+        }
+        if (asMoo.defaultPlayer !== undefined && !playerIds.has(asMoo.defaultPlayer)) {
+            throw new Error(`Unknown defaultPlayer for moo ${asMoo.id}`);
         }
     }
 }
@@ -144,7 +181,14 @@ export function resolveDefaultCharacter(config: MoorWebMcpConfig): CharacterRef 
 export function loadConfig(configPath: string): MoorWebMcpConfig {
     const absolutePath = resolve(configPath);
     const raw = readFileSync(absolutePath, "utf8");
-    const parsed = JSON.parse(raw);
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        // JSON parser diagnostics can include account passwords from the source.
+        throw new Error(`Invalid JSON in config: ${absolutePath}`);
+    }
     assertConfig(parsed, absolutePath);
+    resolveDefaultCharacter(parsed);
     return parsed;
 }
