@@ -351,6 +351,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Resumed tasks preserve delivered values and errors across transaction retries. This prevents
+  `read()` input and worker responses from reverting to their pre-wait placeholders.
+
 - Calls after `set_verb_code()` use the updated program, including later calls in the same task.
   Active calls finish their original program. Program lookups also refresh after transaction
   changes.

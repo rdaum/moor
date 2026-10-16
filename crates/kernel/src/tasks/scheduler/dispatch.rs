@@ -157,6 +157,9 @@ impl TaskLifecycle {
                             task.vm_host.resume_with_error(error);
                         }
                     }
+                    // A resumed transaction must retry with the delivered value or error,
+                    // not the placeholder saved when its external wait began.
+                    task.retry_state = task.vm_host.vm_exec_state().clone();
                 }
 
                 Task::run_task_loop(

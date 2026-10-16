@@ -454,3 +454,76 @@ fn test_suspend_zero_transaction_renewal_failure_aborts_cleanly() {
     let error = wait_result(&handle).unwrap_err();
     assert_eq!(error, SchedulerError::CouldNotStartTask);
 }
+
+#[test]
+fn resumed_input_survives_conflict_retry() {
+    let verb = Symbol::mk("resume_retry");
+    let database = setup_database(&[TestVerb {
+        name: verb,
+        program: compile(
+            "value = read(); this.name = this.name + \" resumed\"; return value;",
+            CompileOptions::default(),
+        )
+        .unwrap(),
+        argspec: VerbArgsSpec::this_none_this(),
+    }]);
+    let database_probe = database.clone();
+    let gate_next_world_state = Arc::new(AtomicBool::new(false));
+    let (started_send, started_recv) = flume::bounded(1);
+    let (release_send, release_recv) = flume::bounded(1);
+    let (client, _scheduler) = start_scheduler(Box::new(GatedConflictDatabase {
+        inner: database,
+        gate_next_world_state: gate_next_world_state.clone(),
+        started: started_send,
+        release: release_recv,
+    }));
+    let session = Arc::new(MockClientSession::new());
+    let handle = client
+        .submit_verb_task(
+            &SYSTEM_OBJECT,
+            &ObjectRef::Id(SYSTEM_OBJECT),
+            verb,
+            List::mk_list(&[]),
+            v_empty_str(),
+            &SYSTEM_OBJECT,
+            session.clone(),
+        )
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let input_id = loop {
+        if let Some((_, input_id, _)) = session.input_requests().into_iter().next() {
+            break input_id;
+        }
+        assert!(Instant::now() < deadline, "read did not suspend");
+        std::thread::yield_now();
+    };
+    gate_next_world_state.store(true, Ordering::SeqCst);
+    let resume = std::thread::spawn(move || {
+        client.submit_requested_input(
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            input_id,
+            v_str("delivered once"),
+        )
+    });
+    started_recv
+        .recv_timeout(Duration::from_secs(5))
+        .expect("resumed transaction did not reach the gate");
+    let mut competing = database_probe.new_world_state().unwrap();
+    competing
+        .update_property(
+            &system_permissions(),
+            &SYSTEM_OBJECT,
+            Symbol::mk("name"),
+            &v_str("concurrent writer"),
+        )
+        .unwrap();
+    assert!(matches!(
+        competing.commit().unwrap(),
+        CommitResult::Success { .. }
+    ));
+    release_send.send(()).unwrap();
+    resume.join().unwrap().unwrap();
+    assert_eq!(wait_result(&handle), Ok(v_str("delivered once")));
+    assert_eq!(session.input_requests().len(), 1);
+}
