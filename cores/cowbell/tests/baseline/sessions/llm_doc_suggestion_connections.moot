@@ -1,0 +1,61 @@
+// Documentation suggestions retain the initiating connection through model work and rewrites.
+@attach second programmer
+@wizard
+; #90032:fixture(); return true;
+true
+@programmer
+% @doc missingGuideBuiltin
+@text Could not find object: missingGuideBuiltin (Finding suggestions...)
+@event text/plain utility
+@text-within 5 Could not find object: missingGuideBuiltin
+@text Try @doc properties.
+@event text/plain utility
+@second
+@quiet
+@noevents
+@nonprogrammer
+@quiet
+@noevents
+@wizard
+; const client = $player.suggestions_llm_client; for i in [1..30] if (length(#90101.llm_suggestions) == 0) break; endif suspend(0.1); endfor return {client.principals, client.purposes, length(#90101.llm_suggestions)};
+{{#90101}, {'suggestion}, 0}
+// Reassigning the initiating endpoint revokes its pending job.
+; $player.suggestions_llm_client.blocked = true; return true;
+true
+@second
+% @doc missingSecondGuide
+@text Could not find object: missingSecondGuide (Finding suggestions...)
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 2); const job = #90101.llm_suggestions[1]; add_property(#90100, "doc_job", job, {#90100, ""}); add_property(#90100, "doc_tasks", {job.worker_task, job.monitor_task}, {#90100, ""}); return true;
+true
+@reassign second nonprogrammer
+; return #90032:wait_closed(#90100.doc_job, #90100.doc_tasks);
+'cancelled
+@second
+@quiet
+@noevents
+@programmer
+@quiet
+@noevents
+// Detachment also releases owned work without choosing another connection.
+@attach detached programmer
+@detached
+% @doc missingDetachedGuide
+@text Could not find object: missingDetachedGuide (Finding suggestions...)
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 3); #90100.doc_job = #90101.llm_suggestions[1]; #90100.doc_tasks = {#90100.doc_job.worker_task, #90100.doc_job.monitor_task}; return true;
+true
+@detach detached
+; return #90032:wait_closed(#90100.doc_job, #90100.doc_tasks);
+'cancelled
+@programmer
+@quiet
+@noevents
+@nonprogrammer
+@quiet
+@noevents
+@wizard
+; $player.suggestions_llm_client = #-1; delete_property(#90100, "doc_job"); delete_property(#90100, "doc_tasks"); return true;
+true

@@ -319,7 +319,7 @@ object WIZ_FEATURES [
   endverb
 
   verb "@llm-budget" (any none none) owner: ARCH_WIZARD flags: "d"
-    "View a player's LLM token budget and usage";
+    "View an actor's LLM token budget and usage";
     this:_challenge_command_perms();
     if (!player:has_admin_elevation())
       set_task_perms(player);
@@ -327,22 +327,20 @@ object WIZ_FEATURES [
     "Try to resolve target player";
     target = dobj;
     if (!valid(target) && dobjstr)
-      target = $match:match_player(dobjstr, player);
+      target = $match:match_object(dobjstr, player);
     endif
     if (!valid(target))
-      raise(E_INVARG, "Usage: @llm-budget <player>");
-    endif
-    if (!is_player(target))
-      raise(E_INVARG, tostr(target) + " is not a player.");
+      raise(E_INVARG, "Usage: @llm-budget <actor>");
     endif
     "Get budget and usage information";
+    const available = $llm_account:available(target);
     budget = target.llm_token_budget;
     used = target.llm_tokens_used;
     usage_log = target.llm_usage_log;
     percent_used = used * 100 / budget;
     "Build budget info as table";
     title_obj = $format.title:mk("LLM Token Budget for " + target:name() + " (" + tostr(target) + ")");
-    budget_rows = {{"Budget", tostr(budget) + " tokens"}, {"Used", tostr(used) + " tokens"}, {"Remaining", tostr(budget - used) + " tokens"}, {"Usage", tostr(percent_used) + "%"}};
+    budget_rows = {{"Budget", tostr(budget) + " tokens"}, {"Used", tostr(used) + " tokens"}, {"Available", tostr(available) + " tokens"}, {"Reserved", tostr(budget - used - available) + " tokens"}, {"Usage", tostr(percent_used) + "%"}};
     budget_table = $format.table:mk({"Property", "Value"}, budget_rows);
     "Build content blocks";
     content_blocks = {title_obj, budget_table};
@@ -355,10 +353,10 @@ object WIZ_FEATURES [
         timestamp = `entry["timestamp"] ! ANY => 0';
         tokens = `entry["tokens"] ! ANY => 0';
         time_str = ctime(timestamp);
-        usage_rows = {@usage_rows, {time_str, tostr(tokens) + " tokens"}};
+        usage_rows = {@usage_rows, {time_str, tostr(tokens) + " tokens", entry["reported"] ? "reported" | "unreported estimate"}};
       endfor
       usage_title = $format.title:mk("Recent usage (last 5 calls)");
-      usage_table = $format.table:mk({"Time", "Tokens"}, usage_rows);
+      usage_table = $format.table:mk({"Time", "Tokens", "Usage source"}, usage_rows);
       content_blocks = {@content_blocks, usage_title, usage_table};
     endif
     "Send formatted output";
@@ -366,45 +364,43 @@ object WIZ_FEATURES [
     player:inform_current($event:mk_info(player, content):with_audience('utility));
   endverb
 
-  verb "@llm-set-budget" (any at any) owner: ARCH_WIZARD flags: "d"
-    "Set a player's LLM token budget";
+  verb "@llm-set-budget" (any to any) owner: ARCH_WIZARD flags: "d"
+    "Set an actor's LLM token budget";
     this:_challenge_command_perms();
     if (!player:has_admin_elevation())
       set_task_perms(player);
     endif
-    target = dobj;
+    let target = dobj;
     if (!valid(target) && dobjstr)
       target = $match:match_object(dobjstr, player);
     endif
     if (!valid(target))
-      raise(E_INVARG, "Usage: @llm-set-budget <player> to <budget>");
-    endif
-    if (!is_player(target))
-      raise(E_INVARG, tostr(target) + " is not a player.");
+      raise(E_INVARG, "Usage: @llm-set-budget <actor> to <budget>");
     endif
     if (!iobjstr)
-      raise(E_INVARG, "Usage: @llm-set-budget <player> to <budget>");
+      raise(E_INVARG, "Usage: @llm-set-budget <actor> to <budget>");
     endif
-    new_budget = tonum(iobjstr);
+    const new_budget = tonum(iobjstr);
     typeof(new_budget) == TYPE_INT || raise(E_INVARG, "Budget must be a number.");
     new_budget > 0 || raise(E_INVARG, "Budget must be positive.");
-    old_budget = target.llm_token_budget;
-    used = target.llm_tokens_used;
-    question = "Set " + target:name() + "'s LLM token budget to " + tostr(new_budget) + " (currently " + tostr(old_budget) + ", " + tostr(used) + " used)?";
-    metadata = {{"input_type", "yes_no"}, {"prompt", question}};
-    response = player:read_with_prompt(metadata);
+    const old_budget = target.llm_token_budget;
+    const used = target.llm_tokens_used;
+    const question = "Set " + target:name() + "'s LLM token budget to " + tostr(new_budget) + " (currently " + tostr(old_budget) + ", " + tostr(used) + " used)?";
+    const metadata = {{"input_type", "yes_no"}, {"prompt", question}};
+    let response = player:read_with_prompt(metadata);
     typeof(response) == TYPE_STR || (response = tostr(response));
     response = response:trim():lowercase();
     if (!(response == "yes" || response == "y"))
       player:inform_current($event:mk_error(player, "Budget change cancelled."));
       return;
     endif
+    $wiz_features:_challenge_command_perms();
     target.llm_token_budget = new_budget;
     player:inform_current($event:mk_info(player, "Set " + target:name() + "'s LLM token budget to " + tostr(new_budget) + " tokens."));
   endverb
 
   verb "@llm-reset-usage" (any none none) owner: ARCH_WIZARD flags: "d"
-    "Reset a player's LLM token usage counter";
+    "Reset an actor's LLM token usage counter";
     this:_challenge_command_perms();
     if (!player:has_admin_elevation())
       set_task_perms(player);
@@ -414,10 +410,7 @@ object WIZ_FEATURES [
       target = $match:match_object(dobjstr, player);
     endif
     if (!valid(target))
-      raise(E_INVARG, "Usage: @llm-reset-usage <player>");
-    endif
-    if (!is_player(target))
-      raise(E_INVARG, tostr(target) + " is not a player.");
+      raise(E_INVARG, "Usage: @llm-reset-usage <actor>");
     endif
     used = target.llm_tokens_used;
     budget = target.llm_token_budget;
@@ -430,6 +423,9 @@ object WIZ_FEATURES [
       player:inform_current($event:mk_error(player, "Usage reset cancelled."));
       return;
     endif
+    $wiz_features:_challenge_command_perms();
+    $llm_account:reconcile(target);
+    length(target.llm_reservations) == 0 || raise(E_INVARG, "Wait for active model requests before resetting usage.");
     target.llm_tokens_used = 0;
     target.llm_usage_log = {};
     player:inform_current($event:mk_info(player, "Reset " + target:name() + "'s LLM token usage to 0 and cleared usage log."));

@@ -167,9 +167,12 @@ object BUILDER_FEATURES [
       player:inform_current($event:mk_error(player, "Template compilation failed: " + compiled):with_audience('utility));
       return;
     endif
-    const prop_key = $obj_utils:property_key(target, prop_name);
-    const grants = prop_key == E_PROPNF ? {{"property_define", target}} | {{"property_write", target, prop_key}};
-    $obj_utils:add_message_entry(target, prop_name, compiled, player, grants);
+    try
+      $obj_utils:add_message_entry(target, prop_name, compiled, player);
+    except problem (E_PERM)
+      player:inform_current($event:mk_error(player, problem[2]):with_audience('utility));
+      return false;
+    endtry
     player:inform_current($event:mk_info(player, "Added message to " + tostr(target) + "." + prop_name):with_audience('utility));
   endverb
 
@@ -183,26 +186,33 @@ object BUILDER_FEATURES [
       player:inform_current($event:mk_error(player, "Usage: @del-message <object>.<prop> <index>"):with_audience('utility));
       return;
     endif
-    prop_spec = argstr:raw_words()[1];
-    idx = toint(args[2]);
-    parsed = $prog_utils:parse_target_spec(prop_spec);
+    const prop_spec = argstr:raw_words()[1];
+    const idx = toint(args[2]);
+    const parsed = $prog_utils:parse_target_spec(prop_spec);
+    let target_name;
+    let prop_name;
     if (parsed && parsed['type] == 'property)
       target_name = parsed['object_str];
       prop_name = parsed['item_name];
     elseif (parsed && parsed['type] == 'compound && length(parsed['selectors]) > 0)
-      sel = parsed['selectors][1];
+      const sel = parsed['selectors][1];
       sel['kind] == 'property || raise(E_INVARG, "Property must be in the form object.property");
       target_name = parsed['object_str];
       prop_name = sel['item_name];
     else
       raise(E_INVARG, "Property must be in the form object.property");
     endif
-    target = $match:match_object(target_name, player);
+    const target = $match:match_object(target_name, player);
     valid(target) || raise(E_INVARG, "Object not found");
     prop_name:ends_with("_msg_bag") || prop_name:ends_with("_msgs") || raise(E_INVARG, "Property must end with _msg_bag or _msgs");
-    prop_key = $obj_utils:property_key(target, prop_name);
+    const prop_key = $obj_utils:property_key(target, prop_name);
     prop_key == E_PROPNF && raise(E_INVARG, "Message bag not found on " + tostr(target) + "." + prop_name);
-    $obj_utils:remove_message_entry(target, prop_key, idx, player, {{"property_write", target, prop_key}});
+    try
+      $obj_utils:remove_message_entry(target, prop_key, idx, player);
+    except problem (E_PERM)
+      player:inform_current($event:mk_error(player, problem[2]):with_audience('utility));
+      return false;
+    endtry
     player:inform_current($event:mk_info(player, "Removed message #" + tostr(idx) + " from " + tostr(target) + "." + prop_name):with_audience('utility));
   endverb
 
@@ -1388,14 +1398,11 @@ object BUILDER_FEATURES [
       endtry
       typeof(target_obj) != TYPE_OBJ && raise(E_INVARG, "That reference is not an object.");
       !valid(target_obj) && raise(E_INVARG, "That object does not exist.");
-      "Check if property is writable";
+      "New message properties require ownership; existing writes use native permissions after compilation.";
       const existing = $obj_utils:property_key(target_obj, prop_name);
       if (existing == E_PROPNF)
         (target_obj.owner == player || player.wizard)
           || raise(E_PERM, "You must own the object to add a message.");
-      else
-        const {writable, error_msg} = $obj_utils:check_message_property_writable(target_obj, prop_name, player);
-        writable || raise(E_PERM, error_msg);
       endif
       "Compile and validate the template";
       const {success, result} = $obj_utils:validate_and_compile_template(template_string, target_obj, prop_name);
@@ -1413,8 +1420,7 @@ object BUILDER_FEATURES [
         const value = prop_name:ends_with("_msg") ? compiled_list | $msg_bag:mk(compiled_list);
         add_property(target_obj, prop_name, value, {target_obj.owner, "rc"});
       else
-        $obj_utils:set_compiled_message(target_obj, prop_key, compiled_list, player,
-          {{"property_write", target_obj, prop_key}});
+        $obj_utils:set_compiled_message(target_obj, prop_key, compiled_list, player);
       endif
       player:inform_current($event:mk_info(player, success_message));
       return true;
@@ -1486,7 +1492,7 @@ object BUILDER_FEATURES [
       typeof(target_obj) != TYPE_OBJ && raise(E_INVARG, "That reference is not an object.");
       !valid(target_obj) && raise(E_INVARG, "That object does not exist.");
       value = E_PROPNF;
-      for prop_info in ($obj_utils:message_properties(target_obj, player, true))
+      for prop_info in ($obj_utils:message_properties(target_obj, player))
         if (tostr(prop_info[1]) == prop_name)
           value = prop_info[2];
           break;
@@ -1664,7 +1670,7 @@ object BUILDER_FEATURES [
       prop_name:ends_with("_rule") || raise(E_INVARG, "Rule properties must end with '_rule'");
       "Get the rule";
       rule = E_PROPNF;
-      for prop_info in ($obj_utils:rule_properties(target, player, true))
+      for prop_info in ($obj_utils:rule_properties(target, player))
         if (tostr(prop_info[1]) == prop_name)
           rule = prop_info[2];
           break;
@@ -1695,7 +1701,7 @@ object BUILDER_FEATURES [
     try
       target_obj = $match:match_object(dobjstr, player);
       "Get message properties";
-      msg_props = $obj_utils:message_properties(target_obj, player, true);
+      msg_props = $obj_utils:message_properties(target_obj, player);
       if (!msg_props || length(msg_props) == 0)
         obj_name = `target_obj.name ! ANY => tostr(target_obj)';
         message = obj_name + " (" + tostr(target_obj) + ") has no message properties.";
@@ -1749,7 +1755,7 @@ object BUILDER_FEATURES [
       return 0;
     endtry
     "Get rule properties";
-    rule_props = $obj_utils:rule_properties(target_obj, player, true);
+    rule_props = $obj_utils:rule_properties(target_obj, player);
     if (!rule_props || length(rule_props) == 0)
       obj_name = `target_obj.name ! ANY => tostr(target_obj)';
       message = obj_name + " (" + tostr(target_obj) + ") has no rule properties.";
@@ -2970,7 +2976,18 @@ object BUILDER_FEATURES [
       return $builder_features:reaction_help(length(words) == 0 ? "help" | words[1]);
     endif
     const host = $builder_features:_author_object(words[1], who);
-    (host.owner == who || who.wizard) || raise(E_PERM, "You do not own " + host.name + ".");
+    return $builder_features:author_on(command, host, words, who);
+  endmethod
+
+  method author_on owner: ARCH_WIZARD
+    "Apply tokenized authoring to a captured host; explicit copy targets avoid resolving names after approval.";
+    const {command, host, words, who, ?copy_target = false} = args;
+    const principal = caller_perms();
+    valid(who) && (principal == who || principal.wizard) || raise(E_PERM);
+    who.is_builder || raise(E_PERM, "Builder privileges are required.");
+    valid(host) && (host.owner == who || who.wizard) || raise(E_PERM, "You do not own the target.");
+    typeof(words) == TYPE_LIST && length(words) > 0 || raise(E_INVARG);
+    set_task_perms(who);
     if (command == 'state)
       return $builder_features:_author_state(host, words[2..$], who);
     elseif (command == 'rule)
@@ -2980,7 +2997,7 @@ object BUILDER_FEATURES [
     endif
     command == 'reaction || raise(E_INVARG, "Unknown authoring command.");
     if (length(words) == 1)
-      const reactions = $obj_utils:reaction_properties(host, who, true);
+      const reactions = $obj_utils:reaction_properties(host, who);
       let lines = {"Reactions on " + host.name + ":"};
       for entry in (reactions)
         lines = {@lines, tostr(entry[1])[1..$ - 9] + " — "
@@ -3100,8 +3117,9 @@ object BUILDER_FEATURES [
     elseif (operation == "copy")
       (length(rest) == 2 || (length(rest) == 4 && rest[3] == "as")) && rest[1] == "to"
         || raise(E_INVARG, "Use copy to OBJECT, or copy to OBJECT as NAME.");
-      const destination = $builder_features:_author_object(rest[2], who);
-      (destination.owner == who || who.wizard) || raise(E_PERM, "You do not own the destination.");
+      const destination = typeof(copy_target) == TYPE_OBJ ? copy_target
+        | $builder_features:_author_object(rest[2], who);
+      valid(destination) && (destination.owner == who || who.wizard) || raise(E_PERM, "You do not own the destination.");
       const copy_name = length(rest) == 4 ? tosym(rest[4]) | name;
       $behavior_schema:_name(copy_name, "reaction name");
       const copy_property = tostr(copy_name) + "_reaction";
@@ -3180,7 +3198,7 @@ object BUILDER_FEATURES [
       return {"Set " + words[1] + " to " + $builder_features:_author_value_text(['kind -> 'literal, 'value -> value]) + "."};
     endif
     !maphaskey(host.reaction_state_fields, name) || raise(E_INVARG, "That state is already declared. Use set to change its value.");
-    for entry in ($obj_utils:reaction_properties(host, who, true))
+    for entry in ($obj_utils:reaction_properties(host, who))
       const settings = `entry[2].parameters ! E_PROPNF => []';
       !maphaskey(settings, name) || raise(E_INVARG, "A reaction already uses that name for a setting.");
     endfor

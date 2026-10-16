@@ -17,85 +17,70 @@ object LLM_CHAT_OPTS [
 
   method with_temperature owner: HACKER
     "Set sampling temperature (0-2, lower = more deterministic)";
-    {temp} = args;
+    const {temp} = args;
     typeof(temp) in {TYPE_INT, TYPE_FLOAT} || raise(E_TYPE, "temperature must be a number");
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['temperature] = temp;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_max_tokens owner: HACKER
     "Set maximum output tokens";
-    {max} = args;
+    const {max} = args;
     typeof(max) == TYPE_INT || raise(E_TYPE, "max_tokens must be an integer");
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['max_tokens] = max;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_tool_choice owner: HACKER
-    "Set tool choice: 'auto, 'none, 'required, or ['type -> 'function, 'function -> ['name -> \"fn\"]]";
-    {choice} = args;
-    slots = flyslots(this);
+    "Set tool choice: 'auto, 'none, 'required, or [\"type\" -> \"function\", \"function\" -> [\"name\" -> \"fn\"]].";
+    const {choice} = args;
+    let slots = flyslots(this);
     slots['tool_choice] = choice;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_top_p owner: HACKER
     "Set nucleus sampling threshold (0-1)";
-    {p} = args;
+    const {p} = args;
     typeof(p) in {TYPE_INT, TYPE_FLOAT} || raise(E_TYPE, "top_p must be a number");
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['top_p] = p;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_frequency_penalty owner: HACKER
     "Set frequency penalty (-2 to 2, penalizes repeated tokens)";
-    {penalty} = args;
+    const {penalty} = args;
     typeof(penalty) in {TYPE_INT, TYPE_FLOAT} || raise(E_TYPE, "frequency_penalty must be a number");
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['frequency_penalty] = penalty;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_presence_penalty owner: HACKER
     "Set presence penalty (-2 to 2, encourages new topics)";
-    {penalty} = args;
+    const {penalty} = args;
     typeof(penalty) in {TYPE_INT, TYPE_FLOAT} || raise(E_TYPE, "presence_penalty must be a number");
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['presence_penalty] = penalty;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_stop owner: HACKER
     "Set stop sequences (string or list of strings)";
-    {stop} = args;
-    slots = flyslots(this);
+    const {stop} = args;
+    let slots = flyslots(this);
     slots['stop] = stop;
     return toflyweight(this.delegate, slots);
   endmethod
 
   method with_json_mode owner: HACKER
     "Enable JSON output mode";
-    slots = flyslots(this);
+    let slots = flyslots(this);
     slots['response_format] = ["type" -> "json_object"];
     return toflyweight(this.delegate, slots);
   endmethod
 
-  method to_body_params owner: HACKER
-    "Extract API parameters from flyweight slots, converting symbols to strings for JSON";
-    result = [];
-    slots = flyslots(this);
-    for key in (mapkeys(slots))
-      val = slots[key];
-      "Convert symbol tool_choice value to string for API";
-      if (key == 'tool_choice && typeof(val) == TYPE_SYM)
-        val = tostr(val);
-      endif
-      "Use string key for JSON compatibility";
-      result[tostr(key)] = val;
-    endfor
-    return result;
-  endmethod
 endobject

@@ -1,0 +1,46 @@
+// Explicit help assistance uses the requester's authority and initiating connection.
+@attach second nonprogrammer
+@wizard
+; #90032:help_fixture(); return true;
+true
+@second
+% help unlisted_query
+~~No help found for 'unlisted_query'. Want help finding similar topics?
+@event text/plain utility
+% assist
+@text No help found for 'unlisted_query'. Checking suggestions...
+@event text/plain utility
+@text-within 5 No help found for 'unlisted_query', but...
+=
+@text A short note.
+=
+@text Try one of these:
+=
+~~probe
+@event text/plain utility
+@nonprogrammer
+@quiet
+@noevents
+@wizard
+; const client = $player.suggestions_llm_client; for i in [1..30] if (length(#90102.llm_suggestions) == 0) break; endif suspend(0.1); endfor return {#90102.help_probe.principal, client.principals, client.purposes, length(client.requests), index(client.requests[1], "Private body") == 0, length(#90102.llm_suggestions)};
+{#90102, {#90102}, {'suggestion}, 1, true, 0}
+// Unlisted model topics cannot become help links or commands.
+; const client = $player.suggestions_llm_client; client.response = "{\"topics\":[\"unlisted\"],\"note\":\"Do not show fabricated guidance.\"}"; const job = $llm_help_suggestion:start(#90102, connections(#90102)[1][1], ['query -> "unknown"]); return #90032:wait_closed(job);
+'complete
+@second
+@text No help found for 'unknown'. Checking suggestions...
+@event text/plain utility
+@text No help found for 'unknown'. Try help to see available topics.
+@event text/plain utility
+// Metadata changes during model work discard the obsolete links.
+@wizard
+; const client = $player.suggestions_llm_client; client.blocked = true; const job = $llm_help_suggestion:start(#90102, connections(#90102)[1][1], ['query -> "changed"]); #90032:wait_requests(client, 3); #90102.help_probe.summary = "Changed topic."; client.blocked = false; return #90032:wait_closed(job);
+'failed
+@second
+@text No help found for 'changed'. Checking suggestions...
+@event text/plain utility
+@text No help found for 'changed'. Try help to see available topics.
+@event text/plain utility
+@wizard
+; delete_verb(#90102, "help_environment"); delete_property(#90102, "help_probe"); $player.suggestions_llm_client = #-1; return true;
+true

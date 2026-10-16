@@ -1,0 +1,95 @@
+// Bare assist selects only the latest opt-in request on the invoking connection.
+@attach second nonprogrammer
+@wizard
+; const client = #90032:help_fixture(); client.blocked = true; return true;
+true
+@nonprogrammer
+% help first_question
+~~No help found for 'first_question'. Want help finding similar topics?
+@event text/plain utility
+@second
+% help second_question
+~~No help found for 'second_question'. Want help finding similar topics?
+@event text/plain utility
+@wizard
+; return {length(#90102.llm_assist_contexts), length($player.suggestions_llm_client.requests)};
+{2, 0}
+@nonprogrammer
+% assist
+@text No help found for 'first_question'. Checking suggestions...
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 1); return index($player.suggestions_llm_client.requests[1], "first_question") > 0;
+true
+@second
+% assist
+@text No help found for 'second_question'. Checking suggestions...
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 2); return {index($player.suggestions_llm_client.requests[2], "second_question") > 0, length(#90102.llm_assist_contexts)};
+{true, 0}
+; const jobs = #90102.llm_suggestions; $llm_suggestion:cancel_all(#90102); for job in (jobs) #90032:wait_closed(job); endfor return true;
+true
+@nonprogrammer
+% assist
+@text No current assist request on this connection. Try your command or help query again.
+@event text/plain utility
+// Explicit request links use the same connection-bound consumption path.
+@wizard
+; const destination = connections(#90102)[2][1]; $llm_assist_context:offer(#90102, destination, 'help, "linked question"); let entry = #90102.llm_assist_contexts[1]; entry.token = "test_request"; #90102.llm_assist_contexts = {entry}; return true;
+true
+@second
+% assist --request test_request
+@text No current assist request on this connection. Try your command or help query again.
+@event text/plain utility
+@nonprogrammer
+% assist --request test_request
+@text No help found for 'linked question'. Checking suggestions...
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 3); const jobs = #90102.llm_suggestions; $llm_suggestion:cancel_all(#90102); for job in (jobs) #90032:wait_closed(job); endfor return length(#90102.llm_assist_contexts);
+0
+@nonprogrammer
+% assist --request test_request
+@text No current assist request on this connection. Try your command or help query again.
+@event text/plain utility
+% assist --request
+@text Usage: assist --request TOKEN
+@event text/plain utility
+// Real command misses retain only parsed input strings; they do not start model work.
+% unlikely_command_probe some object
+~~I didn't understand that command. Want help checking alternatives?
+@event text/plain utility
+@wizard
+; const entry = #90102.llm_assist_contexts[1]; const result = {entry.kind, entry.input['verb], entry.input['dobjstr], length(entry.input), length($player.suggestions_llm_client.requests)}; #90102.llm_assist_contexts = {}; return result;
+{'command, "unlikely_command_probe", "some object", 4, 3}
+// Token consumption is connection-bound and single-use, even before model work.
+@wizard
+; const connections = connections(#90102); const first = connections[2][1]; const second = connections[1][1]; const token = $llm_assist_context:offer(#90102, first, 'help, "private question"); const wrong = $llm_assist_context:take(#90102, second, token); const right = $llm_assist_context:take(#90102, first, token); const replay = $llm_assist_context:take(#90102, first, token); return {wrong, right.input, replay};
+{false, "private question", false}
+// Requests have a fixed count and byte bound; oldest entries leave first.
+; const destination = connections(#90102)[1][1]; for i in [1..20] $llm_assist_context:offer(#90102, destination, 'help, "question " + tostr(i)); endfor return {length(#90102.llm_assist_contexts), #90102.llm_assist_contexts[1].input, value_bytes(#90102.llm_assist_contexts) <= 32768};
+{8, "question 13", true}
+// Long inputs exercise the byte limit independently of the entry-count limit.
+; #90102.llm_assist_contexts = {}; const destination = connections(#90102)[1][1]; const text = {"🪕" for i in [1..1024]}:join(""); for i in [1..8] $llm_assist_context:offer(#90102, destination, 'help, text); endfor return {length(#90102.llm_assist_contexts) < 8, value_bytes(#90102.llm_assist_contexts) <= 32768};
+{true, true}
+// Expiry and authority changes invalidate requests rather than invoking the model.
+; #90102.llm_assist_contexts = {}; const destination = connections(#90102)[1][1]; $llm_assist_context:offer(#90102, destination, 'help, "expired"); let entry = #90102.llm_assist_contexts[1]; entry.expires = time() - 1; #90102.llm_assist_contexts = {entry}; return $llm_assist_context:take(#90102, destination);
+false
+; const destination = connections(#90102)[1][1]; $llm_assist_context:offer(#90102, destination, 'help, "revoked"); #90102.programmer = true; const result = $llm_assist_context:take(#90102, destination); #90102.programmer = false; return result;
+false
+// Reassigned and detached endpoints cannot retain opt-in requests for another session.
+; $llm_assist_context:offer(#90102, connections(#90102)[1][1], 'help, "reassigned"); return true;
+true
+@reassign second programmer
+; return length($llm_assist_context:prune(#90102));
+0
+@attach detached nonprogrammer
+; $llm_assist_context:offer(#90102, connections(#90102)[1][1], 'help, "detached"); return true;
+true
+@detach detached
+; return length($llm_assist_context:prune(#90102));
+0
+@wizard
+; delete_verb(#90102, "help_environment"); delete_property(#90102, "help_probe"); $player.suggestions_llm_client = #-1; return true;
+true

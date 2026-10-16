@@ -12,13 +12,15 @@ object LLM_AGENT_TOOL [
 
   method mk owner: HACKER
     "Create a tool definition flyweight";
-    const {name, description, parameters, target_obj, target_verb} = args;
+    const {name, description, parameters, target_obj, target_verb, ?effect = 'unknown} = args;
     typeof(name) == TYPE_STR || raise(E_TYPE);
     typeof(description) == TYPE_STR || raise(E_TYPE);
     typeof(parameters) == TYPE_MAP || raise(E_TYPE);
     typeof(target_obj) == TYPE_OBJ || raise(E_TYPE);
     typeof(target_verb) == TYPE_STR || raise(E_TYPE);
-    return <this, .name = name, .description = description, .parameters = parameters, .target_obj = target_obj, .target_verb = target_verb>;
+    effect in {'inspection, 'mutation, 'presentation, 'input, 'external, 'unknown} || raise(E_INVARG);
+    const schema = length(parameters) == 0 ? ["type" -> "object", "properties" -> []] | parameters;
+    return <this, .effect = effect, .name = name, .description = description, .parameters = schema, .target_obj = target_obj, .target_verb = target_verb>;
   endmethod
 
   method to_schema owner: HACKER
@@ -34,13 +36,12 @@ object LLM_AGENT_TOOL [
   method execute owner: ARCH_WIZARD
     "Dispatch a tool as its authenticated caller. Explicit actor delegation requires a wizard caller.";
     const principal = caller_perms();
-    isa(caller, $llm_agent) || isa(caller, $rlm_agent) || raise(E_PERM);
+    isa(caller, $llm_agent) || raise(E_PERM);
     const {args_json, ?actor = caller_perms()} = args;
     typeof(actor) == TYPE_OBJ && valid(actor) || raise(E_PERM, "Tool actor must be valid");
     principal == actor || principal.wizard || raise(E_PERM, "Tool caller cannot impersonate actor");
     set_task_perms(actor);
-    const tool_args = typeof(args_json) == TYPE_STR ? parse_json(args_json) | args_json;
-    typeof(tool_args) == TYPE_MAP || raise(E_TYPE, "Tool arguments must be a map");
+    const tool_args = $llm_tool_schema:arguments(args_json, this.parameters);
     const prefixed_verb = "_tool_" + this.target_verb;
     if (respond_to(this.target_obj, prefixed_verb))
       return this.target_obj:(prefixed_verb)(tool_args, actor);

@@ -1,0 +1,39 @@
+// Job progress, tool presentation, and final output use only the captured connection.
+@attach second nonprogrammer
+@wizard
+; return #90031:presentation_case(#90102, connections(#90102)[1][1]);
+true
+@second
+@event text/plain utility
+@text Running present_report.
+@event text/plain utility
+@text private report
+@event text/plain utility
+@text done
+@nonprogrammer
+@quiet
+@noevents
+@programmer
+@quiet
+@noevents
+// Reassigned endpoints do not receive the original actor's output.
+@wizard
+; add_property(#90100, "presenter_probe", $llm_presenter:new(#90102, connections(#90102)[1][1], #1), {#90100, ""}); return true;
+true
+@reassign second programmer
+; $llm_presenter:send(#90100.presenter_probe, #90102, "reassigned secret"); return true;
+true
+@nonprogrammer
+@quiet
+@noevents
+@second
+@quiet
+@noevents
+// Detached endpoints do not fall back to another connection.
+@detach second
+@wizard
+; $llm_presenter:send(#90100.presenter_probe, #90102, "detached secret"); #90100.presenter_probe:close(); return true;
+true
+@nonprogrammer
+@quiet
+@noevents

@@ -99,18 +99,36 @@ impl MockMootRunner {
             for _ in 0..pending {
                 let (request_player, id, meta) =
                     self.pending_inputs.pop_front().expect("pending input");
-                let Some(line) = self
-                    .input_queue
-                    .get_mut(&request_player)
-                    .and_then(|queue| queue.pop_front())
-                else {
+                let candidates = if request_player.is_positive() {
+                    self.hub.for_player(request_player)
+                } else {
+                    vec![request_player]
+                };
+                let answer = candidates.into_iter().find_map(|connection| {
+                    let owner = self.hub.owner_for(connection)?;
+                    let line = self.input_queue.get_mut(&connection)?.pop_front()?;
+                    Some((connection, owner, line))
+                });
+                let Some((connection, owner, line)) = answer else {
                     self.pending_inputs.push_back((request_player, id, meta));
                     continue;
                 };
-                self.scheduler
-                    .submit_requested_input(&request_player, &request_player, id, v_string(line))
-                    .map_err(|err| eyre!("input submission failed: {err}"))?;
-                submitted = true;
+                match self.scheduler.submit_requested_input(
+                    &connection,
+                    &owner,
+                    id,
+                    v_string(line.clone()),
+                ) {
+                    Ok(()) => submitted = true,
+                    Err(SchedulerError::InputRequestNotFound(_)) => {
+                        // A cancelled read must not consume the next interaction's answer.
+                        self.input_queue
+                            .entry(connection)
+                            .or_default()
+                            .push_front(line);
+                    }
+                    Err(err) => return Err(eyre!("input submission failed: {err}")),
+                }
             }
             if !submitted {
                 return Ok(());
@@ -366,7 +384,9 @@ impl SessionRunner for MockMootRunner {
             .named_sessions
             .get(name)
             .ok_or_else(|| eyre!("unknown connection: {name}"))?;
-        if !self.hub.detach(session.connection_id().unwrap()) {
+        let connection = session.connection_id().unwrap();
+        self.input_queue.remove(&connection);
+        if !self.hub.detach(connection) {
             return Err(eyre!("connection already detached: {name}"));
         }
         Ok(())
@@ -382,6 +402,8 @@ impl SessionRunner for MockMootRunner {
         {
             return Err(eyre!("connection detached: {name}"));
         }
+        self.input_queue
+            .remove(&endpoint.1.connection_id().unwrap());
         endpoint.0 = player;
         Ok(())
     }
@@ -446,8 +468,17 @@ impl SessionRunner for MockMootRunner {
     }
 
     fn provide_input(&mut self, player: &Obj, text: &str) -> Result<()> {
+        let connection = self
+            .session(player)
+            .connection_id()
+            .ok_or_else(|| eyre!("selected session has no connection"))?;
+        if self.hub.owner_for(connection) != Some(*player) {
+            return Err(eyre!(
+                "cannot answer from a detached or reassigned connection"
+            ));
+        }
         self.input_queue
-            .entry(*player)
+            .entry(connection)
             .or_default()
             .push_back(text.to_string());
         Ok(())

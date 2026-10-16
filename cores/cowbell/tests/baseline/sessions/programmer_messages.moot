@@ -46,7 +46,7 @@ true
 ; const object = $match:match_object("messagesample", player); return {length(object.replies_msgs:entries()), $sub_utils:decompile(object.replies_msgs:entries()[1])};
 {1, "Replacement."}
 % @set-message #90102.protected_msg Stolen.
-~~do not have permission
+~~permission denied
 ; return #90102.protected_msg;
 {"unchanged"}
 ; return `$obj_utils:set_compiled_message(#90102, "protected_msg", {"forged"}, #90102) ! E_PERM => E_PERM';
@@ -59,3 +59,15 @@ E_PERM
 E_PERM
 ; return #90102.protected_msg;
 {"unchanged"}
+
+// Builder message commands must not turn a foreign property into a write grant.
+@wizard
+; add_property(#90102, "protected_msgs", $msg_bag:mk("original"), {#90102, "r"}); return true;
+true
+@programmer
+% @add-message #90102.protected_msgs Stolen.
+~~permission denied
+% @del-message #90102.protected_msgs 1
+~~permission denied
+; return #90102.protected_msgs:entries();
+{"original"}

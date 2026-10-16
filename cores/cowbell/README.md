@@ -141,6 +141,9 @@ Run the Cowbell checks from the repository root:
 make -C cores/cowbell check
 ```
 
+`check` runs style and method tests. Use `check-full` for the longer integration suite used by CI.
+Use `test-llm` for focused LLM regressions.
+
 Developer references cover specific parts of the project:
 
 - [Runtime testing](RUNTIME_TESTING.md): test suites and focused checks.

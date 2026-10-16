@@ -21,10 +21,12 @@ object HEADLESS_CAPABILITY_SCENARIOS
       agent.owner = $hacker;
       $test_utils:assert_false($player.wizard, "fixture caller must not be a wizard");
       $test_utils:assert_true(agent.owner != $player, "fixture caller must not own the agent");
-      for method in ({"get_task_status", "get_todos", "reset_tool_failures"})
+      for invocation in ({{agent, "get_project"}, {agent, "reset_tool_failures"},
+                         {agent:get_project(), "get_task_status"}, {agent:get_project(), "get_todos"}})
+        {subject, method} = invocation;
         denied = false;
         try
-          this:_llm_public_call_as_player(agent, method);
+          this:_llm_public_call_as_player(subject, method);
         except (E_PERM)
           denied = true;
         endtry
@@ -39,7 +41,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
   verb _llm_public_call_as_player (this none this) owner: PLAYER flags: "rxd"
     caller == this && this == #90005 || raise(E_PERM);
     {agent, method} = args;
-    method in {"get_task_status", "get_todos", "reset_tool_failures"} || raise(E_PERM);
+    method in {"get_project", "get_task_status", "get_todos", "reset_tool_failures"} || raise(E_PERM);
     return agent:(method)();
   endverb
 
@@ -418,14 +420,14 @@ object HEADLESS_CAPABILITY_SCENARIOS
       $root:grant_capability(test_area, {'add_room, 'create_passage, 'remove_passage}, $player, 'area);
       $root:grant_capability(room_a, {'dig_from}, $player, 'room);
       $root:grant_capability(room_b, {'dig_into}, $player, 'room);
-      build_result = $agent_building_tools:build_room(["name" -> "agent cap room", "area" -> tostr(test_area)], $player);
+      build_result = $llm_building_tools:build_room(["name" -> "agent cap room", "area" -> tostr(test_area)], $player);
       built_room = this:_find_room_named_in_area(test_area, "agent cap room");
       $test_utils:assert_true(valid(built_room), "agent build_room should create a room through stored area grant");
       $test_utils:assert_true(index(build_result, "Created \"agent cap room\"") == 1, "agent build_room should report creation");
-      dig_result = $agent_building_tools:dig_passage(["source_room" -> tostr(room_a), "direction" -> "north,n", "target_room" -> tostr(room_b), "oneway" -> true], $player);
+      dig_result = $llm_building_tools:dig_passage(["source_room" -> tostr(room_a), "direction" -> "north,n", "target_room" -> tostr(room_b), "oneway" -> true], $player);
       $test_utils:assert_true(index(dig_result, "Dug passage: north,n") == 1, "agent dig_passage should report passage creation");
       $test_utils:assert_true(typeof(test_area:passage_for(room_a, room_b)) == TYPE_FLYWEIGHT, "agent dig_passage should register passage");
-      remove_result = $agent_building_tools:remove_passage(["source_room" -> room_a, "target_room" -> room_b], $player);
+      remove_result = $llm_building_tools:remove_passage(["source_room" -> room_a, "target_room" -> room_b], $player);
       $test_utils:assert_true(index(remove_result, "Removed passage") == 1, "agent remove_passage should report removal");
       $test_utils:assert_false(test_area:passage_for(room_a, room_b), "agent remove_passage should clear passage");
     finally
@@ -444,8 +446,8 @@ object HEADLESS_CAPABILITY_SCENARIOS
     try
       test_area = create($area);
       $root:grant_capability(test_area, {'create_passage}, $player, 'area);
-      result = $agent_building_tools:build_room(["name" -> "agent denied room", "area" -> tostr(test_area)], $player);
-      $test_utils:assert_true(index(result, "Permission denied:") == 1, "agent build_room should report denied add_room");
+      result = $llm_building_tools:build_room(["name" -> "agent denied room", "area" -> tostr(test_area)], $player);
+      $test_utils:assert_true(result.status == 'failure && result.code == "permission_denied", "agent build_room should report denied add_room");
       $test_utils:assert_false(valid(this:_find_room_named_in_area(test_area, "agent denied room")), "denied agent build_room should not create a room");
     finally
       valid(test_area) && test_area:destroy();
@@ -466,7 +468,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
       $root:grant_capability(room_b, {'dig_into}, $player, 'room);
       denied = false;
       try
-        $agent_building_tools:dig_passage(["source_room" -> tostr(room_a), "direction" -> "north", "target_room" -> tostr(room_b), "oneway" -> true], $player);
+        $llm_building_tools:dig_passage(["source_room" -> tostr(room_a), "direction" -> "north", "target_room" -> tostr(room_b), "oneway" -> true], $player);
       except (E_PERM)
         denied = true;
       endtry
@@ -477,16 +479,16 @@ object HEADLESS_CAPABILITY_SCENARIOS
       room_d = from_missing:make_room_in($room);
       $root:grant_capability(from_missing, {'create_passage}, $player, 'area);
       $root:grant_capability(room_d, {'dig_into}, $player, 'room);
-      result = $agent_building_tools:dig_passage(["source_room" -> tostr(room_c), "direction" -> "east", "target_room" -> tostr(room_d), "oneway" -> true], $player);
-      $test_utils:assert_true(index(result, "Permission denied:") == 1, "agent dig_passage should report denied source dig_from");
+      result = $llm_building_tools:dig_passage(["source_room" -> tostr(room_c), "direction" -> "east", "target_room" -> tostr(room_d), "oneway" -> true], $player);
+      $test_utils:assert_true(result.status == 'failure && result.code == "permission_denied", "agent dig_passage should report denied source dig_from");
       $test_utils:assert_false(from_missing:passage_for(room_c, room_d), "denied missing-source dig should not register passage");
       to_missing = create($area);
       room_e = to_missing:make_room_in($room);
       room_f = to_missing:make_room_in($room);
       $root:grant_capability(to_missing, {'create_passage}, $player, 'area);
       $root:grant_capability(room_e, {'dig_from}, $player, 'room);
-      result = $agent_building_tools:dig_passage(["source_room" -> tostr(room_e), "direction" -> "west", "target_room" -> tostr(room_f), "oneway" -> true], $player);
-      $test_utils:assert_true(index(result, "Permission denied:") == 1, "agent dig_passage should report denied destination dig_into");
+      result = $llm_building_tools:dig_passage(["source_room" -> tostr(room_e), "direction" -> "west", "target_room" -> tostr(room_f), "oneway" -> true], $player);
+      $test_utils:assert_true(result.status == 'failure && result.code == "permission_denied", "agent dig_passage should report denied destination dig_into");
       $test_utils:assert_false(to_missing:passage_for(room_e, room_f), "denied missing-destination dig should not register passage");
     finally
       valid(to_missing) && to_missing:destroy();
@@ -513,7 +515,7 @@ object HEADLESS_CAPABILITY_SCENARIOS
       $player:moveto(room_a);
       denied = false;
       try
-        $agent_building_tools:remove_passage(["source_room" -> room_a, "target_room" -> room_b], $player);
+        $llm_building_tools:remove_passage(["source_room" -> room_a, "target_room" -> room_b], $player);
       except (E_PERM)
         denied = true;
       endtry
@@ -526,8 +528,8 @@ object HEADLESS_CAPABILITY_SCENARIOS
       passage2 = from_missing:create_passage(room_c, room_d, passage2);
       $root:grant_capability(from_missing, {'remove_passage}, $player, 'area);
       $player:moveto(room_c);
-      result = $agent_building_tools:remove_passage(["source_room" -> room_c, "target_room" -> room_d], $player);
-      $test_utils:assert_true(index(result, "Permission denied:") == 1, "agent remove_passage should report denied source dig_from");
+      result = $llm_building_tools:remove_passage(["source_room" -> room_c, "target_room" -> room_d], $player);
+      $test_utils:assert_true(result.status == 'failure && result.code == "permission_denied", "agent remove_passage should report denied source dig_from");
       $test_utils:assert_eq(from_missing:passage_for(room_c, room_d), passage2, "denied missing-source remove should preserve passage");
     finally
       valid(old_player_location) && $player:moveto(old_player_location);

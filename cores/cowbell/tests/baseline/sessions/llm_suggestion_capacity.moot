@@ -1,0 +1,47 @@
+// Three LLM suggestion frontends explain shared capacity on the invoking connection.
+@attach second programmer
+@wizard
+; #90032:fixture().blocked = true; return true;
+true
+@programmer
+% @doc missingQuotaFirst
+@text Could not find object: missingQuotaFirst (Finding suggestions...)
+@event text/plain utility
+@second
+% @doc missingQuotaSecond
+@text Could not find object: missingQuotaSecond (Finding suggestions...)
+@event text/plain utility
+@wizard
+; #90032:wait_requests($player.suggestions_llm_client, 2); return length(#90101.llm_suggestions);
+2
+@programmer
+% @doc missingQuotaThird
+@text Two LLM suggestions are active. Use stop or wait.
+@event text/plain utility
+% assist find a nonexistent thing
+@text Two LLM suggestions are active. Use stop or wait.
+@event text/plain utility
+% help missingQuotaHelp
+~~No help found for 'missingQuotaHelp'. Want help finding similar topics?
+@event text/plain utility
+% assist
+@text Two LLM suggestions are active. Use stop or wait.
+@event text/plain utility
+@second
+@quiet
+@noevents
+@nonprogrammer
+@quiet
+@noevents
+@wizard
+; return {length(#90101.llm_suggestions), length($player.suggestions_llm_client.requests)};
+{2, 2}
+@programmer
+% stop
+@text You stop LLM suggestions.
+@event text/plain utility
+@wizard
+; return length(#90101.llm_suggestions);
+0
+; $player.suggestions_llm_client = #-1; return true;
+true

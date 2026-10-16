@@ -77,6 +77,10 @@ Cowbell entries.
 
 ### Changed
 
+- LLM agents retain failure counters only for registered tools and cap them at the retry limit.
+  Removing a tool releases its counter. Invented tool names no longer grow retained failure state
+  across interactions; each unknown call still returns an explicit tool error.
+
 - The naming API replaces `is_plural()`, `is_countable()`, `is_proper_noun()` and their item flags
   with `noun_grammar()`, `noun_phrase()`, `listing_form()`, and `match_names()`. Custom prototypes
   must update old overrides. Indefinite mass and plural nouns now use “some.”
@@ -193,7 +197,194 @@ Cowbell entries.
 - Agent reports, private messages, and command guidance use document nodes. Output keeps its
   structure across HTML, Djot, and plain text without embedded ANSI or generated markup strings.
 
+### Removed
+
+- Remove the unused LLM event-queue prototype. Observer runtimes own their bounded queues.
+- Remove experimental RLM execution, workspace eval, and system registration from the LLM subsystem.
+  Both task-room frontends now use the shared LLM agent and guarded change tools.
+- Remove the duplicate LLM agentic conversation, loop, and tool prototypes. Shipped callers use
+  `$llm_agent` and `$llm_agent_tool` directly.
+
 ### Fixed
+
+- LLM observers use their configured client's model when no observer preference is set. Ordinary
+  room conversations no longer fail with an invalid model name under the default configuration.
+
+- LLM wearable progress shares bounded HUD and speech rendering. Inspection displays the supplied
+  object reference, and source-range progress accepts either optional boundary independently. The
+  visor and compass use one immutable progress value with separate rendering methods and frontend
+  hooks. Progress displays supplied references and argument summaries without querying object code.
+
+- LLM documentation, help, and command suggestions explain the two-job capacity limit on the
+  invoking connection. A third request no longer produces a command traceback or starts model work.
+  Existing suggestions remain active until completion or `stop`.
+
+- LLM tool outcomes accept only JSON data and have 64 KiB limits for retained and encoded values.
+  Invalid results cannot retain live objects or callbacks in the agent. Failed inspection results
+  let later tools continue. Invalid mutation results retain an explicit recovery barrier, because
+  the operation can have committed before returning its result. Tool error details are bounded.
+
+- LLM object and player inspection render structured descriptions as readable text. Literal strings
+  retain their punctuation. Description callbacks and rendering use the requesting actor's
+  authority, and descriptions have a 16 KiB limit before and after rendering.
+
+- LLM inspection tools share paginated code search across the visor, compass, and task rooms. The
+  `grep` tool returns structured matches and continuation cursors, with per-page work and output
+  limits. Missing or explicitly unreadable objects return errors. Results report unreadable source
+  and oversized lines instead of silently presenting an incomplete search. Search remains literal
+  and case-insensitive, with local default scope for ordinary actors and global scope for wizards.
+
+- LLM source inspection, visor listings, and room previews share immutable source snapshots.
+  Inherited aliases use native lookup without target metadata callbacks. Source ranges retain their
+  original line numbers and optional number gutters. Each snapshot has a 64 KiB limit; smaller
+  ranges from larger verbs remain available. Metadata inspection does not load source. Remove the
+  visor's duplicate source-payload and definer helpers.
+
+- LLM wearables share stored-rule evaluation through the behavior-tool provider. Both rule tools
+  accept JSON bindings; `evaluate_rule` no longer accepts a MOO literal string. Stored-rule bindings
+  are optional and default to empty. Named rule properties use native reads under requester
+  permissions. Failed reads return inspection errors and do not stop later tools as uncertain
+  mutations.
+
+- LLM wearables share one project-tool catalog. The compass now uses `create_task`,
+  `record_finding`, and `task_status`, like the visor. Both devices can query findings and complete
+  tasks through tools. Project tools belong to the active interaction and reject calls after it
+  closes. Failed project reads no longer require recovery for an uncertain mutation.
+- LLM wearable prompts use shared guidance and separate device personas. Remove duplicated MOO
+  examples, incorrect language claims, and instructions for nonexistent parallel task execution.
+  Device authors can specialize `role_prompt` and `_system_prompt`.
+
+- LLM observers capture room input before running client or content callbacks. Those callbacks run
+  under the observer job deadline, so failures cannot interrupt room delivery or item movement. Mr.
+  Welcome reacts to native item transfers; direct callback calls create no observations. Owners can
+  inspect bounded intake error counts and codes through the observer runtime.
+
+- The managed Cowbell package includes all shipped LLM collaborators. Source reviews can resolve
+  their constant bindings and include their definitions.
+- LLM agent project state now uses private anonymous collaborators. Todo lists, tasks, and findings
+  have count and byte limits. Access follows the agent's current owner. Removing a task releases its
+  descendants and findings, and retained handles cannot modify removed work. The visor and compass
+  share task selection and status. Their planning commands accept a device and description:
+  `plan_investigation visor with DESCRIPTION` and `plan_building compass with DESCRIPTION`.
+  `clear_project DEVICE` stops the interaction and clears its tasks, findings, and todos.
+- LLM command suggestions use the shared bounded job lifecycle and requester authority. Command,
+  help, and documentation suggestions share admission limits, deadlines, cancellation, and captured
+  output connections. Suggestions preserve object aliases and readable state, use current custom
+  exits and room hints, and discard replies when context changes. Candidate links require matching
+  command syntax or an exact room command. Native metadata collection excludes private definitions.
+- LLM assist opt-in requests are private and bound to their originating connection. Bare `assist`
+  selects that connection's newest request. Request links use `assist --request TOKEN` and work
+  once. Requests expire after two minutes and become invalid after connection, room, role, owner, or
+  client changes. Each player retains at most eight requests and 32 KiB of input and request
+  metadata.
+- LLM help suggestions use the shared anonymous job lifecycle, including cancellation, deadlines,
+  and the invoking connection. Help providers and feature probes receive the requesting player's
+  authority. Replies link only to topics in the captured catalog; changed catalogs discard pending
+  suggestions. Help tools and suggestions share bounded topic collection.
+- LLM documentation suggestions keep their requester and connection in bounded anonymous jobs. Each
+  player can run two suggestions, with a 30-second deadline for context collection, model work, and
+  output. `stop` cancels pending suggestions. Detached or reassigned connections, revoked programmer
+  status, and client changes cancel pending work. Context collection uses native read permissions,
+  excludes private ancestor and system-reference metadata, and rechecks context before publishing a
+  reply.
+- LLM guide tools share inspection, help, and social providers. Mr. Welcome uses the common `object`
+  and `to_room` argument names; `inspect_object` replaces the duplicate `find_object` tool. Social
+  tools use the NPC's authority and captured room. Persona callbacks require an active LLM job and
+  reject output after movement, shutdown, or permission changes. Failed lookups and denied reads
+  remain tool failures.
+- LLM observer room events and direct questions now share one bounded queue and conversation. Direct
+  questions use the NPC's tool authority and billing identity. Usage stays on the invoking
+  connection. Deadlines include setup and output; reset and shutdown cancel owned tasks. Interrupted
+  mutations require inspection and an explicit reset before further execution.
+- LLM observers use their dedicated client for readiness checks and triage. Structured events retain
+  their speaker and action, and conversations directed at another NPC do not trigger a reply. Triage
+  accepts an explicit visible decision and discards results when the conversation changes.
+- LLM observer speech preserves ordinary sentences previously suppressed by phrase filters. Leaked
+  tool markup cannot produce speech or actions. Replies stay in the captured room and are suppressed
+  after the observer moves or is disabled. Mr. Welcome starts without a dumped agent.
+
+- LLM behavior tools on wearables confirm rule, message, state, reaction, and fact changes on the
+  initiating connection. Changed previews require a new decision. Reaction authoring keeps the
+  selected host and copy destination through confirmation; renaming objects cannot redirect a write.
+- LLM tools and builder commands use the caller's native read permissions for message, rule, and
+  reaction lists. Private properties stay private. Property-name lookup uses native metadata without
+  calling object code.
+
+- LLM tools and builder commands check property permissions when editing messages. Owning an object
+  that refers to a foreign message bag does not grant access to that bag. Neither entry point
+  manufactures write grants. Changes during template compilation cannot retain revoked write
+  permissions.
+
+- LLM room tool output uses each job's captured requester and connection. Source code, tables, and
+  reports no longer broadcast to the room. Closed jobs cannot publish through retained presentation
+  tools, and detached or reassigned connections receive no delayed output.
+- LLM task-room output reaches each requester's session when the ambient player differs. The shared
+  utility output method accepts the receiver's authenticated principal without selecting another
+  session.
+- LLM frontends now share `src/llm/` and direct system references: `$llm_coding_room`, `$llm_runner`
+  and `$llm_prompt_observer`. The separate `$agentic` namespace is removed. Room configuration uses
+  `max_iterations`, `system_prompt`, and `task_timeout_seconds`.
+- LLM requests use a shared provider boundary with bounded payloads, deadlines, and transient HTTP
+  retries. Options are inert data; streaming and invalid options fail before dispatch. Provider
+  error bodies do not enter user errors. Retries retain the original request and stop after access
+  or credential changes.
+- LLM clients require a local key and explicit sharing for other actors. Descendants cannot use
+  inherited credentials. Room configuration preserves the owner's authority and no longer exposes
+  key fragments.
+- Every LLM request purpose reserves and settles the captured actor's account, including NPC work,
+  compaction, triage, and suggestions. Missing usage and abandoned requests retain explicit
+  unreported charges. Usage logs retain 100 entries. Budget commands support NPCs and show reserved
+  capacity.
+- Model preferences belong to individual LLM agents. Configuring a wearable or observer no longer
+  changes the shared client's model. Text-only queries preserve provider text without extracting
+  JSON fragments.
+- LLM room catalog hooks receive requester authority. Internal agent methods reject forged actors,
+  including calls from methods added to the same object.
+- LLM prompt observer reconfiguration releases idle anonymous collaborators and rejects replacement
+  during an active response. Runners preserve caller authority and reject access to foreign agents.
+- LLM programming tools can update verb metadata and argument specifications under the requester's
+  permissions. The visor uses shared inspection and authoring catalogs, including `get_property`,
+  `list_properties`, and `inspect_object`. Wearable configuration checks the incoming principal and
+  creates each anonymous agent under its intended owner.
+- The LLM visor uses the shared programming catalog: `program_verb`, `set_verb_info`, and
+  `set_property_info`. Property values are JSON values. Programming tools bound to a wearable
+  confirm writes on its initiating connection. Closing the interaction disables retained tool
+  providers and restores the device's catalog. Compiler errors preserve the previous verb code.
+- LLM building tools on the compass and visor confirm changes on the initiating connection. Changed
+  object or passage previews require another decision. Revoking builder, programmer, or wizard
+  status ends the interaction. Building permission denials return failures, and failed object
+  placement attempts cleanup. Incomplete cleanup identifies the surviving object.
+- The LLM visor eval tool remains opt-in and requires a separate confirmation for each call. Code
+  runs with the captured player's identity and permissions. Runtime errors report an unknown outcome
+  because earlier effects may have committed. The default programming catalog does not include eval.
+- LLM agent tools validate required fields, nested arguments, and limits before callbacks or
+  mutations. Invalid arguments produce a definite failure. Change tools use the same validator, with
+  exact field names and enum strings.
+- LLM agents keep transcripts in independent anonymous conversation objects. Guarded context methods
+  replace direct property writes. Transcripts have count and size limits, reject incomplete tool
+  exchanges, and compact before capacity is exhausted. Stale summaries cannot replace newer
+  messages.
+- LLM agents obey iteration and token limits, stop later tools after cancellation, and report
+  invalid provider replies. Context compaction retains complete tool exchanges and preserves
+  concurrent messages. Tool failures have explicit outcomes; unresolved effects prevent blind
+  retries.
+- LLM agent rooms enforce queue limits before dispatch and support independent concurrent jobs.
+  `halt` cancels the requester's work; `reset` requires room owner or wizard authority. Worker loss
+  cancels orphaned model calls without replay. History and saved contexts have bounded retention.
+- LLM room revisions select the requester's newest history entry. Resumed tasks carry fresh
+  authorization. Requests use anonymous jobs that capture the requester and connection, track the
+  model child, and release callback references.
+- LLM room history and queued requests are private. Status and context views filter by requester or
+  room administrator. Public room descriptions do not include transcript excerpts.
+- LLM observer memory uses a shared anonymous component with bounded fact storage and exact recall
+  and removal. Duplicate facts retain their age. Descendants have independent memory. Compaction
+  rejects proposals that omit source facts, and ownership changes revoke the previous owner's
+  access.
+- LLM observer fact compaction validates proposed facts before replacement, preserves source ages,
+  and retains concurrent changes. Fact administration requires owner or wizard authority.
+- LLM tool inspection reports verb argument specifications correctly. LLM wearables use one empty
+  task ID, handle missing tasks, and parse rule bindings as data. Task initialization and completion
+  require owner or wizard authority.
 
 - `@dump-database` waits for the checkpoint export to finish and reports its result, instead of
   announcing success when the request is only queued.

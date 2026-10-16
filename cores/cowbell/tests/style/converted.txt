@@ -108,27 +108,7 @@ items/container.moo:open
 items/container.moo:close
 items/container.moo:lock
 items/container.moo:unlock
-llm/llm_agent.moo
-llm/llm_agent_tool.moo
-llm/agent_building_tools.moo
-llm/rlm_agent.moo
-llm/llm_wearable.moo
-llm/agent_room.moo
-llm/data_visor.moo
-llm/llm_room_observer.moo
-agentic/agentic_agent.moo
-agentic/agentic_tool.moo
-agentic/agentic_loop.moo
-agentic/agentic_runner.moo
-agentic/agentic_coding_room.moo
-agentic/agentic_room_observer.moo
-llm/architects_compass.moo:_tool_create_project
-llm/architects_compass.moo:_tool_record_creation
-llm/architects_compass.moo:_tool_project_status
-llm/mr_welcome.moo:_tool_find_route
-llm/mr_welcome.moo:_tool_find_object
-llm/mr_welcome.moo:_tool_list_commands
-llm/mr_welcome.moo:_tool_help_lookup
+llm
 
 utils/match.moo:match_object
 utils/match.moo:match_player
@@ -208,7 +188,6 @@ features/builder_features.moo:@schedule
 features/builder_features.moo:@stop-schedule
 change_manager.moo
 
-agentic/agentic_event_queue.moo
 events/msg_bag.moo
 format/format.moo
 format/format_djot.moo
@@ -261,7 +240,6 @@ rules/rule.moo
 rules/rule_engine.moo
 rules/condition.moo
 rules/world_facts.moo
-llm/agent_building_tools.moo:tool_test_rule
 
 relations/relation.moo
 items/container.moo:can_lock
@@ -295,7 +273,6 @@ items/wearable.moo:wear
 items/wearable.moo:remove
 items/wearable.moo:action_wear
 items/wearable.moo:action_remove
-llm/llm_wearable.moo:do_wear
 root.moo:check_actor
 rules/reaction.moo:_builtin_action_schemas
 rules/reaction.moo:action_schemas
@@ -344,8 +321,6 @@ rules/reaction.moo:report
 rules/reaction.moo:_timer_trace
 relations/relation.moo:assert
 relations/relation.moo:retract
-llm/agent_building_tools.moo:list_reactions
-llm/agent_building_tools.moo:author_reaction
 features/builder_features.moo:@reaction
 features/builder_features.moo:_author_relation
 features/builder_features.moo:#*
@@ -367,3 +342,25 @@ rules/reaction.moo:event_schedules
 rules/reaction.moo:scheduled_event
 root.moo:message_bindings
 root.moo:message_event
+features/wiz_features.moo:@llm-set-budget
+events/event_receiver.moo:_can_inform_as
+utils/obj_utils.moo:set_compiled_message
+utils/obj_utils.moo:add_message_entry
+utils/obj_utils.moo:remove_message_entry
+utils/obj_utils.moo:property_key
+features/builder_features.moo:@add-message
+features/builder_features.moo:@del-message
+features/builder_features.moo:@set-m*essage
+features/builder_features.moo:author_on
+utils/obj_utils.moo:message_properties
+utils/obj_utils.moo:rule_properties
+utils/obj_utils.moo:reaction_properties
+utils/obj_utils.moo:_matching_properties
+utils/obj_utils.moo:property_keys
+
+features/prog_features.moo:suggest_doc_topic
+player.moo:_assist_with_help_query
+player.moo:suggest_command_alternatives
+player.moo:suggest_help_topic
+player.moo:assist
+player.moo:_assist_with_pc

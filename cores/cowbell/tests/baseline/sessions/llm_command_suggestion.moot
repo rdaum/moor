@@ -1,0 +1,39 @@
+// Command suggestions share owned jobs and preserve actual parser scope and callback authority.
+@attach second nonprogrammer
+@wizard
+; #90032:command_fixture(); return true;
+true
+@nonprogrammer
+@event data:state room_snapshot
+@second
+% assist pick up probe
+@text Checking a few possibilities...
+@event text/plain utility
+@text-within 5 Try these.
+=
+@text Here are a few commands worth trying:
+=
+~~get probe
+=
+~~press 7
+@event text/plain utility
+@nonprogrammer
+@quiet
+@noevents
+@wizard
+; const client = $player.suggestions_llm_client; for i in [1..30] if (length(#90102.llm_suggestions) == 0) break; endif suspend(0.1); endfor return {client.principals, client.purposes, index(client.requests[1], "pick up probe") > 0, index(client.requests[1], "Command Probe") > 0, #90102.location.principal, length(#90102.llm_suggestions)};
+{{#90102}, {'suggestion}, true, true, #90102, 0}
+// Syntax recognition does not accept an ambient verb with incompatible arguments or multiple input lines.
+; const snapshot = $llm_command_context:snapshot(#90102); return {$llm_command_context:accepts(#90102, snapshot, "home invented arguments"), $llm_command_context:accepts(#90102, snapshot, "look\nquit"), $llm_command_context:accepts(#90102, snapshot, "press 7")};
+{false, false, true}
+// Changed names during model work invalidate the result before links are delivered.
+; const client = $player.suggestions_llm_client; client.blocked = true; const job = $llm_command_suggestion:start(#90102, connections(#90102)[1][1], ['verb -> "get probe", 'dobjstr -> "", 'prepstr -> "", 'iobjstr -> ""]); #90032:wait_requests(client, 2); #90100.command_fixture[3].name = "Changed Probe"; client.blocked = false; return #90032:wait_closed(job);
+'failed
+@second
+@text Checking a few possibilities...
+@event text/plain utility
+@text I couldn't find a close match for that. Try look, inventory, or help.
+@event text/plain utility
+@wizard
+; return #90032:close_command_fixture();
+true

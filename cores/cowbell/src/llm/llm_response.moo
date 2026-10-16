@@ -6,139 +6,116 @@ object LLM_RESPONSE [
   parent: ROOT
   owner: ARCH_WIZARD
 
-  verb mk (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Create a flyweight wrapping an LLM API response map.";
-    {response_map} = args;
-    return toflyweight(this, ['raw -> response_map]);
-  endverb
+  method mk owner: ARCH_WIZARD
+    "Wrap provider data without rewriting content or interpreting reasoning as an answer.";
+    const {raw} = args;
+    return <$llm_response, .raw = raw>;
+  endmethod
 
-  verb is_valid (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Check if response has valid structure with choices.";
-    raw = this.raw;
-    typeof(raw) != TYPE_MAP && return false;
-    !maphaskey(raw, "choices") && return false;
-    typeof(raw["choices"]) != TYPE_LIST && return false;
-    return length(raw["choices"]) > 0;
-  endverb
-
-  verb message (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Get the first choice's message, sanitized for API re-submission.";
-    !this:is_valid() && return [];
-    choice = this.raw["choices"][1];
-    typeof(choice) != TYPE_MAP && return [];
-    !maphaskey(choice, "message") && return [];
-    msg = choice["message"];
-    typeof(msg) != TYPE_MAP && return [];
-    role = "assistant";
-    if (maphaskey(msg, "role") && typeof(msg["role"]) == TYPE_STR && msg["role"] != "")
-      role = msg["role"];
+  method is_valid owner: ARCH_WIZARD
+    "Validate the first assistant message and the complete tool-call envelope.";
+    const raw = this.raw;
+    typeof(raw) == TYPE_MAP && maphaskey(raw, "choices") || return false;
+    const choices = raw["choices"];
+    typeof(choices) == TYPE_LIST && length(choices) > 0 || return false;
+    const first = choices[1];
+    typeof(first) == TYPE_MAP && maphaskey(first, "message") || return false;
+    const message = first["message"];
+    typeof(message) == TYPE_MAP || return false;
+    if (maphaskey(message, "role") && message["role"] != "assistant")
+      return false;
     endif
-    cleaned = ["role" -> role];
-    "Only include content if it's a real string (not 'null').";
-    if (maphaskey(msg, "content"))
-      content = msg["content"];
-      if (typeof(content) == TYPE_STR && content != "null")
-        "Strip leading 'null' garbage some models produce.";
-        while (length(content) > 4 && content[1..4] == "null")
-          content = content[5..length(content)];
-          while (length(content) > 0 && (content[1] == " " || content[1] == "\n"))
-            content = content[2..length(content)];
-          endwhile
-        endwhile
-        length(content) > 0 && (cleaned["content"] = content);
+    const calls = maphaskey(message, "tool_calls") ? message["tool_calls"] | {};
+    typeof(calls) == TYPE_LIST || return false;
+    let seen = {};
+    for call in (calls)
+      typeof(call) == TYPE_MAP && maphaskey(call, "id") && maphaskey(call, "function") || return false;
+      const id = call["id"];
+      typeof(id) == TYPE_STR && length(id) > 0 && !(id in seen) || return false;
+      seen = {@seen, id};
+      const function = call["function"];
+      typeof(function) == TYPE_MAP && maphaskey(function, "name") && maphaskey(function, "arguments") || return false;
+      typeof(function["name"]) == TYPE_STR && length(function["name"]) > 0 || return false;
+      typeof(function["arguments"]) in {TYPE_STR, TYPE_MAP} || return false;
+      if (maphaskey(call, "type") && call["type"] != "function")
+        return false;
       endif
-    endif
-    "Only include tool_calls if it's present and a non-empty list.";
-    if (maphaskey(msg, "tool_calls"))
-      tc = msg["tool_calls"];
-      if (typeof(tc) == TYPE_LIST && length(tc) > 0)
-        cleaned["tool_calls"] = tc;
-      endif
-    endif
-    return cleaned;
-  endverb
+    endfor
+    length(calls) > 0 && return true;
+    return maphaskey(message, "content") && typeof(message["content"]) == TYPE_STR;
+  endmethod
 
-  verb content (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Extract content from raw response, with reasoning_content fallback.";
-    !this:is_valid() && return "";
-    choice = this.raw["choices"][1];
-    typeof(choice) != TYPE_MAP && return "";
-    !maphaskey(choice, "message") && return "";
-    msg = choice["message"];
-    typeof(msg) != TYPE_MAP && return "";
-    if (maphaskey(msg, "content"))
-      content = msg["content"];
-      if (typeof(content) == TYPE_STR && content != "" && content != "null")
-        return content;
-      endif
+  method message owner: ARCH_WIZARD
+    "Return a reusable assistant envelope, retaining literal text and provider reasoning metadata.";
+    this:is_valid() || return [];
+    const source = this.raw["choices"][1]["message"];
+    let message = ["role" -> "assistant"];
+    if (maphaskey(source, "content") && typeof(source["content"]) == TYPE_STR)
+      message["content"] = source["content"];
     endif
-    if (maphaskey(msg, "reasoning_content"))
-      reasoning = msg["reasoning_content"];
-      if (typeof(reasoning) == TYPE_STR && reasoning != "null")
-        return reasoning;
+    for key in ({"reasoning", "reasoning_content", "reasoning_details"})
+      if (maphaskey(source, key))
+        message[key] = source[key];
       endif
+    endfor
+    if (maphaskey(source, "tool_calls") && length(source["tool_calls"]) > 0)
+      let calls = {};
+      for call in (source["tool_calls"])
+        const function = call["function"];
+        const parameters = function["arguments"];
+        calls = {@calls, ["id" -> call["id"], "type" -> "function", "function" -> [
+          "name" -> function["name"], "arguments" -> typeof(parameters) == TYPE_STR ? parameters | generate_json(parameters)]]};
+      endfor
+      message["tool_calls"] = calls;
     endif
-    return "";
-  endverb
+    return message;
+  endmethod
 
-  verb tool_calls (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Get tool_calls list from message, or empty list if none.";
-    msg = this:message();
-    typeof(msg) != TYPE_MAP && return {};
-    !maphaskey(msg, "tool_calls") && return {};
-    tc = msg["tool_calls"];
-    typeof(tc) != TYPE_LIST && return {};
-    return tc;
-  endverb
+  method content owner: ARCH_WIZARD
+    "Return only visible content. Reasoning and the literal word null are separate values.";
+    this:is_valid() || return "";
+    const message = this.raw["choices"][1]["message"];
+    return maphaskey(message, "content") && typeof(message["content"]) == TYPE_STR ? message["content"] | "";
+  endmethod
 
-  verb has_tool_calls (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Check if response has any tool calls.";
+  method tool_calls owner: ARCH_WIZARD
+    "Return validated tool calls or an empty list.";
+    const message = this:message();
+    return maphaskey(message, "tool_calls") ? message["tool_calls"] | {};
+  endmethod
+
+  method has_tool_calls owner: ARCH_WIZARD
+    "Return whether the validated response requests tools.";
     return length(this:tool_calls()) > 0;
-  endverb
+  endmethod
 
-  verb usage (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Get usage stats map, or empty map if not present.";
-    raw = this.raw;
-    typeof(raw) != TYPE_MAP && return [];
-    !maphaskey(raw, "usage") && return [];
-    return raw["usage"];
-  endverb
+  method usage owner: ARCH_WIZARD
+    "Return the provider usage map, if present.";
+    const raw = this.raw;
+    if (typeof(raw) == TYPE_MAP && maphaskey(raw, "usage") && typeof(raw["usage"]) == TYPE_MAP)
+      return raw["usage"];
+    endif
+    return [];
+  endmethod
 
-  verb test_flyweight (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Test $llm_response flyweight methods.";
-    "Test valid response with content";
-    sample = ["choices" -> {["message" -> ["content" -> "Hello!"]]}];
-    resp = this:mk(sample);
-    resp:is_valid() || raise(E_ASSERT, "should be valid");
-    resp:content() != "Hello!" && raise(E_ASSERT, "content should be Hello!");
-    resp:has_tool_calls() && raise(E_ASSERT, "should have no tool calls");
-    length(resp:tool_calls()) != 0 && raise(E_ASSERT, "tool_calls should be empty");
-    "Test response with tool calls";
-    sample2 = ["choices" -> {["message" -> ["content" -> "", "tool_calls" -> {["id" -> "1", "function" -> ["name" -> "test", "arguments" -> []]]}]]}, "usage" -> ["total_tokens" -> 100]];
-    resp2 = this:mk(sample2);
-    resp2:is_valid() || raise(E_ASSERT, "should be valid with tools");
-    !resp2:has_tool_calls() && raise(E_ASSERT, "should have tool calls");
-    length(resp2:tool_calls()) != 1 && raise(E_ASSERT, "should have 1 tool call");
-    resp2:usage()["total_tokens"] != 100 && raise(E_ASSERT, "usage should have total_tokens");
-    "Test reasoning_content fallback";
-    sample3 = ["choices" -> {["message" -> ["reasoning_content" -> "Thinking..."]]}];
-    resp3 = this:mk(sample3);
-    resp3:content() != "Thinking..." && raise(E_ASSERT, "should fall back to reasoning_content");
-    "Test invalid responses";
-    resp4 = this:mk("not a map");
-    resp4:is_valid() && raise(E_ASSERT, "string should be invalid");
-    resp5 = this:mk(["no_choices" -> 1]);
-    resp5:is_valid() && raise(E_ASSERT, "missing choices should be invalid");
-    resp6 = this:mk(["choices" -> {}]);
-    resp6:is_valid() && raise(E_ASSERT, "empty choices should be invalid");
+  method reasoning owner: ARCH_WIZARD
+    "Return reasoning metadata without exposing it as a final answer.";
+    const message = this:message();
+    return maphaskey(message, "reasoning_content") && typeof(message["reasoning_content"]) == TYPE_STR ? message["reasoning_content"] | "";
+  endmethod
+
+  method test_flyweight owner: ARCH_WIZARD
+    "Provider normalization preserves literal content and rejects incomplete tool envelopes.";
+    for text in ({"Hello!", "null", "null pointer", "NULL prefix"})
+      const response = this:mk(["choices" -> {["message" -> ["content" -> text]]}]);
+      response:is_valid() || raise(E_ASSERT);
+      strcmp(response:content(), text) == 0 || raise(E_ASSERT);
+      strcmp(response:message()["content"], text) == 0 || raise(E_ASSERT);
+    endfor
+    const reasoning = this:mk(["choices" -> {["message" -> ["reasoning_content" -> "private reasoning"]]}]);
+    reasoning:content() == "" || raise(E_ASSERT, "Reasoning is not an answer");
+    const invalid = this:mk(["choices" -> {["message" -> ["tool_calls" -> {["id" -> "incomplete"]}]]}]);
+    !invalid:is_valid() || raise(E_ASSERT, "Incomplete tools are invalid");
     return true;
-  endverb
-
-  verb reasoning (none none none) owner: ARCH_WIZARD flags: "rxd"
-    "Extract reasoning_content from response.";
-    msg = this:message();
-    typeof(msg) != TYPE_MAP && return "";
-    maphaskey(msg, "reasoning_content") && typeof(msg["reasoning_content"]) == TYPE_STR && msg["reasoning_content"] != "null" && return msg["reasoning_content"];
-    return "";
-  endverb
+  endmethod
 endobject

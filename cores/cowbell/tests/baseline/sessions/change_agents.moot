@@ -1,25 +1,25 @@
-// Real RLM and agentic room orchestration with a deterministic model fixture.
+// Base and coding room orchestration with a deterministic model fixture.
 @wizard
-; return #90030:run_scenario("rlm", true);
+; return #90030:run_scenario("base", true);
 true
-; return #90030:run_scenario("rlm", false);
+; return #90030:run_scenario("base", false);
 true
-; return #90030:run_scenario("agentic", true);
+; return #90030:run_scenario("coding", true);
 true
-; return #90030:run_scenario("agentic", false);
+; return #90030:run_scenario("coding", false);
 true
 // A model reply arrives after the requester loses wizard authority.
-; return #90030:run_scenario("rlm", false, true);
+; return #90030:run_scenario("base", false, true);
 true
-; return #90030:run_scenario("agentic", false, true);
+; return #90030:run_scenario("coding", false, true);
 true
 // Saved edits remain usable after a concurrent live edit and comparison refresh.
-; return #90030:run_scenario("rlm", false, false, true);
+; return #90030:run_scenario("base", false, false, true);
 true
-; return #90030:run_scenario("agentic", false, false, true);
+; return #90030:run_scenario("coding", false, false, true);
 true
 @programmer
-; return #90030:run_denied("rlm");
+; return #90030:run_denied("base");
 true
-; return #90030:run_denied("agentic");
+; return #90030:run_denied("coding");
 true

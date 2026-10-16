@@ -8,6 +8,11 @@ object ROOT [
   fertile: true
   readable: true
 
+  property llm_token_budget (owner: ARCH_WIZARD, flags: "") = 20000000;
+  property llm_tokens_used (owner: ARCH_WIZARD, flags: "") = 0;
+  property llm_usage_log (owner: ARCH_WIZARD, flags: "") = {};
+  property llm_reservations (owner: ARCH_WIZARD, flags: "") = [];
+
   property reaction_state_fields (owner: HACKER, flags: "rc") = [];
   property reaction_reports (owner: ARCH_WIZARD, flags: "") = [];
   property reaction_timers (owner: ARCH_WIZARD, flags: "") = [];

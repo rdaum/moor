@@ -118,12 +118,13 @@ class CoreMakefiles(unittest.TestCase):
         self.assertIn("test fixtures entered shipped export", self.make("cowbell", success=False))
 
     def test_cowbell_check_builds_once_and_runs_binaries_directly(self):
-        output = self.make("cowbell", "-n", "check", fake=False)
-        cargo = [line for line in output.splitlines() if line.startswith("cargo ")]
-        self.assertEqual(len(cargo), 1, output)
-        self.assertTrue(cargo[0].startswith("cargo build --locked "), cargo)
-        self.assertNotIn("cargo run", output)
-        self.assertIn("/debug/core-session-runner --cowbell", output)
+        for target in ("check", "check-full"):
+            output = self.make("cowbell", "-n", target, fake=False)
+            cargo = [line for line in output.splitlines() if line.startswith("cargo ")]
+            self.assertEqual(len(cargo), 1, output)
+            self.assertTrue(cargo[0].startswith("cargo build --locked "), cargo)
+            self.assertNotIn("cargo run", output)
+            self.assertEqual("/debug/core-session-runner --cowbell" in output, target == "check-full")
 
     def test_textdump_and_legacy_aliases(self):
         self.make("lambda-moor", "output")
