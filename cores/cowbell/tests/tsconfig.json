@@ -9,7 +9,6 @@
   },
   "include": [
     "mcp/**/*.ts",
-    "changes/**/*.ts",
-    "../../../clients/moor-web-mcp/src/compat.d.ts"
+    "changes/**/*.ts"
   ]
 }

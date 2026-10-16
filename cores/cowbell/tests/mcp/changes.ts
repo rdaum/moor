@@ -1,76 +1,12 @@
 import assert from "node:assert/strict";
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { once } from "node:events";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { ChangesFixture, source, workspace } from "../../../../clients/meadow/e2e/changes-fixture.ts";
 import { MoorWebClient } from "../../../../clients/moor-web-mcp/src/moor-service.ts";
+import { Mcp } from "../../../../clients/moor-web-mcp/tests/mcp-client.ts";
 
 // Tests inspect the wire format as returned by the real MCP process.
 type Json = any;
-class Mcp {
-    private sequence = 0;
-    private pending = new Map<number, { resolve: (value: Json) => void; reject: (error: Error) => void }>();
-    private child: ChildProcessWithoutNullStreams;
-    private log = "";
-    constructor(binary: string, args: string[], cwd: string) {
-        this.child = spawn(binary, args, { cwd, stdio: "pipe" });
-        this.child.stderr.on("data", chunk => this.log = (this.log + chunk).slice(-16000));
-        createInterface({ input: this.child.stdout }).on("line", line => {
-            const value = JSON.parse(line);
-            if (value.id !== undefined) this.pending.get(value.id)?.resolve(value);
-        });
-        this.child.on("exit", code => {
-            for (const request of this.pending.values()) request.reject(new Error(`MCP exited ${code}: ${this.log}`));
-        });
-    }
-    async rpc(method: string, params: Json = {}, expectedError?: RegExp) {
-        const id = ++this.sequence;
-        let timer: NodeJS.Timeout;
-        try {
-            const response = await new Promise<Json>((resolve, reject) => {
-                this.pending.set(id, { resolve, reject });
-                timer = setTimeout(() => reject(new Error(`MCP timeout: ${method}\n${this.log}`)), 90000);
-                this.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-            });
-            if (expectedError) {
-                assert.match(response.error?.message ?? "", expectedError);
-                return response.error;
-            }
-            assert.equal(response.error, undefined, JSON.stringify(response));
-            return response.result;
-        } finally {
-            clearTimeout(timer!);
-            this.pending.delete(id);
-        }
-    }
-    async call(name: string, args: Json = {}, error?: string) {
-        const response = await this.rpc("tools/call", { name: `changes_${name}`, arguments: args });
-        const content = response.structuredContent;
-        assert.ok(content, JSON.stringify(response));
-        assert.deepEqual(JSON.parse(response.content[0].text), content);
-        if (error) {
-            assert.equal(response.isError, true, JSON.stringify(content));
-            assert.equal(content.error.code, error, JSON.stringify(content));
-            return content.error;
-        }
-        assert.equal(content.ok, true, JSON.stringify(content));
-        assert.notEqual(response.isError, true);
-        return content.result;
-    }
-    async close() {
-        if (this.child.exitCode !== null || this.child.signalCode !== null) return;
-        const closed = once(this.child, "exit");
-        this.child.kill("SIGTERM");
-        const timer = setTimeout(() => this.child.kill("SIGKILL"), 5000);
-        try {
-            await closed;
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-}
 
 async function run(transport: "http" | "git") {
     const fixture = new ChangesFixture();
@@ -108,17 +44,11 @@ async function run(transport: "http" | "git") {
                 }),
             );
             client = new Mcp(process.execPath, [
-                "--import",
-                "tsx",
-                "clients/moor-web-mcp/src/index.ts",
+                "clients/moor-web-mcp/dist/index.js",
                 "--config",
                 config,
             ], workspace);
-            await client.rpc("initialize", {
-                protocolVersion: "2024-11-05",
-                capabilities: {},
-                clientInfo: { name: "acceptance", version: "1" },
-            });
+            await client.rpc("initialize");
             await client.rpc("tools/list");
         }
         await connect();
@@ -157,7 +87,7 @@ async function run(transport: "http" | "git") {
             await client.rpc("tools/call", {
                 name: "program_verb",
                 arguments: { object, verb: "probe", code: "return 0;", actor: "#2" },
-            }, /not a supported argument/);
+            }, /additional properties/);
             await client.rpc("tools/call", {
                 name: "program_verb",
                 arguments: { object: "#9500", verb: "upstream", code: "return 0;" },
@@ -166,6 +96,29 @@ async function run(transport: "http" | "git") {
             assert.equal(failure.ok, false);
             assert.equal(failure.code, "compile_error");
             assert.equal((await assertions.evalExpression(actor, `return ${object}:probe();`)).js, "#123");
+            async function builtin(name: string, args: Json = {}, error = false) {
+                const response = await client!.rpc("tools/call", { name: `moo_${name}`, arguments: args });
+                assert.equal(response.isError ?? false, error, JSON.stringify(response));
+                return response.content[0].text as string;
+            }
+            assert.match(await builtin("eval", { expression: "return player;" }), /9502/);
+            assert.match(await builtin("resolve", { object: "me" }), /9502/);
+            assert.match(await builtin("list_verbs", { object }), /probe/);
+            assert.match(await builtin("get_verb", { object, name: "probe" }), /#123/);
+            assert.match(await builtin("invoke_verb", { object, verb: "probe", args: [] }), /#123/);
+            await builtin("program_verb", { object, name: "probe", code: "return args;" });
+            const values = [true, null, "#123", "line one\nline two"];
+            const invoked = await builtin("invoke_verb", { object, verb: "probe", args: values });
+            assert.deepEqual(JSON.parse(invoked.split("\n\n")[1]), [true, { oid: -1 }, "#123", "line one\nline two"]);
+            await builtin("program_verb", { object, name: "probe", code: "return (;" }, true);
+            await builtin("set_property", { object, name: "name", valueLiteral: "\"MCP renamed\"" });
+            assert.match(await builtin("get_property", { object, name: "name" }), /MCP renamed/);
+            assert.match(await builtin("list_properties", { object, inherited: true }), /description/);
+            assert.match(await builtin("function_help", { function_name: "tostr" }), /tostr/);
+            assert.match(await builtin("command", { command: "look", include_metadata: true }), /events/);
+            const metadata = await client.rpc("resources/read", { uri: "moor://moos" });
+            assert.doesNotMatch(metadata.contents[0].text, /password/);
+            console.log("PASS web MCP / static tools and command completion");
             await tool("recycle_object", { object });
             assert.equal((await assertions.evalExpression(actor, `return valid(${object});`)).js, false);
             await assertions.evalExpression(actor, "#9502.wizard = true; return true;");
@@ -256,7 +209,7 @@ async function run(transport: "http" | "git") {
             "invalid_request",
         );
         const oversized = { package: "acceptance", sources: [{ label: "oversized.moo", text: " ".repeat(4194305) }] };
-        await client.rpc("tools/call", { name: "changes_check", arguments: oversized }, /413 Payload Too Large/);
+        await client.call("check", oversized, "invalid_request");
         const before = await assertions.evalExpression(
             actor,
             "return {#9500:upstream(), #9500:conflict(), #9500:edited(), #9500:deferred()};",

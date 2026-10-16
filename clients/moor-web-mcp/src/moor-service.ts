@@ -54,6 +54,7 @@ interface CharacterSessionState {
     wsConnectPromise: Promise<void> | null;
     recentEvents: string[];
     commandChain: Promise<void>;
+    command?: { event: (bytes: Uint8Array) => void; fail: (message: string) => void };
 }
 
 interface CommandResult {
@@ -88,29 +89,15 @@ function objectLikeToRef(value: unknown): string {
     throw new Error(`Unable to convert object reference: ${JSON.stringify(value)}`);
 }
 
-function jsonToMooLiteral(value: unknown): string {
-    if (value === null || value === undefined) {
-        return "none";
-    }
-    if (typeof value === "boolean") {
-        return value ? "1" : "0";
-    }
-    if (typeof value === "number") {
-        if (!Number.isFinite(value)) {
-            throw new Error("Non-finite numeric value is not representable in MOO literal");
-        }
-        return Number.isInteger(value) ? `${value}` : `${value}`;
-    }
-    if (typeof value === "string") {
-        const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
-        return `"${escaped}"`;
-    }
-    if (Array.isArray(value)) {
-        return `{${value.map((item) => jsonToMooLiteral(item)).join(", ")}}`;
-    }
+function mooJson(value: unknown): string {
+    return `parse_json("${escapeMooString(JSON.stringify(value))}")`;
+}
 
-    const entries = Object.entries(value as Record<string, unknown>);
-    return `[${entries.map(([k, v]) => `${jsonToMooLiteral(k)} -> ${jsonToMooLiteral(v)}`).join(", ")}]`;
+function mooObject(reference: string): string {
+    if (/^oid:-?\d+$/.test(reference)) return `#${reference.slice(4)}`;
+    if (/^uuid:[0-9a-f]{6}-[0-9a-f]{10}$/i.test(reference)) return `#${reference.slice(5)}`;
+    if (/^#(?:-?\d+|[0-9a-f]{6}-[0-9a-f]{10})$/i.test(reference)) return reference;
+    throw new Error(`Invalid target object reference: ${reference}`);
 }
 
 function escapeMooString(value: string): string {
@@ -155,13 +142,13 @@ function formatCommandEventForText(event: unknown): string | null {
 export class MoorWebClient {
     private readonly config: MoorWebMcpConfig;
     private readonly sessions = new Map<string, CharacterSessionState>();
+    private readonly connecting = new Map<string, Promise<CharacterSessionState>>();
+    private readonly shutdown = new AbortController();
+    private readonly timeoutMs: number;
 
     constructor(config: MoorWebMcpConfig) {
         this.config = config;
-    }
-
-    listMoos(): MooConfig[] {
-        return this.config.moos;
+        this.timeoutMs = config.timeoutMs ?? 30000;
     }
 
     getRecentEvents(character: CharacterRef): string[] {
@@ -180,23 +167,19 @@ export class MoorWebClient {
         return { moo, player };
     }
 
-    async evalExpression(character: CharacterRef, expression: string): Promise<{ js: unknown; literal: string }> {
-        const session = await this.ensureSession(character);
-        const { moo } = this.findCharacter(character);
+    async evalExpression(
+        character: CharacterRef,
+        expression: string,
+        signal?: AbortSignal,
+    ): Promise<{ js: unknown; literal: string }> {
         const trimmed = expression.trim();
-        const maybeWrapped = /(^return\b|;\s*$)/.test(trimmed) ? expression : `return ${trimmed};`;
-        const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(moo.connectAddress)}/v1/eval`, {
-                method: "POST",
-                headers: {
-                    Accept: "application/x-flatbuffers",
-                    "Content-Type": "text/plain",
-                    "X-Moor-Auth-Token": session.authToken,
-                },
-                body: maybeWrapped,
-            }),
-            "eval",
-        );
+        const body = /(^return\b|;\s*$)/.test(trimmed) ? expression : `return ${trimmed};`;
+        const response = await this.authorizedRequest(character, "/v1/eval", {
+            method: "POST",
+            headers: { Accept: "application/x-flatbuffers", "Content-Type": "text/plain" },
+            body,
+            signal,
+        });
 
         const bytes = new Uint8Array(await response.arrayBuffer());
         try {
@@ -215,154 +198,134 @@ export class MoorWebClient {
         }
     }
 
-    async command(character: CharacterRef, command: string): Promise<CommandResult> {
+    async command(character: CharacterRef, command: string, signal?: AbortSignal): Promise<CommandResult> {
         const session = await this.ensureSession(character);
-        await this.ensureWs(character, session);
-
-        let resolveResult!: (result: CommandResult) => void;
-        let resolved = false;
-        const done = new Promise<CommandResult>((resolve) => {
-            resolveResult = resolve;
-        });
-
-        const lines: string[] = [];
-        const events: unknown[] = [];
-        let errored = false;
-        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
-        const finish = () => {
-            if (resolved) {
-                return;
-            }
-            resolved = true;
-            if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-            }
-            resolveResult({ lines, events, error: errored });
+        const run = async (): Promise<CommandResult> => {
+            this.shutdown.signal.throwIfAborted();
+            signal?.throwIfAborted();
+            await this.ensureWs(character, session);
+            const ws = session.ws!;
+            return new Promise<CommandResult>(resolve => {
+                const lines: string[] = [];
+                const events: unknown[] = [];
+                let settled = false;
+                const finish = (error: boolean, message?: string) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    signal?.removeEventListener("abort", cancelled);
+                    session.command = undefined;
+                    if (message) lines.push(message);
+                    // A timed-out command may still run. Discard its connection so late
+                    // completion cannot be mistaken for the next queued command's result.
+                    if (error && message) ws.terminate();
+                    resolve({ lines, events, error });
+                };
+                const cancelled = () => finish(true, "Command cancelled; its outcome may be unknown.");
+                const timer = setTimeout(
+                    () => finish(true, "Command timed out; its outcome may be unknown."),
+                    this.timeoutMs,
+                );
+                signal?.addEventListener("abort", cancelled, { once: true });
+                session.command = {
+                    fail: message => finish(true, message),
+                    event: bytes =>
+                        dispatchClientEvent(bytes, {
+                            onNarrativeEventMessage: narrative => {
+                                const parsed = parseWsNarrativeEventMessage(narrative, value =>
+                                    new MoorVar(value).toJS(), value =>
+                                    new MoorVar(value).asString());
+                                if (parsed) {
+                                    events.push(parsed);
+                                    const text = formatCommandEventForText(parsed);
+                                    if (text !== null) {
+                                        lines.push(text);
+                                    }
+                                }
+                            },
+                            onTaskErrorEvent: event => {
+                                const error = event.error();
+                                const narrative = error ? schedulerErrorToNarrative(error) : null;
+                                if (narrative) {
+                                    lines.push(narrative.message);
+                                }
+                                finish(true);
+                            },
+                            onTaskSuccessEvent: () =>
+                                finish(false),
+                            onRequestInputEvent: () =>
+                                finish(true, "Command requires interactive input; use a MOO client."),
+                        }),
+                };
+                if (signal?.aborted) cancelled();
+                else {ws.send(command, error => {
+                        if (error) finish(true, error.message);
+                    });}
+            });
         };
-
-        const installIdleTimeout = (ms: number) => {
-            if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-            }
-            timeoutHandle = setTimeout(() => finish(), ms);
-        };
-
-        const ws = session.ws;
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            throw new Error("WebSocket not connected");
-        }
-
-        const onMessage = (data: unknown) => {
-            try {
-                const bytes = bytesFromWebSocketMessage(data);
-                if (!bytes) {
-                    return;
-                }
-                if (handleWebSocketControlFrame(bytes, (payload) => ws.send(payload))) {
-                    return;
-                }
-                dispatchClientEvent(bytes, {
-                    onNarrativeEventMessage: (narrative: unknown) => {
-                        const parsed = parseWsNarrativeEventMessage(
-                            narrative,
-                            (value: unknown) => new MoorVar(value as any).toJS(),
-                            (value: unknown) => new MoorVar(value as any).asString(),
-                        );
-                        if (parsed) {
-                            events.push(parsed);
-                            const text = formatCommandEventForText(parsed);
-                            if (text !== null) {
-                                lines.push(text);
-                            }
-                            installIdleTimeout(700);
-                        }
-                    },
-                    onTaskErrorEvent: (taskError: any) => {
-                        const schedulerError = taskError.error();
-                        if (schedulerError) {
-                            const narrative = schedulerErrorToNarrative(schedulerError);
-                            if (narrative) {
-                                lines.push(narrative.message);
-                            }
-                        }
-                        errored = true;
-                        finish();
-                    },
-                    onTaskSuccessEvent: () => {
-                        finish();
-                    },
-                });
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                if (message.includes("empty client event")) {
-                    return;
-                }
-                lines.push(`WebSocket decode error: ${message}`);
-                events.push({ kind: "decode_error", message });
-                errored = true;
-                finish();
-            }
-        };
-
-        const run = async () => {
-            ws.on("message", onMessage);
-            try {
-                installIdleTimeout(5000);
-                ws.send(command);
-                return await done;
-            } finally {
-                ws.off("message", onMessage);
-            }
-        };
-
-        const resultPromise = session.commandChain.then(() => run());
-        session.commandChain = resultPromise.then(
-            () => undefined,
-            () => undefined,
-        );
-        return resultPromise;
+        const pending = session.commandChain.then(run);
+        session.commandChain = pending.then(() => undefined, () => undefined);
+        return pending;
     }
 
-    async requestJson(character: CharacterRef, path: string, init?: RequestInit): Promise<unknown> {
+    private fetch(url: string, init: RequestInit): Promise<Response> {
+        const signals = [this.shutdown.signal, AbortSignal.timeout(this.timeoutMs)];
+        if (init.signal) signals.push(init.signal);
+        return fetch(url, { ...init, signal: AbortSignal.any(signals) });
+    }
+
+    async requestJson(
+        character: CharacterRef,
+        path: string,
+        init?: RequestInit,
+        signal?: AbortSignal,
+    ): Promise<unknown> {
+        const response = await this.authorizedRequest(character, path, { ...init, signal: signal ?? init?.signal });
+        const data = await response.json();
+        const reply = data?.result?.ClientSuccess?.reply?.reply;
+        // HTTP 200 carries both successful RPC replies and rejected operations.
+        const failure = data?.result?.Failure
+            ?? reply?.VerbProgramResponseReply?.response?.response?.VerbProgramFailure;
+        if (failure) throw new Error(`${path} failed: ${JSON.stringify(failure)}`);
+        return reply ?? data;
+    }
+
+    private async authorizedRequest(character: CharacterRef, path: string, init: RequestInit): Promise<Response> {
         const session = await this.ensureSession(character);
         const { moo } = this.findCharacter(character);
-        const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(moo.connectAddress)}${path}`, {
-                ...(init ?? {}),
-                headers: {
-                    Accept: "application/json",
-                    "X-Moor-Auth-Token": session.authToken,
-                    ...(init?.headers ?? {}),
-                },
-            }),
-            path,
-        );
-        return response.json();
+        const response = await this.fetch(`${trimTrailingSlash(moo.connectAddress)}${path}`, {
+            ...init,
+            headers: { Accept: "application/json", "X-Moor-Auth-Token": session.authToken, ...init.headers },
+        });
+        if (response.status === 401 && this.sessions.get(this.sessionKey(character)) === session) {
+            this.sessions.delete(this.sessionKey(character));
+            session.ws?.terminate();
+        }
+        return ensureOk(response, path);
     }
 
     async refreshDynamicTools(character: CharacterRef): Promise<DynamicTool[]> {
-        const { js } = await this.evalExpression(character, "return #0:external_agent_tools();");
-        if (!Array.isArray(js)) {
-            return [];
-        }
+        const { js } = await this.evalExpression(
+            character,
+            "return respond_to(#0, \"external_agent_tools\") ? #0:external_agent_tools() | {};",
+        );
+        if (!Array.isArray(js)) throw new Error("Tool registry must return a list");
 
         const results: DynamicTool[] = [];
         for (const entry of js) {
-            if (!entry || typeof entry !== "object") {
-                continue;
-            }
+            if (!entry || typeof entry !== "object") throw new Error("Invalid tool registry entry");
             const asMap = entry as Record<string, unknown>;
-            if (typeof asMap.name !== "string" || typeof asMap.target_verb !== "string") {
-                continue;
-            }
+            if (
+                typeof asMap.name !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(asMap.name)
+                || typeof asMap.target_verb !== "string" || !asMap.target_verb.length
+                || results.some(tool => tool.name === asMap.name)
+            ) throw new Error("Invalid or duplicate tool registry name");
 
-            let targetObj: string;
-            try {
-                targetObj = objectLikeToRef(asMap.target_obj);
-            } catch {
-                continue;
-            }
+            const targetObj = mooObject(objectLikeToRef(asMap.target_obj));
+            if (
+                !asMap.input_schema || typeof asMap.input_schema !== "object" || Array.isArray(asMap.input_schema)
+                || (asMap.input_schema as Record<string, unknown>).type !== "object"
+            ) throw new Error(`Invalid schema for ${asMap.name}`);
 
             results.push({
                 name: asMap.name,
@@ -378,24 +341,35 @@ export class MoorWebClient {
     }
 
     async refreshDynamicResources(character: CharacterRef): Promise<DynamicResource[]> {
-        const { js } = await this.evalExpression(character, "return #0:external_agent_resources();");
-        if (!Array.isArray(js)) return [];
-        return js.filter((entry): entry is DynamicResource =>
-            entry !== null && typeof entry === "object"
-            && ["uri", "name", "description", "mimeType", "content"].every(key => typeof entry[key] === "string")
+        const { js } = await this.evalExpression(
+            character,
+            "return respond_to(#0, \"external_agent_resources\") ? #0:external_agent_resources() | {};",
         );
+        if (!Array.isArray(js)) throw new Error("Resource registry must return a list");
+        const seen = new Set<string>();
+        for (const entry of js) {
+            if (
+                !entry || typeof entry !== "object"
+                || !["uri", "name", "description", "mimeType", "content"].every(key => typeof entry[key] === "string")
+                || seen.has(entry.uri) || entry.uri === "moor://moos" || /^moor:\/\/(events|world)\//.test(entry.uri)
+            ) throw new Error("Invalid or duplicate resource registry entry");
+            seen.add(entry.uri);
+        }
+        return js;
     }
 
     async executeDynamicTool(
         character: CharacterRef,
         tool: DynamicTool,
         args: unknown,
+        signal?: AbortSignal,
     ): Promise<{ js: unknown; literal: string }> {
         // Decode actual JSON in the world so booleans, strings and multiline
         // programs use the same mapping as internal agents.
-        const mooArgs = `parse_json(${jsonToMooLiteral(JSON.stringify(args ?? {}))})`;
-        const expression = `return ${tool.targetObj}:${tool.targetVerb}(${mooArgs}, player);`;
-        return this.evalExpression(character, expression);
+        const expression = `return ${mooObject(tool.targetObj)}:(${mooJson(tool.targetVerb)})(${
+            mooJson(args ?? {})
+        }, player);`;
+        return this.evalExpression(character, expression, signal);
     }
 
     async invokeVerbViaEval(
@@ -403,20 +377,34 @@ export class MoorWebClient {
         objectRef: string,
         verb: string,
         args: unknown[],
+        signal?: AbortSignal,
     ): Promise<{ js: unknown; literal: string }> {
-        const argLiteral = jsonToMooLiteral(args);
-        return this.evalExpression(character, `return ${objectRef}:${verb}(@${argLiteral});`);
+        return this.evalExpression(
+            character,
+            `return ${mooObject(objectRef)}:(${mooJson(verb)})(@${mooJson(args)});`,
+            signal,
+        );
     }
 
-    async functionHelp(character: CharacterRef, functionName: string): Promise<{ js: unknown; literal: string }> {
-        const escaped = escapeMooString(functionName);
-        return this.evalExpression(character, `return function_help("${escaped}");`);
+    async functionHelp(
+        character: CharacterRef,
+        functionName: string,
+        signal?: AbortSignal,
+    ): Promise<{ js: unknown; literal: string }> {
+        return this.evalExpression(character, `return function_help(${mooJson(functionName)});`, signal);
+    }
+
+    async propertyValue(character: CharacterRef, object: string, name: string, signal?: AbortSignal) {
+        // Native property access also supports built-in fields such as name.
+        return this.evalExpression(character, `return ${mooObject(object)}.(${mooJson(name)});`, signal);
     }
 
     async close(): Promise<void> {
+        this.shutdown.abort();
         for (const session of this.sessions.values()) {
             if (session.ws) {
-                session.ws.close();
+                session.command?.fail("MCP connection closed; command outcome may be unknown.");
+                session.ws.terminate();
             }
             session.ws = null;
             session.wsConnectPromise = null;
@@ -424,7 +412,7 @@ export class MoorWebClient {
     }
 
     private sessionKey(character: CharacterRef): string {
-        return `${character.mooId}/${character.playerId}`;
+        return JSON.stringify([character.mooId, character.playerId]);
     }
 
     private async ensureSession(character: CharacterRef): Promise<CharacterSessionState> {
@@ -434,6 +422,19 @@ export class MoorWebClient {
             return existing;
         }
 
+        let pending = this.connecting.get(key);
+        if (!pending) {
+            pending = this.login(character);
+            this.connecting.set(key, pending);
+            pending.finally(() => {
+                this.connecting.delete(key);
+            }).catch(() => {});
+        }
+        return pending;
+    }
+
+    private async login(character: CharacterRef): Promise<CharacterSessionState> {
+        const key = this.sessionKey(character);
         const selected = this.findCharacter(character);
         const formBody = new URLSearchParams({
             player: selected.player.username,
@@ -441,7 +442,7 @@ export class MoorWebClient {
         }).toString();
 
         const response = await ensureOk(
-            await fetch(`${trimTrailingSlash(selected.moo.connectAddress)}/auth/connect`, {
+            await this.fetch(`${trimTrailingSlash(selected.moo.connectAddress)}/auth/connect`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
@@ -492,7 +493,7 @@ export class MoorWebClient {
             },
         });
 
-        const ws = new WebSocket(wsUrl, protocols);
+        const ws = new WebSocket(wsUrl, protocols, { handshakeTimeout: this.timeoutMs });
         session.ws = ws;
         const wsConnectPromise = new Promise<void>((resolve, reject) => {
             const onOpen = () => {
@@ -505,10 +506,12 @@ export class MoorWebClient {
             };
             ws.once("open", onOpen);
             ws.once("error", onError);
+            ws.once("close", () => reject(new Error("WebSocket closed during connection")));
         });
         session.wsConnectPromise = wsConnectPromise;
 
         const clearIfCurrent = () => {
+            if (session.ws === ws) session.command?.fail("WebSocket closed; command outcome may be unknown.");
             if (session.ws === ws) {
                 session.ws = null;
             }
@@ -518,6 +521,7 @@ export class MoorWebClient {
         };
 
         ws.on("message", (rawData: unknown) => {
+            if (session.ws !== ws) return;
             try {
                 const bytes = bytesFromWebSocketMessage(rawData);
                 if (!bytes) {
@@ -527,11 +531,11 @@ export class MoorWebClient {
                     return;
                 }
                 dispatchClientEvent(bytes, {
-                    onNarrativeEventMessage: (narrative: unknown) => {
+                    onNarrativeEventMessage: narrative => {
                         const parsed = parseWsNarrativeEventMessage(
                             narrative,
-                            (value: unknown) => new MoorVar(value as any).toJS(),
-                            (value: unknown) => new MoorVar(value as any).asString(),
+                            value => new MoorVar(value).toJS(),
+                            value => new MoorVar(value).asString(),
                         );
                         if (parsed?.kind !== "notify") {
                             return;
@@ -542,8 +546,8 @@ export class MoorWebClient {
                             session.recentEvents.shift();
                         }
                     },
-                    onCredentialsUpdatedEvent: (credentials: unknown) => {
-                        const updated = decodeCredentialsUpdatedEvent(credentials as any);
+                    onCredentialsUpdatedEvent: credentials => {
+                        const updated = decodeCredentialsUpdatedEvent(credentials);
                         if (!updated) {
                             return;
                         }
@@ -551,8 +555,11 @@ export class MoorWebClient {
                         session.clientToken = updated.clientToken;
                     },
                 });
-            } catch {
-                // Ignore non-client-event frames while keeping connection alive.
+                session.command?.event(bytes);
+            } catch (error) {
+                session.command?.fail(
+                    `WebSocket decode error: ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
         });
         ws.on("close", clearIfCurrent);

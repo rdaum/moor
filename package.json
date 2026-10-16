@@ -39,7 +39,9 @@
     "full:dev-traced": "concurrently \"npm run meadow:dev\" \"npm run moor:traced\"",
     "full:build": "npm run web:build && cargo build --release -p moor-server --bin moor",
     "format:check": "dprint check",
-    "test:changes": "npm run web:prepare && cargo build -p moor-server --bin moor && npm run test:changes --workspace meadow"
+    "test:changes": "npm run web:prepare && cargo build -p moor-server --bin moor && npm run test:changes --workspace meadow",
+    "test:mcp": "npm run web:prepare && npm test --workspace @moor/web-mcp",
+    "test:mcp:integration": "npm run web:prepare && npm run web-mcp:build && cargo build --locked -p moor-daemon -p moor-web-host -p moor-telnet-host -p moor-git-worker -p moor-curl-worker && node --import tsx cores/cowbell/tests/mcp/changes.ts"
   },
   "author": "Ryan Daum <ryan.daum@gmail.com>",
   "license": "AGPL-3.0-only",

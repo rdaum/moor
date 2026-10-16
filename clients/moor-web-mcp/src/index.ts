@@ -11,67 +11,41 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <https://www.gnu.org/licenses/>.
 
-import readline from "node:readline";
-
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { loadConfig, resolveDefaultCharacter } from "./config.js";
 import { McpServer } from "./mcp-server.js";
 import { MoorWebClient } from "./moor-service.js";
 
-function parseArgs(argv: string[]): { configPath: string } {
-    let configPath = "";
-    for (let i = 0; i < argv.length; i++) {
-        if ((argv[i] === "--config" || argv[i] === "-c") && argv[i + 1]) {
-            configPath = argv[i + 1];
-            i++;
-        }
-    }
-    if (!configPath) {
+async function main(): Promise<void> {
+    const args = process.argv.slice(2);
+    if (args.length !== 2 || !["--config", "-c"].includes(args[0])) {
         throw new Error("Usage: moor-web-mcp --config <config.json>");
     }
-    return { configPath };
-}
-
-async function main(): Promise<void> {
-    const args = parseArgs(process.argv.slice(2));
-    const config = loadConfig(args.configPath);
-    const defaultCharacter = resolveDefaultCharacter(config);
+    const config = loadConfig(args[1]);
     const moor = new MoorWebClient(config);
-    const server = new McpServer(moor, config.moos, defaultCharacter);
-
-    const rl = readline.createInterface({
-        input: process.stdin,
-        crlfDelay: Infinity,
-    });
-
-    rl.on("line", async (line) => {
-        await server.handleLine(line, (outLine) => {
-            process.stdout.write(`${outLine}\n`);
-        });
-    });
-
+    const handle = serveStdio(() => {
+        const server = new McpServer(moor, config.moos, resolveDefaultCharacter(config));
+        server.onclose = () => {
+            void moor.close();
+        };
+        return server;
+    }, { onerror: error => console.error(error.message) });
     const shutdown = async () => {
-        rl.close();
+        await handle.close();
         await moor.close();
-        process.exit(0);
     };
-
-    process.on("SIGINT", () => {
+    process.once("SIGINT", () => {
         void shutdown();
     });
-    process.on("SIGTERM", () => {
+    process.once("SIGTERM", () => {
         void shutdown();
     });
-
-    process.on("uncaughtException", (error: unknown) => {
-        const formatted = error instanceof Error ? (error.stack ?? error.message) : String(error);
-        process.stderr.write(`uncaughtException: ${formatted}\n`);
-    });
-    process.on("unhandledRejection", (reason: unknown) => {
-        process.stderr.write(`unhandledRejection: ${String(reason)}\n`);
+    process.stdin.once("end", () => {
+        void shutdown();
     });
 }
 
-void main().catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
-    process.exit(1);
+void main().catch(error => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
 });

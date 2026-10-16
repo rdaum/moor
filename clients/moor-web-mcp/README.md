@@ -8,6 +8,7 @@ Create a JSON config file:
 
 ```json
 {
+  "timeoutMs": 30000,
   "defaultMoo": "local-dev",
   "defaultCharacter": "programmer",
   "moos": [
@@ -39,7 +40,8 @@ Create a JSON config file:
 ## Run
 
 ```bash
-npm run build --prefix clients/moor-web-mcp
+npm run web:prepare
+npm run web-mcp:build
 node clients/moor-web-mcp/dist/index.js --config /path/to/moor-web-mcp.json
 ```
 
@@ -53,8 +55,11 @@ Read the `moor://changes-guide` resource for the review workflow. Dynamic tool r
 `structuredContent` and the same JSON in text. Preserve returned review generations, cursors, and
 prepared handles. After a lost reply, read status before repeating a write.
 
-The catalog and guide come from the default configured character's world. Refresh the catalog with
-`moo_refresh_dynamic_tools` after changing the core. See the
+Tool and resource catalogs are cached per world and account. Calls select their catalog through
+`moo` and `character`; omitted values use the configured defaults. `wizard: true` requires a
+configured wizard account. Refresh the selected catalog with `moo_refresh_dynamic_tools` after
+changing the core. Resource lists include world and account URIs. Short guide URIs refer to the
+default account. See the
 [administrator workflow](../../book/src/the-system/object-loading.md#review-updates-with-an-agent)
 for decisions, permissions, and recovery.
 
@@ -76,3 +81,34 @@ The
 run web MCP against isolated HTTP and Git sources. The tests include shared LLM tools, saved drafts,
 additions, restart, permission loss, and recovery after a lost reply. They require no paid model
 access.
+
+## Errors and deadlines
+
+The bridge uses the MCP SDK for stdio transport, initialization, and cancellation. Tool execution
+and argument errors return `isError: true`. Unknown tools return a protocol error.
+
+HTTP requests and commands use `timeoutMs`, which defaults to 30 seconds. Commands on one account
+run in order and wait for task completion. A timeout, cancellation, or disconnection can leave an
+unknown outcome. The bridge closes that command connection and does not repeat the operation. Check
+world state before retrying a write. Commands that request interactive input need a MOO client.
+
+The `moor://moos` resource exposes account metadata without passwords. Protect the configuration
+file: it contains the credentials used for every operation.
+
+## Tests
+
+Run from the repository root:
+
+```bash
+npm run test:mcp
+npm run test:mcp:integration
+```
+
+The fast suite uses an MCP client, local HTTP and WebSocket servers, and isolated catalog fixtures.
+It covers account routing, resource isolation, errors, authentication, cancellation, and command
+completion. CI runs this suite.
+
+The integration command builds the bridge and required Rust services. It starts fresh Cowbell worlds
+and drives the built stdio executable through the MCP SDK client. Coverage includes static
+programming tools, the shared LLM registry, and change management over HTTP and Git. It uses local
+sources and requires no model API key.

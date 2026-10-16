@@ -37,6 +37,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated rustls to 0.23.46 to address four upstream TLS security advisories.
 
+- Web-host returns HTTP 422 for rejected verb source, 403 for programming permission errors, and 404
+  for missing verbs. JSON and FlatBuffer responses retain compiler diagnostics. Meadow displays
+  those diagnostics on error responses.
+
+- Web MCP omits account passwords from resources and isolates tool catalogs by world and account.
+  Tool failures are reported as errors. Commands wait for completion and report uncertain outcomes
+  after timeout or disconnection instead of reporting success.
+
 - Removed the native `moor-mcp-host` binary. MCP clients use `moor-web-mcp` through web-host with
   configured MOO accounts.
 

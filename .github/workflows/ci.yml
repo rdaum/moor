@@ -118,6 +118,9 @@ jobs:
           npm run web:build
           npm run web-mcp:build
 
+      - name: Test MCP bridge
+        run: npm test --workspace @moor/web-mcp
+
       - name: Check Meadow bundle budgets
         run: |
           npm run test:bundle --workspace meadow
