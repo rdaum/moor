@@ -77,7 +77,7 @@ object AGENT_BUILDING_TOOLS [
       add_property(target, "agent_building_private_probe", "secret", {$hacker, ""});
       add_verb(target, {$hacker, "xd", "agent_building_private_verb"}, {"this", "none", "this"});
       set_verb_code(target, "agent_building_private_verb", {"return \"secret\";"});
-      for entry in ({{"get_property", ["object" -> target, "property" -> "agent_building_private_probe"]}, {"get_verb_code", ["object" -> target, "verb" -> "agent_building_private_verb"]}, {"list_verbs", ["object" -> target]}})
+      for entry in ({{"get_property", ["object" -> target, "property" -> "agent_building_private_probe"]}, {"get_verb_code", ["object" -> target, "verb" -> "agent_building_private_verb"]}, {"list_verbs", ["object" -> target]}, {"list_properties", ["object" -> target]}})
         const {endpoint, values} = entry;
         let denied = false;
         try
@@ -102,6 +102,7 @@ object AGENT_BUILDING_TOOLS [
     let route = 0;
     let updated_passage = 0;
     const area = $area:create(true);
+    const other_area = $area:create(true);
     const r1 = $room:create(true);
     const r2 = $room:create(true);
     const actor = $root:create(true);
@@ -131,15 +132,24 @@ object AGENT_BUILDING_TOOLS [
       $test_utils:assert_true(index(map, "Current Location: Tool Test Start") > 0, "area_map should include current room name: " + toliteral(map));
       $test_utils:assert_true(index(map, "Area: Tool Test Area") > 0, "area_map should include area name");
       $test_utils:assert_true(index(map, "Tool Test End") > 0, "area_map should include rooms in area");
-      route = $llm_inspection_tools:find_route(["from_room" -> r1, "to_room" -> r2], actor);
+      move(r2, other_area);
+      route = $llm_inspection_tools:mcp_find_route(["to_room" -> "Tool Test End"], actor);
       $test_utils:assert_true(index(route, "Route from Tool Test Start") > 0, "find_route should include start room name");
       $test_utils:assert_true(index(route, "Go east to Tool Test End") > 0, "find_route should include passage label and destination");
+      route = $llm_inspection_tools:mcp_find_route(
+        ["from_room" -> "Tool Test End", "to_room" -> "Tool Test Start"], actor);
+      $test_utils:assert_true(index(route, "Go west to Tool Test Start") > 0,
+        "Named starting rooms resolve across areas");
+      route = $llm_inspection_tools:find_route(["from_room" -> r2, "to_room" -> r1], actor);
+      $test_utils:assert_true(index(route, "Go west to Tool Test Start") > 0,
+        "Explicit starting objects are not replaced by the actor's location");
       details = $llm_inspection_tools:inspect_object(["object" -> r1], actor);
       $test_utils:assert_true(index(details, "Exits: east") > 0, "inspect_object should include real passage labels");
     finally
       $test_utils:destroy_if_valid(actor);
       $test_utils:destroy_if_valid(r2);
       $test_utils:destroy_if_valid(r1);
+      $test_utils:destroy_if_valid(other_area);
       $test_utils:destroy_if_valid(area);
     endtry
     return true;

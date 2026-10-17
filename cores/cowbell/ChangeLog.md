@@ -207,6 +207,14 @@ Cowbell entries.
 
 ### Fixed
 
+- The shared LLM/MCP `grant_capability` tool converts JSON permission names into symbols correctly.
+  LLM documentation lookup recognizes the bare `sub` and `sub_utils` aliases.
+
+- Compass and MCP route tools resolve room names across connected areas and distinguish missing
+  rooms from rooms with no open route. Explicit starting objects are respected.
+- LLM property inspection handles symbol names and includes inherited properties with their current
+  values and defining objects. Unreadable values remain hidden.
+
 - LLM suggestions no longer lose replies or fallback messages when worker cleanup races with output
   delivery.
 

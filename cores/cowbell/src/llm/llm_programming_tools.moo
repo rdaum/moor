@@ -272,8 +272,8 @@ object LLM_PROGRAMMING_TOOLS [
     const grantee = this:_resolve_object(request["grantee"], actor);
     valid(target) && valid(grantee) || raise(E_INVARG);
     actor == target.owner || actor.wizard || raise(E_PERM);
-    const category = request["category"]:to_symbol();
-    const permissions = {p:to_symbol() for p in (request["permissions"])};
+    const category = tosym(request["category"]);
+    const permissions = {tosym(p) for p in (request["permissions"])};
     const approval = this:_approve(actor, 'grant_capability, target, 'object, "", request);
     typeof(approval) == TYPE_BOOL && approval || return approval;
     $root:grant_capability(target, permissions, grantee, category);
@@ -315,6 +315,29 @@ object LLM_PROGRAMMING_TOOLS [
     finally
       recycle(foreign);
       recycle(owned);
+    endtry
+    return true;
+  endmethod
+
+  method test_grant_capability_tool owner: ARCH_WIZARD
+    "JSON permission names grant usable room access only with the owner's authority.";
+    const actor = $hacker;
+    const recipient = $test_player;
+    const target = create($room, actor, 2);
+    const request = ["target" -> tostr(target), "category" -> "room",
+      "permissions" -> {"dig_from"}, "grantee" -> tostr(recipient)];
+    try
+      $test_utils:assert_raises(E_PERM, this, "mcp_grant_capability", {request, recipient},
+        "A non-owner cannot issue the grant");
+      this:mcp_grant_capability(generate_json(request), actor);
+      const capability = recipient:find_capability_for(target, 'room);
+      $test_utils:assert_type(capability, TYPE_FLYWEIGHT, "The recipient receives a capability");
+      capability:challenge_for('dig_from);
+      $test_utils:assert_raises(E_PERM, capability, "challenge_for", {'dig_into},
+        "The grant does not include other permissions");
+    finally
+      $root:revoke_capability(target, recipient, 'room);
+      $test_utils:destroy_if_valid(target);
     endtry
     return true;
   endmethod

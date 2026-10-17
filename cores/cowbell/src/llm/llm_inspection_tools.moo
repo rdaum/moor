@@ -15,7 +15,7 @@ object LLM_INSPECTION_TOOLS [
     let tools = {};
     tools = {@tools, $llm_agent_tool:mk("list_verbs", "List verbs on an object.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object to list verbs from"]], "required" -> {"object"}], target_obj, "list_verbs", 'inspection)};
     tools = {@tools, $llm_agent_tool:mk("get_verb_code", "Get source code of a verb.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object containing verb"], "verb" -> ["type" -> "string", "description" -> "Verb name"]], "required" -> {"object", "verb"}], target_obj, "get_verb_code", 'inspection)};
-    tools = {@tools, $llm_agent_tool:mk("list_properties", "List properties on an object.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object"]], "required" -> {"object"}], target_obj, "list_properties", 'inspection)};
+    tools = {@tools, $llm_agent_tool:mk("list_properties", "List local and inherited properties with their current values and defining objects.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object"]], "required" -> {"object"}], target_obj, "list_properties", 'inspection)};
     tools = {@tools, $llm_agent_tool:mk("get_property", "Get a property value.", ["type" -> "object", "properties" -> ["object" -> ["type" -> "string", "description" -> "Object"], "property" -> ["type" -> "string", "description" -> "Property name"]], "required" -> {"object", "property"}], target_obj, "get_property", 'inspection)};
     tools = {@tools, $llm_agent_tool:mk("audit_owned", "List all objects owned by the actor.", ["type" -> "object", "properties" -> [], "required" -> {}], target_obj, "audit_owned", 'inspection)};
     tools = {@tools, $llm_agent_tool:mk("area_map", "Get a list of all rooms in the current area. Use this to see what locations already exist and understand the spatial layout.", ["type" -> "object", "properties" -> [], "required" -> {}], target_obj, "area_map", 'inspection)};
@@ -87,66 +87,60 @@ object LLM_INSPECTION_TOOLS [
     return result:join("\n");
   endmethod
 
-  method find_route owner: ARCH_WIZARD
-    "Tool: Find route between two rooms";
-    let connector = 0;
-    let direction = 0;
-    let from_name = 0;
-    let from_room = 0;
-    let from_spec = 0;
-    let label = 0;
-    let next_name = 0;
-    let next_room = 0;
-    let room = 0;
-    let side_a_room = 0;
-    let side_b_room = 0;
-    let to_name = 0;
-    let to_room = 0;
-    let to_spec = 0;
-    const {args_map, actor} = args;
+  method _resolve_room owner: ARCH_WIZARD
+    "Resolve a room reference using the actor's authority and the navigation graph.";
+    const {spec, actor, origin} = args;
     $llm_tool_provider:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
-    {to_spec, from_spec} = {args_map["to_room"], maphaskey(args_map, "from_room") ? args_map["from_room"] | ""};
-    set_task_perms(actor);
-    "Resolve from_room - may be object, string, or empty";
-    if (!from_spec || from_spec == "")
-      from_room = actor.location;
-    elseif (typeof(from_spec) == TYPE_OBJ)
-      from_room = from_spec;
-    else
-      from_room = $match:match_object(from_spec, actor);
-    endif
-    typeof(from_room) == TYPE_OBJ || raise(E_INVARG, "Error: Could not find starting room '" + tostr(from_spec) + "'.");
-    !valid(from_room) && raise(E_INVARG, "Error: You are not in a room.");
-    const area = from_room.location;
-    !valid(area) && raise(E_INVARG, "Error: Starting room is not in an area.");
-    "Resolve to_room - may be object or string";
-    if (typeof(to_spec) == TYPE_OBJ)
-      to_room = to_spec;
-    else
-      to_room = $match:match_object(to_spec, actor);
-    endif
-    typeof(to_room) == TYPE_OBJ || raise(E_INVARG, "Error: Could not find destination room '" + tostr(to_spec) + "'.");
-    !valid(to_room) && raise(E_INVARG, "Error: Destination room does not exist.");
-    {from_name, to_name} = {from_room:name(), to_room:name()};
-    to_room == from_room && return "You are already at " + to_name + "!";
-    const path = area:find_path(from_room, to_room, true, true, actor);
-    !path && return "No route found from " + from_name + " to " + to_name + ".";
-    let result = {"Route from " + from_name + " (" + tostr(from_room) + ") to " + to_name + " (" + tostr(to_room) + "):"};
-    for i in [1..length(path) - 1]
-      {room, connector} = path[i];
-      next_room = path[i + 1][1];
-      next_name = next_room:name();
-      "Check if this is a transport connection or a passage";
-      if (typeof(connector) == TYPE_LIST && length(connector) >= 1 && connector[1] == 'transport)
-        "Transport connection: {'transport, label, transport_obj}";
-        label = connector[2];
-        result = {@result, "  " + tostr(i) + ". At " + room:name() + ", use " + connector[4] + " (" + label + ")"};
+    let room = spec;
+    if (typeof(spec) != TYPE_OBJ)
+      typeof(spec) == TYPE_STR || raise(E_TYPE, "Expected a room name or object number.");
+      const reference = spec:reference_text();
+      reference != "" || raise(E_INVARG, "A room reference is required.");
+      if (reference[1] in {"#", "$", "@"} || reference in {"here", "me", "player"})
+        room = $match:match_object(reference, actor);
       else
-        "Passage flyweight - extract direction label";
-        {side_a_room, side_b_room} = {connector.side_a_room, connector.side_b_room};
-        direction = room == side_a_room ? connector.side_a_label | room == side_b_room ? connector.side_b_label | "passage";
-        result = {@result, "  " + tostr(i) + ". Go " + direction + " to " + next_name + " (" + tostr(next_room) + ")"};
+        valid(origin) && isa(origin, $room) || raise(E_INVARG, "You are not in a room.");
+        let scope = $area:rooms_from(origin, false);
+        const area = origin.location;
+        if (valid(area) && isa(area, $area))
+          scope = {@scope, @{candidate for candidate in (area.contents) if (isa(candidate, $room))}};
+        endif
+        room = $match:require_unique(reference,
+          $match:candidates_in_scope(reference, scope, ['context -> actor]), "room");
+      endif
+    endif
+    valid(room) && isa(room, $room) || raise(E_INVARG, "Reference is not a room.");
+    return room;
+  endmethod
+
+  method find_route owner: ARCH_WIZARD
+    "Find directions between named rooms or explicit references as the authenticated actor.";
+    const {request, actor} = args;
+    $llm_tool_provider:_require_tool_dispatch(actor, caller_perms());
+    set_task_perms(actor);
+    const from_spec = `request["from_room"] ! E_RANGE => ""';
+    const from_room = this:_resolve_room(from_spec == "" ? actor.location | from_spec,
+      actor, actor.location);
+    const to_room = this:_resolve_room(request["to_room"], actor, from_room);
+    const from_name = from_room:name();
+    const to_name = to_room:name();
+    to_room == from_room && return "You are already at " + to_name + "!";
+    const path = $area:find_path(from_room, to_room, true, true, actor);
+    !path && return "No route found from " + from_name + " to " + to_name + ".";
+    let result = {"Route from " + from_name + " (" + tostr(from_room) + ") to " + to_name
+      + " (" + tostr(to_room) + "):"};
+    for i in [1..length(path) - 1]
+      const {room, connector} = path[i];
+      const next_room = path[i + 1][1];
+      if (typeof(connector) == TYPE_LIST && connector[1] == 'transport)
+        result = {@result, "  " + tostr(i) + ". At " + room:name() + ", use "
+          + connector[4] + " (" + connector[2] + ")"};
+      else
+        const direction = room == connector.side_a_room
+          ? connector.side_a_label | connector.side_b_label;
+        result = {@result, "  " + tostr(i) + ". Go " + direction + " to " + next_room:name()
+          + " (" + tostr(next_room) + ")"};
       endif
     endfor
     return result:join("\n");
@@ -257,34 +251,33 @@ object LLM_INSPECTION_TOOLS [
   endmethod
 
   method list_properties owner: ARCH_WIZARD
-    "Tool: List properties on an object.";
-    let val = 0;
-    let val_str = 0;
-    const {args_map, actor} = args;
+    "List local and inherited properties with the target's values under the actor's permissions.";
+    const {request, actor} = args;
     $llm_tool_provider:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
-    const target_obj = this:_resolve_object(args_map["object"], actor);
-    typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
-    valid(target_obj) || raise(E_INVARG, "Object no longer exists");
-    const prop_list = properties(target_obj);
-    if (length(prop_list) == 0)
-      return "No properties defined on " + tostr(target_obj);
-    endif
-    set_task_perms(actor);
-    let result = "Properties on " + tostr(target_obj) + ":\n";
-    for p in (prop_list)
-      try
-        val = target_obj.(p);
-        val_str = toliteral(val);
-        if (length(val_str) > 50)
-          val_str = val_str[1..50] + "...";
-        endif
-      except (ANY)
-        val_str = "(unreadable)";
-      endtry
-      result = result + "  " + p + " = " + val_str + "\n";
+    const target = this:_resolve_object(request["object"], actor);
+    valid(target) || raise(E_INVARG, "Object no longer exists.");
+    let result = {"Properties on " + tostr(target) + " (including inherited):"};
+    for definer in ({target, @ancestors(target)})
+      const names = properties(definer);
+      if (!names)
+        continue;
+      endif
+      result = {@result, "Defined on " + tostr(definer) + ":"};
+      for name in (names)
+        let value = "";
+        try
+          value = toliteral(target.(name));
+          if (length(value) > 50)
+            value = value[1..50] + "...";
+          endif
+        except (E_PERM)
+          value = "(unreadable)";
+        endtry
+        result = {@result, "  " + tostr(name) + " = " + value};
+      endfor
     endfor
-    return result;
+    return result:join("\n");
   endmethod
 
   method get_property owner: ARCH_WIZARD
@@ -419,6 +412,32 @@ object LLM_INSPECTION_TOOLS [
     $llm_tool_provider:_require_tool_dispatch(actor, caller_perms());
     set_task_perms(actor);
     return $llm_verb_source:metadata(actor, request["object"], request["verb"]):metadata_text();
+  endmethod
+
+  method test_list_properties owner: ARCH_WIZARD
+    "List local and inherited symbols, child values, and unreadable values as the actor.";
+    const prototype = create($thing, $hacker, 2);
+    let target = #-1;
+    try
+      prototype.r = 1;
+      add_property(prototype, "inherited_probe", "parent value", {$hacker, "r"});
+      add_property(prototype, "private_probe", "private value", {$hacker, ""});
+      target = create(prototype, $hacker, 2);
+      target.r = 1;
+      target.inherited_probe = "child value";
+      add_property(target, "local_probe", 42, {$hacker, "r"});
+      const listing = this:mcp_list_properties(["object" -> tostr(target)], $test_player);
+      $test_utils:assert_true(index(listing, "local_probe = 42") > 0, "Local symbol names render");
+      $test_utils:assert_true(index(listing, "inherited_probe = \"child value\"") > 0,
+        "Inherited properties use the target's value");
+      $test_utils:assert_true(index(listing, "private_probe = (unreadable)") > 0,
+        "Private inherited values stay unreadable");
+      $test_utils:assert_eq(index(listing, "private value"), 0, "Private values are not disclosed");
+    finally
+      $test_utils:destroy_if_valid(target);
+      $test_utils:destroy_if_valid(prototype);
+    endtry
+    return true;
   endmethod
 
 endobject

@@ -43,7 +43,7 @@ object LLM_HELP_TOOLS [
       alias_name == "sub_utils" && (alias_obj = $sub_utils);
       alias_name == "sub" && (alias_obj = $sub);
     endif
-    if (alias_obj)
+    if (typeof(alias_obj) == TYPE_OBJ && valid(alias_obj))
       type = 'object;
       target_obj = alias_obj;
       item_name = "";
@@ -185,6 +185,16 @@ object LLM_HELP_TOOLS [
       endif
     endfor
     return "No help found for: " + topic;
+  endmethod
+
+  method test_doc_lookup_aliases owner: ARCH_WIZARD
+    "Bare substitution aliases select the same documentation as explicit system references.";
+    for name in ({"sub_utils", "sub"})
+      const explicit = this:mcp_doc_lookup(["target" -> "$" + name], $test_player);
+      const alias = this:mcp_doc_lookup(["target" -> name], $test_player);
+      $test_utils:assert_eq(alias, explicit, "Alias resolves to its documented object");
+    endfor
+    return true;
   endmethod
 
 endobject
