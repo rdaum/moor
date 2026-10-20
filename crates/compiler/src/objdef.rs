@@ -860,6 +860,40 @@ mod tests {
     }
 
     /// Regression on quoted string constants for property names
+    /// A body line whose first bytes hold a multi-byte character where the end
+    /// keyword's length would fall must not panic the end-keyword probe.
+    #[test]
+    fn test_multibyte_char_at_body_line_start() {
+        let spec = r#"
+                object #1
+                    parent: #1
+                    name: "Test Object"
+                    location: #3
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    verb "v" (any any any) owner: #184 flags: "rd"
+                        "abcde§";
+                        return 5;
+                    endverb
+
+                    method m owner: #184
+                        "abcdefgh§";
+                        return 5;
+                    endmethod
+                endobject"#;
+        let objs = compile_object_definitions(
+            spec,
+            &CompileOptions::default(),
+            &mut ObjFileContext::new(),
+        )
+        .unwrap();
+        assert_eq!(objs[0].verbs.len(), 2);
+    }
+
     #[test]
     fn test_quoted_string_propname() {
         let spec = r#"object #1

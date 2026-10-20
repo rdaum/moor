@@ -1264,8 +1264,11 @@ impl<'a> LiteralParser<'a> {
                         break;
                     }
                 }
-                if self.source[probe..].len() >= end_kw_len
-                    && self.source[probe..][..end_kw_len].eq_ignore_ascii_case(end_keyword)
+                // Compare bytes, not a `str` slice: the line may hold a multi-byte
+                // character that straddles `end_kw_len`, which isn't a char boundary.
+                let rest = &self.source.as_bytes()[probe..];
+                if rest.len() >= end_kw_len
+                    && rest[..end_kw_len].eq_ignore_ascii_case(end_keyword.as_bytes())
                 {
                     let next = self.source[probe + end_kw_len..].chars().next();
                     if !matches!(next, Some(c) if c == '_' || c.is_ascii_alphanumeric()) {
