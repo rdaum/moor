@@ -373,6 +373,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Telnet Djot output preserves ordered-list starting numbers, table alignment and captions, nested
+  definitions, and footnote labels. Screen-reader mode suppresses generated ANSI styling and MOO
+  highlighting. Highlighted MOO code preserves Unicode text and blank lines.
+
 - Resumed tasks preserve delivered values and errors across transaction retries. This prevents
   `read()` input and worker responses from reverting to their pre-wait placeholders.
 

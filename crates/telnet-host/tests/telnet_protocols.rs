@@ -518,6 +518,7 @@ protocols:
   eor: true
   charset: true
   mccp2: true
+  mxp: true
   client_data_rate: 0
   mssp_values:
     NAME: TestMOO
@@ -674,6 +675,64 @@ const PROMPT: &str = r#"notify(connection(), "HP> ", 0, 1, 'text_plain, ["prompt
 
 fn text(s: &str) -> Ev {
     Ev::Text(s.as_bytes().to_vec())
+}
+
+/// Exercise the daemon notification path, session options, renderer, and wire codec together.
+#[test]
+#[serial(telnet_protocols)]
+fn djot_rendering_with_moo_highlighting_and_mxp() {
+    fn render(client: &mut Client, lines: &[&str]) -> String {
+        let source = lines
+            .iter()
+            .map(|line| serde_json::to_string(line).unwrap())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let events = client.run(&format!(
+            "notify(connection(), {{{source}}}, 0, 0, 'text_djot);"
+        ));
+        String::from_utf8(text_of(&events)).unwrap()
+    }
+
+    let f = fixture();
+    let mut c = Client::connect(f.full);
+    c.login();
+    let ansi = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+
+    let code = render(&mut c, &["```MoO", "return 42;", "```"]);
+    assert!(code.contains("\x1b["), "missing MOO highlighting: {code:?}");
+    assert_eq!(ansi.replace_all(&code, ""), "return 42;\r\n");
+    let fallback = render(&mut c, &["```rust", "let x = 1;", "```"]);
+    assert_eq!(ansi.replace_all(&fallback, ""), "[rust]\r\nlet x = 1;\r\n");
+
+    let ordered = render(&mut c, &["3. third", "4. fourth"]);
+    let ordered = ansi.replace_all(&ordered, "");
+    assert!(ordered.contains("3. third"), "{ordered:?}");
+    assert!(ordered.contains("4. fourth"), "{ordered:?}");
+
+    c.line(".A11Y");
+    c.expect_text_contains(b"Screen reader mode is now on\r\n");
+    assert_eq!(
+        render(
+            &mut c,
+            &["| Name | Role |", "|---|---|", "| Alice | *Builder* |"]
+        ),
+        "Row 1: Name: Alice; Role: Builder\r\n"
+    );
+    assert_eq!(
+        render(&mut c, &["```moo", "return 42;", "```"]),
+        "[moo]\r\nreturn 42;\r\n"
+    );
+
+    const MXP: u8 = 91;
+    c.do_(MXP);
+    let negotiation = c.expect_text_contains(b"\x1b[7z");
+    assert!(negotiation.contains(&Ev::Negotiate(WILL, MXP)));
+    assert!(negotiation.contains(&Ev::Subneg(MXP, vec![])));
+    wait_options(&mut c, &["{'mxp, true}"]);
+    assert_eq!(
+        render(&mut c, &["[look](moo://cmd/look) & <world>"]),
+        "\x1b[1z<SEND href=\"look\">look</SEND> &amp; &lt;world&gt;\r\n"
+    );
 }
 
 fn gmcp_ev(message: &str) -> Ev {

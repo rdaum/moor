@@ -16,6 +16,17 @@
 use colored::{Color, Colorize};
 use std::sync::LazyLock;
 
+/// Application-provided highlighting for MOO fences in termjot documents.
+pub(super) struct MooHighlighter;
+
+impl termjot::SyntaxHighlighter for MooHighlighter {
+    fn highlight(&self, language: &str, code: &str) -> Option<String> {
+        language
+            .eq_ignore_ascii_case("moo")
+            .then(|| highlight_moo(code))
+    }
+}
+
 /// Token types for MOO syntax
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TokenType {
@@ -88,33 +99,30 @@ pub fn highlight_moo(code: &str) -> String {
     let mut output = String::new();
     let mut in_block_comment = false;
 
-    for line in code.lines() {
-        if !output.is_empty() {
+    for (line_number, line) in code.split('\n').enumerate() {
+        if line_number > 0 {
             output.push('\n');
         }
 
         let mut pos = 0;
-        let chars: Vec<char> = line.chars().collect();
-
-        while pos < chars.len() {
-            let remaining: String = chars[pos..].iter().collect();
+        while pos < line.len() {
+            let remaining = &line[pos..];
 
             // Handle block comment continuation
             if in_block_comment {
                 if let Some(end_pos) = remaining.find("*/") {
-                    let comment_text: String = chars[pos..pos + end_pos + 2].iter().collect();
-                    output.push_str(&colorize(&comment_text, TokenType::Comment));
+                    output.push_str(&colorize(&remaining[..end_pos + 2], TokenType::Comment));
                     pos += end_pos + 2;
                     in_block_comment = false;
                 } else {
-                    output.push_str(&colorize(&remaining, TokenType::Comment));
+                    output.push_str(&colorize(remaining, TokenType::Comment));
                     break;
                 }
                 continue;
             }
 
             // Try to match tokens
-            if let Some(token) = try_match_token(&remaining) {
+            if let Some(token) = try_match_token(remaining) {
                 output.push_str(&colorize(token.text, token.token_type));
                 pos += token.text.len();
 
@@ -127,8 +135,9 @@ pub fn highlight_moo(code: &str) -> String {
                 }
             } else {
                 // No match - output single character
-                output.push(chars[pos]);
-                pos += 1;
+                let ch = remaining.chars().next().unwrap();
+                output.push(ch);
+                pos += ch.len_utf8();
             }
         }
     }
@@ -310,6 +319,19 @@ fn colorize(text: &str, token_type: TokenType) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn termjot_highlighter_preserves_unicode_and_blank_lines() {
+        use termjot::SyntaxHighlighter;
+
+        colored::control::set_override(true);
+        let source = "\n\nreturn \"café\"; /* é\né */ return 42;\n\n";
+        let output = MooHighlighter.highlight("MoO", source).unwrap();
+        let ansi = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+        assert_eq!(ansi.replace_all(&output, ""), source);
+        assert!(MooHighlighter.highlight("rust", source).is_none());
+        assert!(MooHighlighter.highlight("", source).is_none());
+    }
 
     #[test]
     fn highlights_token_classes_without_changing_source() {

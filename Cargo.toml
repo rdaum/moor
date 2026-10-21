@@ -249,5 +249,4 @@ anstream = { version = "1.0", features = ["test"] }
 anstyle = "1.0"
 colored = "3.0"
 crossterm = "0.29"
-jotdown = { version = "0.10", default-features = false }
 rustyline = "18.0"

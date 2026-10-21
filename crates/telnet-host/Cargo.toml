@@ -70,12 +70,10 @@ tracing.workspace = true
 
 # Terminal & UI
 colored.workspace = true
-jotdown.workspace = true
 regex.workspace = true
-tabled.workspace = true
+termjot = { version = "0.1", features = ["mxp"] }
 
 # Utilities & Helpers
-urlencoding.workspace = true
 uuid.workspace = true
 
 # Testing
