@@ -4,6 +4,9 @@ unmaintained = "all"
 unsound = "all"
 unused-ignored-advisory = "deny"
 ignore = [
+    # Remove once i18n-config's replacement of basic-toml with toml is released
+    # and adopted by Age's translation macros.
+    { id = "RUSTSEC-2026-0374", reason = "Temporary exception: Age's translation macros use basic-toml through i18n-config to parse manifests at compile time; upstream has replaced it but has not published the fix" },
     # SSH-RSA exposure is documented in book/src/the-moo-programming-language/built-in-functions/crypto.md.
     # Revisit when patched versions or Age's RSA implementation change.
     { id = "RUSTSEC-2023-0071", reason = "Preserve Age SSH-RSA compatibility; secret-key decryption of untrusted ciphertext must not be exposed by MOO verbs" },
