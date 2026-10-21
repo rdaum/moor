@@ -137,7 +137,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 tower = "0.5"
 tower-http = { version = "0.7", features = ["cors"] }
 tower_governor = "0.8"
-webpki-roots = "1.0"
+webpki-roots = "1.0.10"
 webrtc = "0.17"
 
 # Async Runtime & Concurrency

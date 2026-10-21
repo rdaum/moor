@@ -373,6 +373,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Updated TLS certificate verification and bundled roots to reject distrusted emSign intermediates
+  whose private keys are publicly known (RUSTSEC-2026-0381, RUSTSEC-2026-0382, and
+  RUSTSEC-2026-0383).
+
 - Telnet Djot output preserves ordered-list starting numbers, table alignment and captions, nested
   definitions, and footnote labels. Screen-reader mode suppresses generated ANSI styling and MOO
   highlighting. Highlighted MOO code preserves Unicode text and blank lines.
