@@ -25,6 +25,10 @@ Cowbell entries.
 - Every player can use `@describe me as TEXT` to describe themselves. Builders keep the same command
   for objects and exits.
 
+- Room listings with more than eight people name the first five and count the rest, for example
+  "Ada, Bert, Cy, Di, Ed and 41 others are deeply asleep." `$look.actor_listing_limit` and
+  `$look.actor_listing_shown` set the limits.
+
 - `@llm-config setup` prompts for a provider URL, model, and API key, then configures shared access
   for Mr. Welcome, wearables, and assistance. `scripts/dev.sh` performs this setup with OpenRouter
   and `deepseek/deepseek-v4.1-flash` when `OPENROUTER_KEY` or `OPENROUTER_API_KEY` is set, and

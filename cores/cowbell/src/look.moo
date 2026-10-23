@@ -5,6 +5,9 @@ object LOOK [
   parent: ROOT
   owner: HACKER
 
+  property actor_listing_limit (owner: HACKER, flags: "rc") = 8;
+  property actor_listing_shown (owner: HACKER, flags: "rc") = 5;
+
   override description (owner: HACKER, flags: "rc") = "Look inputs capture one viewer's document and references before narrative or panel layout.";
 
   method mk owner: ARCH_WIZARD
@@ -257,7 +260,13 @@ object LOOK [
         const ending = ((length(actors) > 1 || actors[1]['plural]) ? " are" | " is")
           + (sleeping ? " deeply asleep." | " here.");
         "Sleeping is already expressed by the sentence, so omit the status suffix.";
-        const labels = sleeping ? {sleeping_actor['bare] for sleeping_actor in (actors)} | actors;
+        let labels = sleeping ? {sleeping_actor['bare] for sleeping_actor in (actors)} | actors;
+        "A long list names the first few and counts the rest.";
+        if (length(labels) > $look.actor_listing_limit)
+          const shown = $look.actor_listing_shown;
+          const others = length(labels) - shown;
+          labels = {@labels[1..shown], ['content -> $format:literal_inline(tostr(others, " others"))]};
+        endif
         lines = {@lines, {
           @$document_resolver:_capitalize($look:_join(labels))[1],
           @$format:literal_inline(ending)}};

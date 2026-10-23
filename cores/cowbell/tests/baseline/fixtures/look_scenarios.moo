@@ -112,6 +112,38 @@ object LOOK_SCENARIOS
     return true;
   endmethod
 
+  method test_long_actor_lists_are_summarized owner: ARCH_WIZARD
+    "Past the listing limit a room names the first few actors and counts the rest.";
+    const room = create($room);
+    let actors = {};
+    try
+      room.name = "Crowded Hall";
+      for i in [1..10]
+        const actor = create($actor);
+        actor.name = "Guest" + tostr(i);
+        move(actor, room);
+        actors = {@actors, actor};
+      endfor
+      const view = room:look_self():capture(#90102);
+      const body = $document:render($look:narrative(view):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(body, " and 5 others are here."), "remaining actors are counted");
+      $test_utils:assert_eq(length({actor for actor in (actors) if (index(body, actor.name + " ") || index(body, actor.name + ","))}), 5,
+        "only the first five names are shown");
+      for actor in (actors[1..2])
+        recycle(actor);
+      endfor
+      actors = actors[3..$];
+      const short = $document:render($look:narrative(room:look_self():capture(#90102)):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(short, " are here.") && !index(short, "others"), "a list within the limit names everyone");
+    finally
+      for actor in (actors)
+        valid(actor) && recycle(actor);
+      endfor
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
   method test_capture_preserves_authority owner: ARCH_WIZARD
     "Public capture cannot elevate the caller through private description producers.";
     const room = create($room);
