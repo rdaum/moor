@@ -1,0 +1,31 @@
+// Interactive setup configures the shipped world without contacting a provider.
+@wizard
+>>
+>>
+>> fixture-key
+>> yes
+% @llm-config setup
+@text World LLM configured. Mr. Welcome, wearables, and assistance can use it.
+; return {$llm_client.api_endpoint, $llm_client.model, $llm_client.shared, $llm_client:is_configured(), $player.suggestions_llm_client == $llm_client, $mr_welcome.enabled};
+{"https://openrouter.ai/api/v1/chat/completions", "deepseek/deepseek-v4.1-flash", true, true, true, true}
+// Cancelling leaves the configured client untouched.
+>> http://127.0.0.1:9999/completions
+>> other-model
+>> other-key
+>> no
+% @llm-config setup
+@text LLM setup cancelled.
+; return {$llm_client.model, $llm_client.api_key == "fixture-key"};
+{"deepseek/deepseek-v4.1-flash", true}
+// The startup hook uses the same setup operation and can update an existing world.
+; #0:server_started(["llm" -> ["endpoint" -> "http://127.0.0.1:9999/completions", "model" -> "fixture-model", "key" -> "replacement-key"]]); return {$llm_client.model, $llm_client.api_key == "replacement-key", $llm_client.shared};
+{"fixture-model", true, true}
+// A running flag left by an interrupted turn does not block startup; Mr. Welcome keeps his client.
+; const agent = create($llm_agent); agent.client = #-1; agent.running = true; $mr_welcome.agent = agent; #0:server_started(["llm" -> ["endpoint" -> "http://127.0.0.1:9999/completions", "model" -> "running-model", "key" -> "running-key"]]); const result = {agent.client, $llm_client.model}; $mr_welcome.agent = #-1; recycle(agent); return result;
+{#-1, "running-model"}
+// Unknown sections and missing settings are rejected with a reason.
+; return {`#0:server_started(["lm" -> []]) ! E_INVARG => "unknown"', `#0:server_started(["llm" -> ["endpoint" -> "http://127.0.0.1:9999/completions"]]) ! E_INVARG => "missing"'};
+{"unknown", "missing"}
+@programmer
+; return `$llm_client:configure_world("http://127.0.0.1:9999/completions", "forged", "forged") ! E_PERM => true';
+true

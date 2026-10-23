@@ -10,8 +10,29 @@ Experimental RLM execution is removed.
 
 ## Configure model access
 
-Enable the curl worker in the server configuration. Set the client's endpoint and model from a
-trusted wizard session. For example:
+For native development, export `OPENROUTER_KEY` or `OPENROUTER_API_KEY` and run `scripts/dev.sh`.
+If both are set, `OPENROUTER_KEY` takes precedence. The launcher starts the
+curl worker and configures OpenRouter with `deepseek/deepseek-v4.1-flash`. It enables shared provider
+access, Mr. Welcome, and player assistance. Each launch with that variable reapplies the configuration
+to the selected database. Without the variable, the launcher leaves LLM configuration unchanged.
+If Mr. Welcome is running with a different client, he keeps that client; the rest of the setup
+still applies. Startup rejects unknown configuration sections and missing `llm` fields.
+
+For interactive setup, enable the curl worker and run this command as a wizard:
+
+```text
+@llm-config setup
+```
+
+Enter the completion URL, model, and API key. Blank URL and model answers use the displayed defaults.
+The key uses a password prompt; a blank answer keeps the current key. Confirm shared access to apply
+the configuration and enable Mr. Welcome, wearables, and assistance. Cancelling leaves the configuration
+unchanged. Setup does not send a model request.
+
+Use `@llm-config` to show the configuration without displaying the key. The `endpoint`, `model`, and
+`key` subcommands change individual settings.
+
+For a private client, configure its endpoint, model, key, and permitted actors separately. For example:
 
 ```moo
 $llm_client.api_endpoint = "https://openrouter.ai/api/v1/chat/completions";
@@ -22,7 +43,8 @@ Set a credential with `$llm_client:set_api_key(key)`. The key is a private prope
 Protect world databases and checkpoints that contain configured credentials. Do not put a real key
 in source files, test fixtures, prompts, or diagnostic output.
 
-Clients are private by default. The owner can authorize specific actors:
+Clients are private by default; world setup explicitly enables shared access. The owner can restrict
+use to specific actors:
 
 ```moo
 $llm_client:set_access(false, {#123, #456});

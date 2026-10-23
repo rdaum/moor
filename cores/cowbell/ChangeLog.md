@@ -17,6 +17,11 @@ Cowbell entries.
   Unicode text. Builder edits and LLM description tools use these checks. Existing stored values
   remain unchanged; raw programmer assignments can bypass core setters.
 
+- `@llm-config setup` prompts for a provider URL, model, and API key, then configures shared access
+  for Mr. Welcome, wearables, and assistance. `scripts/dev.sh` performs this setup with OpenRouter
+  and `deepseek/deepseek-v4.1-flash` when `OPENROUTER_KEY` or `OPENROUTER_API_KEY` is set, and
+  starts the curl worker.
+
 - Objects control noun phrases, grammar, and matching names through inherited verbs. `@grammar` lets
   builders inspect and edit articles, plural names, and room-listing preferences. Rooms, inventory,
   clothing, and stock messages share those choices. Articles work in commands and completion without

@@ -609,6 +609,7 @@ object WIZ_FEATURES [
   verb "@llm-config" (any none none) owner: ARCH_WIZARD flags: "rd"
     "View or configure LLM client settings (endpoint, model, key)";
     "Usage: @llm-config                  - show current settings";
+    "       @llm-config setup            - configure the shared world client";
     "       @llm-config endpoint <url>   - set API endpoint";
     "       @llm-config model <name>     - set default model";
     "       @llm-config key              - set API key (prompts securely)";
@@ -616,34 +617,63 @@ object WIZ_FEATURES [
     if (!player:has_admin_elevation())
       set_task_perms(player);
     endif
-    parts = argstr ? argstr:split(" ") | {};
-    cmd = length(parts) > 0 ? parts[1] | "";
+    const parts = argstr ? argstr:split(" ") | {};
+    const cmd = length(parts) > 0 ? parts[1] | "";
     if (cmd == "")
       "Show current configuration";
-      key_status = $llm_client:is_configured() ? "configured" | "NOT SET";
-      title = $format.title:mk("LLM Client Configuration");
-      rows = {{"Endpoint", $llm_client.api_endpoint}, {"Model", $llm_client.model}, {"API Key", key_status}};
-      table = $format.table:mk({"Setting", "Value"}, rows);
-      content = $format.block:mk(title, table);
+      const key_status = $llm_client:is_configured() ? "configured" | "NOT SET";
+      const title = $format.title:mk("LLM Client Configuration");
+      const rows = {{"Endpoint", tostr($llm_client.api_endpoint)}, {"Model", tostr($llm_client.model)}, {"API Key", key_status},
+        {"Shared world access", $llm_client.shared ? "enabled" | "disabled"},
+        {"Assistance", $player.suggestions_llm_client == $llm_client ? "enabled" | "disabled"}};
+      const table = $format.table:mk({"Setting", "Value"}, rows);
+      const content = $format.block:mk(title, table);
       player:inform_current($event:mk_info(player, content):with_audience('utility));
       return;
+    elseif (cmd == "setup")
+      player.wizard || raise(E_PERM, "World LLM setup requires a wizard.");
+      const endpoint_default = typeof($llm_client.api_endpoint) == TYPE_STR && $llm_client.api_endpoint != ""
+        ? $llm_client.api_endpoint | "https://openrouter.ai/api/v1/chat/completions";
+      const model_default = typeof($llm_client.model) == TYPE_STR && $llm_client.model != ""
+        ? $llm_client.model | "deepseek/deepseek-v4.1-flash";
+      let endpoint = player:read_with_prompt({{"prompt", "Completion URL [" + endpoint_default + "]:"}});
+      typeof(endpoint) == TYPE_STR || return;
+      endpoint == "" && (endpoint = endpoint_default);
+      let model = player:read_with_prompt({{"prompt", "Model [" + model_default + "]:"}});
+      typeof(model) == TYPE_STR || return;
+      model == "" && (model = model_default);
+      let key = player:read_with_prompt({{"input_type", "password"}, {"prompt", "API key (blank keeps the current key):"}});
+      typeof(key) == TYPE_STR || return;
+      const answer = player:read_with_prompt({{"prompt", "Enable this client for all players, NPCs, and assistance? [yes/no]"}});
+      if (typeof(answer) != TYPE_STR || answer:trim():lowercase() != "yes")
+        player:inform_current($event:mk_info(player, "LLM setup cancelled."));
+        return;
+      endif
+      // Input suspends; check current authority before reading or changing credentials.
+      player.wizard || raise(E_PERM, "World LLM setup requires a wizard.");
+      key == "" && (key = $llm_client.api_key);
+      if ($llm_client:configure_world(endpoint, model, key))
+        player:inform_current($event:mk_info(player, "World LLM configured. Mr. Welcome, wearables, and assistance can use it."));
+      else
+        player:inform_current($event:mk_info(player, "World LLM configured. Mr. Welcome is running and kept his current client; run setup again after he stops."));
+      endif
     elseif (cmd == "endpoint")
       length(parts) < 2 && raise(E_INVARG, "Usage: @llm-config endpoint <url>");
-      new_endpoint = parts[2..$]:join(" ");
+      const new_endpoint = parts[2..$]:join(" ");
       !new_endpoint:starts_with("http") && raise(E_INVARG, "Endpoint must be a valid URL");
-      old_endpoint = $llm_client.api_endpoint;
+      const old_endpoint = $llm_client.api_endpoint;
       $llm_client.api_endpoint = new_endpoint;
-      player:inform_current($event:mk_info(player, "LLM endpoint changed from " + old_endpoint + " to " + new_endpoint));
+      player:inform_current($event:mk_info(player, "LLM endpoint changed from " + tostr(old_endpoint) + " to " + new_endpoint));
     elseif (cmd == "model")
       length(parts) < 2 && raise(E_INVARG, "Usage: @llm-config model <name>");
-      new_model = parts[2..$]:join(" ");
-      old_model = $llm_client.model;
+      const new_model = parts[2..$]:join(" ");
+      const old_model = $llm_client.model;
       $llm_client.model = new_model;
-      player:inform_current($event:mk_info(player, "LLM model changed from " + old_model + " to " + new_model));
+      player:inform_current($event:mk_info(player, "LLM model changed from " + tostr(old_model) + " to " + new_model));
     elseif (cmd == "key")
       "Prompt for key securely";
-      metadata = {{"input_type", "password"}, {"prompt", "Enter API key:"}};
-      new_key = player:read_with_prompt(metadata);
+      const metadata = {{"input_type", "password"}, {"prompt", "Enter API key:"}};
+      const new_key = player:read_with_prompt(metadata);
       if (!new_key || new_key == "")
         player:inform_current($event:mk_error(player, "API key not changed."));
         return;
@@ -651,7 +681,7 @@ object WIZ_FEATURES [
       $llm_client:set_api_key(new_key);
       player:inform_current($event:mk_info(player, "LLM API key has been set."));
     else
-      raise(E_INVARG, "Unknown subcommand. Use: endpoint, model, or key");
+      raise(E_INVARG, "Unknown subcommand. Use: setup, endpoint, model, or key");
     endif
   endverb
 

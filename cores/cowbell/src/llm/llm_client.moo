@@ -15,6 +15,37 @@ object LLM_CLIENT [
 
   override description (owner: HACKER, flags: "rc") = "OpenAI-compatible LLM API client for chat completions using worker_request.";
 
+  method configure_world owner: ARCH_WIZARD
+    "Configure the shared world provider, assistance, and Mr. Welcome. Only wizards may call; no network requests are made.";
+    "Returns true when Mr. Welcome uses this client. A running Mr. Welcome keeps his client, so startup is not blocked.";
+    caller_perms().wizard && this == $llm_client || raise(E_PERM);
+    const {endpoint, model, key} = args;
+    typeof(endpoint) == TYPE_STR && length(endpoint) <= 4096
+      && (endpoint:starts_with("https://") || endpoint:starts_with("http://"))
+      || raise(E_INVARG, "Use an HTTP or HTTPS completion endpoint.");
+    typeof(model) == TYPE_STR && length(model) > 0 && length(model) <= 256
+      || raise(E_INVARG, "Enter a model name.");
+    typeof(key) == TYPE_STR && length(key) > 0 && length(key) <= 8192
+      || raise(E_INVARG, "Enter an API key.");
+    const agent = $mr_welcome.agent;
+    if (valid(agent) && agent.client != this)
+      "A running flag can outlive an interrupted turn; leave the client rather than block startup.";
+      if (agent.running)
+        server_log("configure_world: Mr. Welcome is running; his client is unchanged.");
+      else
+        agent.client = this;
+      endif
+    endif
+    this.api_endpoint = endpoint;
+    this.model = model;
+    this:set_api_key(key);
+    this:set_access(true);
+    $player.suggestions_llm_client = this;
+    $mr_welcome.enabled = true;
+    "False means Mr. Welcome kept a different client.";
+    return !valid(agent) || agent.client == this;
+  endmethod
+
   method chat owner: ARCH_WIZARD
     "Use the canonical provider with the incoming principal, without inherited credential authority.";
     set_task_perms(caller_perms());

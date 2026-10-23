@@ -492,6 +492,19 @@ object SYSOBJ [
     "Called on server start to kick off initial state after being out of existence for a bit...";
     "...This code should only be run as a server task, but we'll let wizards poke at it...";
     callers() && !caller_perms().wizard && return E_PERM;
+    const {?configuration = []} = args;
+    typeof(configuration) == TYPE_MAP || raise(E_TYPE);
+    for section in (mapkeys(configuration))
+      section == "llm" || raise(E_INVARG, "Unknown startup configuration section: " + toliteral(section));
+    endfor
+    if (maphaskey(configuration, "llm"))
+      const settings = configuration["llm"];
+      typeof(settings) == TYPE_MAP || raise(E_TYPE, "Startup llm settings must be an object.");
+      for field in ({"endpoint", "model", "key"})
+        maphaskey(settings, field) || raise(E_INVARG, "Startup llm settings need " + field + ".");
+      endfor
+      $llm_client:configure_world(settings["endpoint"], settings["model"], settings["key"]);
+    endif
     server_log("Core starting...");
     for object in (this.startup_hooks)
       object:initialize();
