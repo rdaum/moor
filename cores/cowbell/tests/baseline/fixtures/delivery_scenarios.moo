@@ -7,6 +7,23 @@ object DELIVERY_SCENARIOS
   property encodes (owner: ARCH_WIZARD, flags: "rw") = 0;
   property renders (owner: ARCH_WIZARD, flags: "rw") = 0;
 
+  method test_offline_room_snapshot_skips_content owner: ARCH_WIZARD
+    "A live room panel has no recipient when the player has no attached connections.";
+    const receiver = #90102;
+    $test_utils:assert_eq(`connections(receiver) ! E_INVARG => {}', {}, "fixture player is disconnected");
+    add_verb(receiver, {$arch_wizard, "rxd", "_capture_room"}, {"this", "none", "this"});
+    set_verb_code(receiver, "_capture_room", {"raise(E_ASSERT, \"Disconnected panel invoked room content\");"});
+    try
+      $test_utils:assert_false(receiver:emit_room_snapshot_state(receiver, receiver.location),
+        "An offline player has no live panel to refresh");
+      $test_utils:assert_false(receiver:emit_room_look(receiver.location),
+        "An offline arrival has no presentation recipient");
+    finally
+      delete_verb(receiver, "_capture_room");
+    endtry
+    return true;
+  endmethod
+
   method _instrument owner: ARCH_WIZARD
     "Count actual encoder and renderer entry calls inside this isolated test database.";
     const {target, method_name, counter} = args;

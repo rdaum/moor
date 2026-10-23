@@ -299,6 +299,10 @@ object EVENT_RECEIVER [
     const {?room = this.location} = args;
     valid(room) && isa(room, $room) || return;
     this.location == room || return;
+    "An offline player's arrival has neither a live panel nor a narrative recipient.";
+    if (is_player(this) && !length(this:_connections()))
+      return false;
+    endif
     const view = this:_capture_room(room);
     const event = $look:narrative(view):with_metadata('look_kind, "room")
       :with_metadata('look_room, room);
@@ -314,6 +318,8 @@ object EVENT_RECEIVER [
     viewer == this || raise(E_PERM);
     is_player(this) && valid(room) && isa(room, $room) || return;
     this.location == room || return;
+    "Panel state is transient; disconnected players need no capture or rendering.";
+    length(this:_connections()) || return false;
     const view = typeof(captured) == TYPE_MAP ? captured | this:_capture_room(room);
     view['viewer] == this && view['room_ref] == room || raise(E_INVARG, "Room view mismatch");
     view['exit_revision] == room.exit_revision || return false;

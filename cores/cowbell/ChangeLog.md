@@ -207,6 +207,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Room entry and exit no longer render live room panels or arrival descriptions for disconnected
+  players. This avoids repeated room captures and task timeouts in rooms with sleeping occupants.
+
 - The shared LLM/MCP `grant_capability` tool converts JSON permission names into symbols correctly.
   LLM documentation lookup recognizes the bare `sub` and `sub_utils` aliases.
 
