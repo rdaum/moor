@@ -15,8 +15,10 @@ true
 ==> "text-probe"
 % #text-probe.aliases
 ==> {}
-% #text-probe.description = "ordinary\u001B[31mtext"
+% #text-probe.description = "ordinary\u001B[2Jtext"
 ~~Invalid description
+% #text-probe.description = "\u001B[31mred\u001B[0m text"
+~~.description =
 % #text-probe.description = "A description.\n\t日本語"
 ~~.description =
 ; const target = $match:match_object("text-probe", player); return target.description == "A description.\n\t日本語";

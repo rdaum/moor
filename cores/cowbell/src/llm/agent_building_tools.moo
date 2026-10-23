@@ -47,7 +47,7 @@ object AGENT_BUILDING_TOOLS [
       message = $llm_building_tools:set_integrated_description(["object" -> created, "integrated_description" -> "a renamed probe is here"], $hacker);
       $test_utils:assert_true(index(message, "Set integrated description of \"renamed metadata probe\"") > 0, "set_integrated_description should report the real object name");
       $test_utils:assert_raises(E_INVARG, $llm_building_tools, "describe_object",
-        {["object" -> tostr(created), "description" -> "bad\u001B[31mtext"], $hacker},
+        {["object" -> tostr(created), "description" -> "bad\u001B[2Jtext"], $hacker},
         "description tool rejects terminal controls");
       $test_utils:assert_raises(E_INVARG, $llm_building_tools, "set_integrated_description",
         {["object" -> tostr(created), "integrated_description" -> "bad\u200Ftext"], $hacker},

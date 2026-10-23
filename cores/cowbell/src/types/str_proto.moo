@@ -481,13 +481,15 @@ object STR_PROTO [
     "Traverse lists, maps, and flyweights so structured descriptions receive the same checks.";
     "One scan accepts clean text; only a failing string is classified for the error message.";
     "A carriage return must start a CRLF pair; alone it can overwrite a terminal line.";
+    "ESC is allowed only to start an ANSI style (SGR) sequence; cursor and other controls are rejected.";
     const {value, ?depth = 0} = args;
     depth >= 0 && depth <= 64 || raise(E_INVARG, "Description nesting exceeds 64 levels.");
-    const suspect = "[^\\P{Cc}\\t\\n\\r]|\\r(?!\\n)|[^\\P{Cf}\u200C\u200D]";
+    const suspect = "[^\\P{Cc}\\t\\n\\r\\x{1B}]|\\x{1B}(?!\\[[0-9;]{0,32}m)|\\r(?!\\n)|[^\\P{Cf}\u200C\u200D]";
     const kind = typeof(value);
     if (kind == TYPE_STR)
       length(pcre_match(value, suspect)) || return true;
-      const text = strsub(strsub(strsub(value, "\r\n", ""), "\n", ""), "\t", "");
+      let text = strsub(strsub(strsub(value, "\r\n", ""), "\n", ""), "\t", "");
+      text = pcre_replace(text, "s/\\x{1B}\\[[0-9;]{0,32}m//g");
       const ignored = {"empty", "no visible base character", "leading or trailing whitespace",
         "format characters (review context)"};
       const issues = {issue for issue in ($str_proto:name_issues(text)) if (!(issue in ignored))};
@@ -542,10 +544,12 @@ object STR_PROTO [
     $test_utils:assert_raises(E_TYPE, $str_proto, "validate_aliases", {"not a list"},
       "aliases must be a list");
     for description in ({"", "\n\ttext\r\nالعربية", {"line", "", {"more text"}},
-        $format:authored('djot_blocks, "A **bold** description.")})
+        $format:authored('djot_blocks, "A **bold** description."),
+        "\u001B[1;31mred\u001B[0m and \u001B[38;5;208morange\u001B[m"})
       $test_utils:assert_true($str_proto:validate_description(description), "valid description");
     endfor
-    for description in ({"hidden\u200Btext", "\u001B[31mred", "x\u202Ey", "Safe\rFAKE",
+    for description in ({"hidden\u200Btext", "\u001B[2Jcleared", "\u001B[Hhome", "\u001B]0;title",
+        "\u001B", "x\u202Ey", "Safe\rFAKE",
         {"ok", {"bad\u0007"}}, $document_node:mk('text, {}, ['text -> "x\u200Fy"])})
       $test_utils:assert_raises(E_INVARG, $str_proto, "validate_description", {description},
         "reject hidden controls in plain or structured descriptions");

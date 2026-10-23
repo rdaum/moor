@@ -17,6 +17,11 @@ Cowbell entries.
   Unicode text. Builder edits and LLM description tools use these checks. Existing stored values
   remain unchanged; raw programmer assignments can bypass core setters.
 
+- ANSI colour and style codes in text and descriptions now reach telnet and web clients. Other
+  terminal controls, such as cursor movement, screen clearing, and window titles, still appear as
+  visible `\x1b` text. A line that turns a style on is reset before it ends. Names and aliases still
+  reject all control characters.
+
 - `@llm-config setup` prompts for a provider URL, model, and API key, then configures shared access
   for Mr. Welcome, wearables, and assistance. `scripts/dev.sh` performs this setup with OpenRouter
   and `deepseek/deepseek-v4.1-flash` when `OPENROUTER_KEY` or `OPENROUTER_API_KEY` is set, and

@@ -123,7 +123,7 @@ object DOCUMENT_RENDERER [
     if (kind == 'document)
       return $document_renderer:_join(node["blocks"], html ? "\n" | "\n\n", format, path);
     elseif (kind == 'text)
-      return $document_renderer:_escape(node["text"], format);
+      return $document_renderer:_escape(node["text"], format, true);
     elseif (kind == 'soft_break)
       return " ";
     elseif (kind == 'hard_break)
@@ -207,15 +207,16 @@ object DOCUMENT_RENDERER [
   endmethod
 
   method _escape owner: HACKER
-    "Escape literal text once. Plain output never executes an embedded ANSI escape.";
-    let {text, format} = args;
+    "Escape literal text once. With styles, ANSI style (SGR) sequences pass through; no other escape runs.";
+    let {text, format, ?styles = false} = args;
+    styles && (text = $document_renderer:_terminal_styles(text));
     if (format == 'text_html)
       for pair in ({{"&", "&amp;"}, {"<", "&lt;"}, {">", "&gt;"}, {"\"", "&quot;"}, {"'", "&#39;"}})
         text = strsub(text, pair[1], pair[2], 1);
       endfor
       return text;
     endif
-    text = strsub(text, binary_to_str(b"Gw=="), "\\x1b", 1);
+    styles || (text = strsub(text, binary_to_str(b"Gw=="), "\\x1b", 1));
     if (format == 'text_djot)
       const punctuation = "\\!\"#$%&'()*+,-./:;<=>?@[]^_`{|}~";
       for i in [1..length(punctuation)]
@@ -223,6 +224,51 @@ object DOCUMENT_RENDERER [
       endfor
     endif
     return text;
+  endmethod
+
+  method _terminal_styles owner: HACKER
+    "Keep ANSI style sequences (ESC [ digits and semicolons m); show every other ESC as visible text.";
+    "Cursor movement, screen clearing, and titles therefore never reach a terminal.";
+    "A line that turns a style on ends with a reset, so colour cannot bleed past the line.";
+    const {text} = args;
+    const esc = binary_to_str(b"Gw==");
+    index(text, esc) || return text;
+    const reset = esc + "[0m";
+    let out = "";
+    let styled = false;
+    let rest = text;
+    while (true)
+      const found = index(rest, esc);
+      let plain = found ? rest[1..found - 1] | rest;
+      const newline = styled ? index(plain, "\n") | 0;
+      if (newline)
+        plain = plain[1..newline - 1] + reset + plain[newline..$];
+        styled = false;
+      endif
+      out = out + plain;
+      if (!found)
+        break;
+      endif
+      rest = rest[found..$];
+      let finish = 2;
+      if (length(rest) >= 2 && rest[2] == "[")
+        finish = 3;
+        while (finish <= length(rest) && finish <= 35 && index("0123456789;", rest[finish]))
+          finish = finish + 1;
+        endwhile
+      endif
+      if (finish >= 3 && finish <= length(rest) && rest[finish] == "m")
+        const sequence = rest[1..finish];
+        out = out + sequence;
+        styled = !(sequence in {esc + "[m", esc + "[0m"});
+        rest = rest[finish + 1..$];
+      else
+        out = out + "\\x1b";
+        rest = rest[2..$];
+      endif
+    endwhile
+    styled && (out = out + reset);
+    return out;
   endmethod
 
   method _destination owner: HACKER

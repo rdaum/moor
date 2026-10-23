@@ -1376,7 +1376,7 @@ object ROOT [
       $test_utils:assert_eq(target.name, "Original", "name unchanged after failed rename");
       $test_utils:assert_eq(target.aliases, {"original-alias"}, "aliases unchanged after failed rename");
       target:set_description("Original description");
-      $test_utils:assert_raises(E_INVARG, target, "set_description", {{"line", "\u001B[31mred"}},
+      $test_utils:assert_raises(E_INVARG, target, "set_description", {{"line", "\u001B[Hhome"}},
         "nested description control rejected");
       $test_utils:assert_eq(target.description, "Original description", "description unchanged");
       target:set_description("Multiline\n\t日本語");

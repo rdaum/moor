@@ -449,6 +449,30 @@ object DOCUMENT_SCENARIOS
     return true;
   endmethod
 
+  method test_terminal_styles_in_text owner: ARCH_WIZARD
+    "Text keeps ANSI style sequences, closes them before a line ends, and shows every other escape.";
+    const esc = binary_to_str(b"Gw==");
+    const reset = esc + "[0m";
+    $test_utils:assert_eq($document_renderer:_terminal_styles(esc + "[1;31mred\nplain"),
+      esc + "[1;31mred" + reset + "\nplain", "style closed before the newline");
+    $test_utils:assert_eq($document_renderer:_terminal_styles(esc + "[32mgreen"),
+      esc + "[32mgreen" + reset, "style closed at the end of the text");
+    $test_utils:assert_eq($document_renderer:_terminal_styles(esc + "[32mgreen" + reset + "\nplain"),
+      esc + "[32mgreen" + reset + "\nplain", "an explicit reset needs no second reset");
+    for unsafe in ({"[2J", "[H", "[5A", "]0;title", "c", ""})
+      $test_utils:assert_eq($document_renderer:_terminal_styles(esc + unsafe + "x"),
+        "\\x1b" + unsafe + "x", "non-style escape is visible: " + toliteral(unsafe));
+    endfor
+    const text = $document_node:mk('text, {}, ['text -> esc + "[33mamber" + reset + " then " + esc + "[2J"]);
+    const document = $document:mk({this:_paragraph({text})});
+    for format in ({'text_plain, 'text_html})
+      const body = $document:render(document, format)['body];
+      $test_utils:assert_true(index(body, esc + "[33mamber" + reset, 1), "style reaches " + tostr(format));
+      $test_utils:assert_true(index(body, "\\x1b[2J", 1), "cursor control stays visible in " + tostr(format));
+    endfor
+    return true;
+  endmethod
+
   method test_table_link_delimiters owner: ARCH_WIZARD
     "Pipes in link destinations and titles do not introduce extra Djot table columns.";
     const link = $document_node:mk('link, {this:_text("link")},
