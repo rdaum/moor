@@ -475,6 +475,7 @@ async fn run() -> Result<(), Report> {
         },
         num_io_threads: args.num_io_threads,
         workers_enabled: services_config.curl_worker.enabled || services_config.git_worker.enabled,
+        startup_config: None,
         #[cfg(feature = "trace_events")]
         trace_output_path: args
             .trace_output

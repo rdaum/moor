@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased 2.0 series (`main`) branch
 
+- The daemon accepts `--startup-config FILE` to pass a JSON object to `#0:server_started` on each
+  startup. Startup fails if the configured hook fails or times out. Cowbell uses this for LLM setup
+  from the development launcher.
+
 - Term matching and query builtins accept a `case_sensitive` option. It preserves string case in
   matches, repeated bindings, and duplicate removal. Existing calls keep their current behavior.
 

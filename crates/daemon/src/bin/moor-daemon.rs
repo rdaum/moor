@@ -87,6 +87,23 @@ fn main() -> Result<(), Report> {
     let _enrollment_token = ensure_enrollment_token(&enrollment_token_path)?;
 
     let config = args.load_config()?;
+    let startup_config = args
+        .startup_config
+        .as_ref()
+        .map(|path| {
+            let bytes = std::fs::read(path)
+                .map_err(|_| eyre!("Unable to read startup configuration file"))?;
+            let json: serde_json::Value = serde_json::from_slice(&bytes)
+                .map_err(|_| eyre!("Startup configuration must be valid JSON"))?;
+            if !json.is_object() {
+                bail!("Startup configuration must be a JSON object");
+            }
+            Ok(moor_var::json::json_to_var(
+                &json,
+                config.features.use_boolean_returns,
+            ))
+        })
+        .transpose()?;
     let kill_switch = Arc::new(AtomicBool::new(false));
     let emergency_checkpoint = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
@@ -119,6 +136,7 @@ fn main() -> Result<(), Report> {
         },
         num_io_threads: args.num_io_threads,
         workers_enabled: true,
+        startup_config,
         #[cfg(feature = "trace_events")]
         trace_output_path: args.resolved_trace_output_path(),
     };

@@ -34,7 +34,12 @@ use ed25519_dalek::{
     pkcs8::{EncodePrivateKey, EncodePublicKey},
 };
 use eyre::Report;
-use moor_common::{build, model::ObjectRef, tasks::SessionFactory, threading::spawn_efficient};
+use moor_common::{
+    build,
+    model::ObjectRef,
+    tasks::{SchedulerError, SessionFactory},
+    threading::spawn_efficient,
+};
 use moor_compiler::emit_compile_error;
 use moor_db::{Database, TxDB};
 use moor_kernel::{
@@ -44,7 +49,7 @@ use moor_kernel::{
 };
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::{TextdumpImportOptions, textdump_load};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, v_empty_str};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Var, v_empty_str};
 use rand::RngExt;
 use rusty_paseto::core::Key;
 use sha2::{Digest, Sha256};
@@ -123,6 +128,7 @@ pub struct DaemonRuntimeConfig {
     pub keys: DaemonKeys,
     pub num_io_threads: i32,
     pub workers_enabled: bool,
+    pub startup_config: Option<Var>,
     #[cfg(feature = "trace_events")]
     pub trace_output_path: Option<PathBuf>,
 }
@@ -428,9 +434,14 @@ fn create_rpc_transport(
 fn invoke_server_started_hook(
     scheduler_client: &SchedulerClient,
     rpc_server: &Arc<RpcServer>,
+    startup_config: Option<Var>,
 ) -> Result<(), Report> {
+    let configured = startup_config.is_some();
     let player = Obj::mk_id(-1);
     let Ok(session) = rpc_server.clone().mk_background_session(&player) else {
+        if configured {
+            bail!("Unable to create a session for startup configuration");
+        }
         error!("Failed to create background session for server_started hook");
         return Ok(());
     };
@@ -440,11 +451,14 @@ fn invoke_server_started_hook(
         &player,
         &ObjectRef::Id(SYSTEM_OBJECT),
         server_started_verb,
-        List::mk_list(&[]),
+        List::mk_list(&startup_config.into_iter().collect::<Vec<_>>()),
         v_empty_str(),
         &SYSTEM_OBJECT,
         session,
     ) else {
+        if configured {
+            bail!("Unable to submit #0:server_started with startup configuration");
+        }
         debug!("No server_started verb found, skipping hook");
         return Ok(());
     };
@@ -465,6 +479,10 @@ fn invoke_server_started_hook(
         else {
             // Timeout, check if we've exceeded our overall timeout
             if start_time.elapsed() > timeout {
+                if configured {
+                    let _ = scheduler_client.abort_task(task_handle.task_id());
+                    bail!("Startup configuration timed out after 30 seconds");
+                }
                 warn!("Server started hook timed out after 30 seconds");
                 break;
             }
@@ -479,10 +497,14 @@ fn invoke_server_started_hook(
         match result {
             Ok(task_result) => match task_result {
                 moor_kernel::tasks::TaskNotification::Result(value) => {
-                    info!(
-                        "Server started hook completed successfully with result: {:?}",
-                        value
-                    );
+                    if configured {
+                        info!("Server started hook accepted the startup configuration");
+                    } else {
+                        info!(
+                            "Server started hook completed successfully with result: {:?}",
+                            value
+                        );
+                    }
                 }
                 moor_kernel::tasks::TaskNotification::Suspended => {
                     // Ignore suspension notifications; keep waiting for completion.
@@ -490,6 +512,13 @@ fn invoke_server_started_hook(
                 }
             },
             Err(e) => {
+                if configured {
+                    // Report the error, but not the stack, which holds the configuration's secrets.
+                    if let SchedulerError::TaskAbortedException(exception) = &e {
+                        bail!("Server startup configuration failed: {}", exception.error);
+                    }
+                    bail!("Server startup configuration failed: {e}");
+                }
                 warn!("Server started hook failed with error: {:?}", e);
             }
         }
@@ -523,6 +552,7 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
         keys,
         num_io_threads,
         workers_enabled,
+        startup_config,
         #[cfg(feature = "trace_events")]
         trace_output_path,
     } = runtime_config;
@@ -941,7 +971,7 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
     })?;
 
     // Invoke server_started hook if it exists
-    invoke_server_started_hook(&scheduler_client, &rpc_server)?;
+    invoke_server_started_hook(&scheduler_client, &rpc_server, startup_config)?;
 
     if let Some(local_runtime_sender) = local_runtime_sender {
         let _ = local_runtime_sender.send(LocalRuntimeInit {

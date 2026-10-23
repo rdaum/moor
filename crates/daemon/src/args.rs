@@ -82,6 +82,14 @@ pub struct Args {
     pub config_file: Option<PathBuf>,
 
     #[arg(
+        long,
+        value_name = "FILE",
+        help = "JSON object passed to #0:server_started on each startup. May contain secrets; protect the file.",
+        value_hint = ValueHint::FilePath
+    )]
+    pub startup_config: Option<PathBuf>,
+
+    #[arg(
         short,
         long,
         value_name = "connections-db",
