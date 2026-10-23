@@ -1240,6 +1240,7 @@ object BUILDER_FEATURES [
     caller == this || raise(E_PERM);
     set_task_perms(player);
     {target_obj, new_description} = args;
+    $str_proto:validate_description(new_description);
     target_obj.integrated_description = new_description;
   endmethod
 
@@ -2171,6 +2172,13 @@ object BUILDER_FEATURES [
         const property = properties[$];
         property == "parent" && raise(E_INVARG, "Use @parent to change an object's parent.");
         const value = $prog_utils:eval_expression(expression);
+        if (property == "name")
+          $str_proto:validate_name(value);
+        elseif (property == "aliases")
+          $str_proto:validate_aliases(value);
+        elseif (property in {"description", "integrated_description"})
+          $str_proto:validate_description(value);
+        endif
         try
           result.(property) = value;
         except problem (E_PROPNF)

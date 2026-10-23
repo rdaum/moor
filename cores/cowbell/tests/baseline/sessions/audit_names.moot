@@ -1,0 +1,33 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90103.name = "\u200F"; #90103.aliases = {"audit-room", "\u200B"}; add_property(player, "audit_output", "", {player, ""}); add_verb(player, {player, "rxd", "inform_current"}, {"this", "none", "this"}); set_verb_code(player, "inform_current", {"this.audit_output = this.audit_output + $document:render(args[1]:resolve(this), 'text_plain)['body];"}); return true;
+true
+% @audit-names here
+@quiet
+; return index(player.audit_output, "\\u200F") > 0 && index(player.audit_output, "\\u200B") > 0 && index(player.audit_output, "#90103") > 0 && index(player.audit_output, "aliases[2]") > 0 && index(player.audit_output, "2 finding(s) across 1 object(s)") > 0 && !index(player.audit_output, "\u200F") && !index(player.audit_output, "\u200B");
+true
+; player.audit_output = ""; return true;
+true
+% @audit-names --players
+@quiet
+; return !index(player.audit_output, "\\u200F") && !index(player.audit_output, "#90103");
+true
+; player.audit_output = ""; return true;
+true
+% @audit-names
+@quiet
+; return index(player.audit_output, "\\u200F") > 0 && index(player.audit_output, "#90103") > 0 && index(player.audit_output, "No names changed.") > 0;
+true
+; return #90103.name == "\u200F" && #90103.aliases == {"audit-room", "\u200B"};
+true
+// Direct method callers need wizard permissions even when the task player is a wizard.
+; add_verb(#90102, {#90102, "rxd", "audit-probe"}, {"this", "none", "this"}); set_verb_code(#90102, "audit-probe", {"return `$wiz_features:audit_names(#90103) ! E_PERM => E_PERM';"}); return #90102:("audit-probe")() == E_PERM;
+true
+// Wizard dispatch still checks the actual task player at the command boundary.
+; add_verb(#90101, {#90100, "rxd", "audit-command-probe"}, {"this", "none", "this"}); return set_verb_code(#90101, "audit-command-probe", {"const command = ['verb -> \"@audit-names\", 'argstr -> \"\", 'args -> {}, 'dobj -> #-1, 'dobjstr -> \"\", 'prep -> -1, 'prepstr -> \"\", 'iobj -> #-1, 'iobjstr -> \"\"]; return `dispatch_command_verb($wiz_features, \"@audit-names\", command) ! E_PERM => E_PERM';"});
+0
+@programmer
+; return player:("audit-command-probe")() == E_PERM;
+true

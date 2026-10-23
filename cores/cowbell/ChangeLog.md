@@ -8,6 +8,15 @@ Cowbell entries.
 
 ### Added
 
+- Wizards can use `@audit-names` to inspect all stored object names and aliases for invisible names,
+  control characters, directional formatting, and malformed values. Reports include object IDs and
+  escaped values. The audit leaves names unchanged; `--players` limits it to accounts.
+
+- Shared string checks reject blank or hidden-control names and aliases before object or player
+  edits and account creation. Description setters reject hidden controls while retaining multiline
+  Unicode text. Builder edits and LLM description tools use these checks. Existing stored values
+  remain unchanged; raw programmer assignments can bypass core setters.
+
 - Objects control noun phrases, grammar, and matching names through inherited verbs. `@grammar` lets
   builders inspect and edit articles, plural names, and room-listing preferences. Rooms, inventory,
   clothing, and stock messages share those choices. Articles work in commands and completion without

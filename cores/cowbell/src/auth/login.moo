@@ -283,6 +283,12 @@ object LOGIN [
       this:_public_output("Sorry, that name is not available.  Please choose another.");
       return 0;
     endif
+    try
+      $str_proto:validate_name(player_name);
+    except error (E_INVARG)
+      this:_public_output(error[2]);
+      return 0;
+    endtry
     valid(this:find_by_oauth2(provider, external_id)) && return 0;
     new = this:_create_player(player_name, 0, email || "", {});
     this:_claim_oauth_identity(new, provider, external_id);
@@ -372,6 +378,12 @@ object LOGIN [
       "... it is merely there to handle the case that $player_db gets corrupted.";
       return;
     endif
+    try
+      $str_proto:validate_name(name);
+    except error (E_INVARG)
+      this:_public_output(error[2]);
+      return;
+    endtry
     if (!(password = args[2]))
       this:_public_output("You must set a password for your player.");
       return;
@@ -454,10 +466,29 @@ object LOGIN [
     return found;
   endmethod
 
+  method test_invalid_player_name_allocates_nothing owner: ARCH_WIZARD
+    "Check the shared creation boundary before player flags, setup capabilities, or tasks change.";
+    const before = players();
+    for name in ({"\u200F", "\u200B", "name\nspoof", ""})
+      let rejected = false;
+      try
+        $login:_create_player(name, "password", "", {});
+      except (E_INVARG)
+        rejected = true;
+      endtry
+      $test_utils:assert_true(rejected, "invalid player name rejected before allocation");
+    endfor
+    const after = players();
+    $test_utils:assert_true(length(after) == length(before)
+      && !length({who for who in (after) if (!(who in before))}), "no player was allocated");
+    return true;
+  endmethod
+
   method _create_player owner: LOGIN
     ":_create_player(name, password, email, oauth2_identities)";
     caller == this || caller_perms().wizard || raise(E_PERM);
     {player_name, password_value, email, oauth_entries} = args;
+    $str_proto:validate_name(player_name);
     cap = this.player_setup_capability;
     "cap:make_player() returns a setup capability for the new player";
     setup_cap = cap:make_player();

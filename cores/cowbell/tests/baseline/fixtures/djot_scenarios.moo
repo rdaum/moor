@@ -162,7 +162,7 @@ object DJOT_SCENARIOS
 
   method test_shipped_wizard_help owner: ARCH_WIZARD
     "Check every wizard help article.";
-    return this:_check_help_provider(this.providers[5], 13);
+    return this:_check_help_provider(this.providers[5], 14);
   endmethod
 
   method test_authored_producers_and_edit_validation owner: ARCH_WIZARD

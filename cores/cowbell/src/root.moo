@@ -180,6 +180,8 @@ object ROOT [
     const {target, perms, grants} = $root:_check_permissions_with_grants_as(this, actor, 'set_name_aliases);
     set_task_perms(perms, grants);
     const {new_name, new_aliases} = args;
+    $str_proto:validate_name(new_name);
+    $str_proto:validate_aliases(new_aliases);
     target.name = new_name;
     target.aliases = new_aliases;
   endmethod
@@ -232,6 +234,7 @@ object ROOT [
     const {target, perms, grants} = $root:_check_permissions_with_grants_as(this, actor, 'set_description);
     set_task_perms(perms, grants);
     const {description, ?kind = target.description_kind} = args;
+    $str_proto:validate_description(description);
     kind in {'literal, 'djot_blocks} || raise(E_INVARG, "Descriptions require literal or block Djot");
     if (typeof(description) == TYPE_STR)
       $format:authored(kind, description);
@@ -1358,6 +1361,27 @@ object ROOT [
     finally
       valid(scratch) && recycle(scratch);
     endtry
+    return true;
+  endmethod
+
+  method test_text_mutators_validate_before_writing owner: ARCH_WIZARD
+    "Reject invalid names, aliases, and descriptions atomically for objects and players.";
+    for prototype in ({$thing, $player})
+      const target = create(prototype, $hacker, 1);
+      target:set_name_aliases("Original", {"original-alias"});
+      $test_utils:assert_raises(E_INVARG, target, "set_name_aliases", {"\u200F", {}},
+        "invisible name rejected");
+      $test_utils:assert_raises(E_INVARG, target, "set_name_aliases", {"Changed", {"good", "\u200B"}},
+        "bad alias rejects the entire rename");
+      $test_utils:assert_eq(target.name, "Original", "name unchanged after failed rename");
+      $test_utils:assert_eq(target.aliases, {"original-alias"}, "aliases unchanged after failed rename");
+      target:set_description("Original description");
+      $test_utils:assert_raises(E_INVARG, target, "set_description", {{"line", "\u001B[31mred"}},
+        "nested description control rejected");
+      $test_utils:assert_eq(target.description, "Original description", "description unchanged");
+      target:set_description("Multiline\n\t日本語");
+      $test_utils:assert_eq(target.description, "Multiline\n\t日本語", "multiline Unicode retained");
+    endfor
     return true;
   endmethod
 

@@ -429,6 +429,130 @@ object STR_PROTO [
     return {start_index, end_index};
   endmethod
 
+  method name_issues owner: HACKER
+    "Return review reasons for a stored name or alias; Unicode text is not inherently suspect.";
+    const {value} = args;
+    typeof(value) == TYPE_STR || return {"not a string"};
+    length(value) || return {"empty"};
+    let issues = {};
+    "Marks need a visible base; Hangul fillers and the Braille blank also appear empty.";
+    if (length(pcre_match(value, "\\A[\\p{Z}\\p{C}\\p{M}\u115F\u1160\u2800\u3164\uFFA0]*\\z")))
+      issues = {@issues, "no visible base character"};
+    endif
+    if (length(pcre_match(value, "[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]")))
+      issues = {@issues, "directional controls"};
+    endif
+    if (length(pcre_match(value, "\\p{Cc}")))
+      issues = {@issues, "control characters"};
+    endif
+    if (length(pcre_match(value, "\\A\\p{Z}|\\p{Z}\\z")))
+      issues = {@issues, "leading or trailing whitespace"};
+    endif
+    "Joiners are ordinary in some scripts and emoji; report them only when nothing worse is present.";
+    if (length(pcre_match(value, "[^\\P{Cf}\u200C\u200D]")))
+      issues = {@issues, "hidden format characters"};
+    elseif (length(pcre_match(value, "[\u200C\u200D]")))
+      issues = {@issues, "format characters (review context)"};
+    endif
+    return issues;
+  endmethod
+
+  method validate_name owner: HACKER
+    "Reject blank or misleading names with E_INVARG. Joiners in visible Unicode names are allowed.";
+    const {value} = args;
+    const issues = {issue for issue in ($str_proto:name_issues(value))
+      if (issue != "format characters (review context)")};
+    length(issues) && raise(E_INVARG, "Invalid name: " + issues:join(", ") + ".");
+    return true;
+  endmethod
+
+  method validate_aliases owner: HACKER
+    "Validate an entire alias list before a caller changes any name or alias.";
+    const {aliases} = args;
+    typeof(aliases) == TYPE_LIST || raise(E_TYPE, "Aliases must be a list of names.");
+    for alias in (aliases)
+      $str_proto:validate_name(alias);
+    endfor
+    return true;
+  endmethod
+
+  method validate_description owner: HACKER
+    "Validate stored text without running content callbacks. Empty text, tabs, and newlines are allowed.";
+    "Traverse lists, maps, and flyweights so structured descriptions receive the same checks.";
+    "One scan accepts clean text; only a failing string is classified for the error message.";
+    "A carriage return must start a CRLF pair; alone it can overwrite a terminal line.";
+    const {value, ?depth = 0} = args;
+    depth >= 0 && depth <= 64 || raise(E_INVARG, "Description nesting exceeds 64 levels.");
+    const suspect = "[^\\P{Cc}\\t\\n\\r]|\\r(?!\\n)|[^\\P{Cf}\u200C\u200D]";
+    const kind = typeof(value);
+    if (kind == TYPE_STR)
+      length(pcre_match(value, suspect)) || return true;
+      const text = strsub(strsub(strsub(value, "\r\n", ""), "\n", ""), "\t", "");
+      const ignored = {"empty", "no visible base character", "leading or trailing whitespace",
+        "format characters (review context)"};
+      const issues = {issue for issue in ($str_proto:name_issues(text)) if (!(issue in ignored))};
+      raise(E_INVARG, "Invalid description: " + (length(issues) ? issues:join(", ") | "control characters") + ".");
+    elseif (kind == TYPE_LIST || kind == TYPE_MAP)
+      "Check string parts inline so plain multi-line descriptions need no call per line.";
+      for part in (kind == TYPE_LIST ? value | mapvalues(value))
+        const part_kind = typeof(part);
+        if (part_kind == TYPE_STR ? length(pcre_match(part, suspect)) | part_kind in {TYPE_LIST, TYPE_MAP, TYPE_FLYWEIGHT})
+          $str_proto:validate_description(part, depth + 1);
+        endif
+      endfor
+    elseif (kind == TYPE_FLYWEIGHT)
+      $str_proto:validate_description(flyslots(value), depth + 1);
+      $str_proto:validate_description(flycontents(value), depth + 1);
+    endif
+    return true;
+  endmethod
+
+  method test_name_audit_unicode owner: ARCH_WIZARD
+    "Report invisible and control names without rejecting ordinary multilingual text.";
+    for value in ({"", " \u00A0", "\u200F", "\u200B", "\u0301", "\uFE0F", "\u3164", "\u2800"})
+      $test_utils:assert_true(length($str_proto:name_issues(value)) > 0,
+        "invisible name: " + toliteral(value));
+    endfor
+    for value in ({"Gossamer", "Le Spleen", "Émile", "東京", "العربية", "e\u0301", "☕\uFE0F"})
+      $test_utils:assert_eq($str_proto:name_issues(value), {},
+        "visible Unicode name: " + toliteral(value));
+    endfor
+    $test_utils:assert_true("directional controls" in $str_proto:name_issues("abc\u202Edef"),
+      "embedded direction control");
+    $test_utils:assert_true("control characters" in $str_proto:name_issues("a\nb"),
+      "embedded newline");
+    $test_utils:assert_true("control characters" in $str_proto:name_issues("\u001B[31mred"),
+      "terminal escape");
+    $test_utils:assert_true("format characters (review context)" in $str_proto:name_issues("a\u200Db"),
+      "joiner requires context, not automatic removal");
+    return true;
+  endmethod
+
+  method test_text_validation owner: ARCH_WIZARD
+    "Names reject hidden controls while descriptions retain multiline and structured content.";
+    for name in ({"", "\u200F", "\u200B", "a\nb", "x\u202Ey", " name", "\uFE0F"})
+      $test_utils:assert_raises(E_INVARG, $str_proto, "validate_name", {name},
+        "reject suspect name " + toliteral(name));
+    endfor
+    for name in ({"Émile", "東京", "العربية", "e\u0301", "☕\uFE0F", "👩\u200D💻", "می\u200Cروم"})
+      $test_utils:assert_true($str_proto:validate_name(name), "Unicode name remains valid");
+    endfor
+    $test_utils:assert_raises(E_INVARG, $str_proto, "validate_aliases", {{"good", "\u200F"}},
+      "every alias is checked");
+    $test_utils:assert_raises(E_TYPE, $str_proto, "validate_aliases", {"not a list"},
+      "aliases must be a list");
+    for description in ({"", "\n\ttext\r\nالعربية", {"line", "", {"more text"}},
+        $format:authored('djot_blocks, "A **bold** description.")})
+      $test_utils:assert_true($str_proto:validate_description(description), "valid description");
+    endfor
+    for description in ({"hidden\u200Btext", "\u001B[31mred", "x\u202Ey", "Safe\rFAKE",
+        {"ok", {"bad\u0007"}}, $document_node:mk('text, {}, ['text -> "x\u200Fy"])})
+      $test_utils:assert_raises(E_INVARG, $str_proto, "validate_description", {description},
+        "reject hidden controls in plain or structured descriptions");
+    endfor
+    return true;
+  endmethod
+
   method parse_name_aliases owner: HACKER
     "Parse name,alias,alias or name:alias,alias, respecting command quotes and escapes.";
     const {spec} = args;

@@ -361,9 +361,12 @@ object LLM_BUILDING_TOOLS [
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
     !actor.wizard && target_obj.owner != actor && raise(E_PERM, "You do not have permission to describe " + tostr(target_obj));
     !args_map["description"] && raise(E_INVARG, "Description cannot be blank");
+    "Check what set_description will check before asking the player to approve.";
+    $str_proto:validate_description(args_map["description"]);
+    typeof(args_map["description"]) == TYPE_STR && $format:authored(target_obj.description_kind, args_map["description"]);
     const approval = this:_approve(actor, 'describe_object, target_obj, 'property, "description", args_map);
     typeof(approval) == TYPE_BOOL && approval || return approval;
-    target_obj.description = args_map["description"];
+    target_obj:set_description(args_map["description"]);
     return "Set description of \"" + target_obj.name + "\" (" + tostr(target_obj) + ").";
   endmethod
 
@@ -400,6 +403,7 @@ object LLM_BUILDING_TOOLS [
     typeof(target_obj) == TYPE_OBJ || raise(E_INVARG, "Object not found");
     valid(target_obj) || raise(E_INVARG, "Object no longer exists");
     !actor.wizard && target_obj.owner != actor && raise(E_PERM, "You do not have permission to modify " + tostr(target_obj));
+    $str_proto:validate_description(args_map["integrated_description"]);
     const approval = this:_approve(actor, 'set_integrated_description, target_obj, 'property, "integrated_description", args_map);
     typeof(approval) == TYPE_BOOL && approval || return approval;
     target_obj.integrated_description = args_map["integrated_description"];

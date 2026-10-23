@@ -644,6 +644,7 @@ object PASSAGE [
   method with_description_from owner: HACKER
     "Validate and retain one side's source. An omitted format preserves the side's current choice.";
     const {room, description, ?kind = this:description_kind_for(room)} = args;
+    $str_proto:validate_description(description);
     room in {this.side_a_room, this.side_b_room} || raise(E_INVARG, "Room is not connected.");
     $passage:authored_description(description, kind);
     let props = this:_extract_all();

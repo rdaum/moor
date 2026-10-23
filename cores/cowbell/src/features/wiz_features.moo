@@ -870,6 +870,126 @@ object WIZ_FEATURES [
     player:inform_current($event:mk_info(player, "You granted ", target:name(), " wizard privileges."));
   endverb
 
+  method audit_names owner: ARCH_WIZARD
+    "Return name and alias findings for one object. Requires wizard caller permissions.";
+    "Read stored values without invoking the audited object's naming or presentation code.";
+    const actor = caller_perms();
+    valid(actor) && actor.wizard || raise(E_PERM);
+    const {target} = args;
+    valid(target) || raise(E_INVARG, "Object does not exist.");
+    let fields = {{"name", target.name}};
+    const aliases = `target.aliases ! E_PROPNF => {}';
+    if (typeof(aliases) == TYPE_LIST)
+      for i in [1..length(aliases)]
+        fields = {@fields, {tostr("aliases[", i, "]"), aliases[i]}};
+      endfor
+    else
+      fields = {@fields, {"aliases", aliases}};
+    endif
+    let findings = {};
+    for field in (fields)
+      const {label, value} = field;
+      const issues = label == "aliases" ? {"not a list"} | $str_proto:name_issues(value);
+      if (length(issues))
+        "Malformed aliases can contain closures or large values that have no useful name literal.";
+        const escaped = typeof(value) == TYPE_STR ? toliteral(value)
+          | "<value of type " + toliteral(typeof(value)) + ">";
+        findings = {@findings, ['object -> target, 'owner -> target.owner,
+          'location -> target.location, 'field -> label, 'value -> escaped,
+          'issues -> issues]};
+      endif
+    endfor
+    return findings;
+  endmethod
+
+  verb "@audit-names" (any none none) owner: ARCH_WIZARD flags: "rd"
+    "Usage: @audit-names [--players | OBJECT]. Report suspect stored names and aliases.";
+    "Defaults to all objects; never renames anything. Yields between objects during long scans.";
+    this == $wiz_features || raise(E_PERM);
+    this:_challenge_command_perms();
+    const authority = player.wizard ? player | $admin_features:_resolve_delegate(player);
+    set_task_perms(authority);
+    const input = argstr:trim();
+    let targets = {};
+    if (!length(input))
+      targets = objects();
+    elseif (input == "--players")
+      targets = players();
+    elseif (input:starts_with("--"))
+      player:inform_current($event:mk_error(player, "Usage: @audit-names [--players | OBJECT]")
+        :with_audience('utility));
+      return;
+    else
+      try
+        targets = {$match:match_object(input, player)};
+      except e (ANY)
+        player:inform_current($event:mk_error(player, "Could not resolve object: " + tostr(e[2]))
+          :with_audience('utility));
+        return;
+      endtry
+      if (!valid(targets[1]))
+        player:inform_current($event:mk_error(player, "Could not resolve object: " + input)
+          :with_audience('utility));
+        return;
+      endif
+    endif
+    let scanned = 0;
+    let count = 0;
+    let rows = {};
+    for target in (targets)
+      if (ticks_left() < 10000 || seconds_left() < 2)
+        suspend(0);
+      endif
+      if (!valid(target))
+        continue;
+      endif
+      scanned = scanned + 1;
+      for finding in ($wiz_features:audit_names(target))
+        rows = {@rows, {tostr(finding['object]), tostr(finding['owner]),
+          tostr(finding['location]), finding['field], finding['value],
+          finding['issues]:join(", ")}};
+        count = count + 1;
+      endfor
+      if (length(rows) >= 25)
+        player:inform_current($event:mk_info(player, $format.table:mk(
+          {"Object", "Owner", "Location", "Field", "Escaped value", "Reasons"}, rows))
+          :with_audience('utility));
+        rows = {};
+      endif
+    endfor
+    if (length(rows))
+      player:inform_current($event:mk_info(player, $format.table:mk(
+        {"Object", "Owner", "Location", "Field", "Escaped value", "Reasons"}, rows))
+        :with_audience('utility));
+    endif
+    player:inform_current($event:mk_info(player, tostr("Name audit: ", count,
+      " finding(s) across ", scanned, " object(s). No names changed.")):with_audience('utility));
+  endverb
+
+  method test_name_audit_stored_values owner: ARCH_WIZARD
+    "Audit non-player names and aliases without running their code or changing stored values.";
+    const target = $test_utils:anonymous($thing);
+    target.name = "\u200F";
+    target.aliases = {"ordinary", "\u200B", 42};
+    add_verb(target, {$arch_wizard, "rxd", "name noun_phrase"}, {"this", "none", "this"});
+    set_verb_code(target, "name", {"raise(E_ASSERT, \"Audit called object naming code\");"});
+    const findings = $wiz_features:audit_names(target);
+    $test_utils:assert_eq(length(findings), 3, "name and two aliases are suspect");
+    $test_utils:assert_eq(findings[1]['value], "\"\\u200F\"", "invisible text is escaped");
+    $test_utils:assert_eq(findings[2]['field], "aliases[2]", "alias position");
+    $test_utils:assert_eq(findings[3]['issues], {"not a string"}, "malformed alias");
+    $test_utils:assert_eq(target.name, "\u200F", "name unchanged");
+    $test_utils:assert_eq(target.aliases, {"ordinary", "\u200B", 42}, "aliases unchanged");
+    target.aliases = "bad list";
+    $test_utils:assert_eq($wiz_features:audit_names(target)[2]['issues], {"not a list"},
+      "malformed aliases property");
+    const captured = 42;
+    target.aliases = {{x} => x + captured};
+    $test_utils:assert_eq($wiz_features:audit_names(target)[2]['issues], {"not a string"},
+      "closure-valued alias does not abort the audit");
+    return true;
+  endmethod
+
   verb "@audit-cprops" (any none none) owner: ARCH_WIZARD flags: "rd"
     "Audit c-flagged property owners against object owners.";
     "Usage: @audit-cprops [--repair|-r] [OBJECT]";

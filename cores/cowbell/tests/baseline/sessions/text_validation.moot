@@ -1,0 +1,31 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+@wizard
+; #90101.is_builder = true; #90101.authoring_features = $prog_features; return true;
+true
+@programmer
+% @create $thing named text-probe
+~~Created
+% #text-probe.name = "\u200F"
+~~Invalid name
+% #text-probe.aliases = {"good", "\u200B"}
+~~Invalid name
+% #text-probe.name
+==> "text-probe"
+% #text-probe.aliases
+==> {}
+% #text-probe.description = "ordinary\u001B[31mtext"
+~~Invalid description
+% #text-probe.description = "A description.\n\t日本語"
+~~.description =
+; const target = $match:match_object("text-probe", player); return target.description == "A description.\n\t日本語";
+true
+% #me.name = "\u200F"
+~~Invalid name
+; return player.name == "RUNTIME_PROGRAMMER";
+true
+@wizard
+// Both public registration handlers share the validated allocation boundary.
+; const before = length(players()); return `$login:_create_player("\u200F", "password", "", {}) ! E_INVARG => length(players()) == before';
+true

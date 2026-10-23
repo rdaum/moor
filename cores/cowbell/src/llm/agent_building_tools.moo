@@ -46,6 +46,16 @@ object AGENT_BUILDING_TOOLS [
       $test_utils:assert_true(index(message, "Moved \"renamed metadata probe\"") > 0, "move_object should report the real object name");
       message = $llm_building_tools:set_integrated_description(["object" -> created, "integrated_description" -> "a renamed probe is here"], $hacker);
       $test_utils:assert_true(index(message, "Set integrated description of \"renamed metadata probe\"") > 0, "set_integrated_description should report the real object name");
+      $test_utils:assert_raises(E_INVARG, $llm_building_tools, "describe_object",
+        {["object" -> tostr(created), "description" -> "bad\u001B[31mtext"], $hacker},
+        "description tool rejects terminal controls");
+      $test_utils:assert_raises(E_INVARG, $llm_building_tools, "set_integrated_description",
+        {["object" -> tostr(created), "integrated_description" -> "bad\u200Ftext"], $hacker},
+        "integrated description tool rejects directional controls");
+      $test_utils:assert_eq(created.description, "A probe with renamed metadata.",
+        "rejected tool edit preserves description");
+      $test_utils:assert_eq(created.integrated_description, "a renamed probe is here",
+        "rejected tool edit preserves integration");
       audit = $llm_inspection_tools:audit_owned([], $hacker);
       $test_utils:assert_true(index(audit, "renamed metadata probe") > 0, "audit_owned should list real object names");
       add_property(created, "probe_rule", 0, {$hacker, "rc"});
