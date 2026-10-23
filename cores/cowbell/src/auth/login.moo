@@ -31,7 +31,7 @@ object LOGIN [
     }
   };
   property new_player_welcome_message (owner: ARCH_WIZARD, flags: "rc") = {
-    "Welcome to {TITLE}!",
+    "## Welcome to {TITLE}!",
     "",
     "Try entering `help` to see what kind of things you can do where you are."
   };
@@ -94,10 +94,17 @@ object LOGIN [
   method welcome_content owner: ARCH_WIZARD
     "Parse explicit banner syntax before inserting literal server facts into text nodes.";
     set_task_perms(caller_perms());
-    const source = this.welcome_message:join("\n");
-    const authored = $format:authored(this.welcome_message_kind, source);
     const bindings = ["TITLE" -> this.moo_title, "VERSION" -> server_version(),
       "CORE_VERSION" -> $sysobj.core_version];
+    return this:_authored_welcome(this.welcome_message, this.welcome_message_kind, bindings);
+  endmethod
+
+  method _authored_welcome owner: ARCH_WIZARD
+    "Parse authored lines in the given kind, then insert literal bindings into text nodes only.";
+    caller == this || raise(E_PERM);
+    const {lines, kind, bindings} = args;
+    const source = typeof(lines) == TYPE_LIST ? lines:join("\n") | tostr(lines);
+    const authored = $format:authored(kind, source);
     return $document_template:mk('blocks,
       {this:_welcome_node(block, 'block, bindings) for block in (flycontents(authored))});
   endmethod
@@ -484,6 +491,17 @@ object LOGIN [
     return true;
   endmethod
 
+  method test_new_player_welcome_uses_configuration owner: ARCH_WIZARD
+    "The greeting renders the configured welcome as Djot with the world's title.";
+    const welcome = this:_authored_welcome({"## Welcome to {TITLE}!", "", "Check in at the `desk`."},
+      'djot_blocks, ["TITLE" -> "Test Hotel"]);
+    const body = $document:render($event:mk_info(#90102, welcome):resolve(#90102), 'text_plain)['body];
+    $test_utils:assert_true(index(body, "Welcome to Test Hotel!"), "title substituted");
+    $test_utils:assert_true(index(body, "Check in at the desk."), "configured text shown");
+    $test_utils:assert_false(index(body, "{TITLE}"), "no placeholder left");
+    return true;
+  endmethod
+
   method _create_player owner: LOGIN
     ":_create_player(name, password, email, oauth2_identities)";
     caller == this || caller_perms().wizard || raise(E_PERM);
@@ -607,11 +625,11 @@ object LOGIN [
     caller == #0 || caller_perms().wizard || raise(E_PERM);
     const {new_player} = args;
     !valid(new_player) && return;
-    const title = $format.title:mk("Welcome to " + this.moo_title + "!");
+    "The configured welcome is authored Djot; {TITLE} becomes the world's title.";
+    const welcome = this:_authored_welcome(this.new_player_welcome_message, 'djot_blocks,
+      ["TITLE" -> this.moo_title]);
     const tips_list = $format.list:mk({"Set your description: @describe me as <text>", "Set your pronouns: @pronouns they/them (or she/her, he/him, etc.)"});
-    const content = $format.block:mk(title,
-      $format.paragraph:mk("Try entering ", $format.code:inline("help"), " to see what kind of things you can do where you are."),
-      $format.title:mk("Next steps", 4), tips_list);
+    const content = $format.block:mk(welcome, $format.title:mk("Next steps", 4), tips_list);
     let event = $event:mk_info(new_player, content):with_audience('utility):with_presentation_hint('inset);
     new_player:inform_current(event);
     "Trigger profile setup presentation if enabled";
