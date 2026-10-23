@@ -231,14 +231,12 @@ object ACTOR [
     else
       "Default: construct from direction and passage description";
       if (direction)
-        "Handle direction grammar - vertical directions need different phrasing";
-        if (direction in {"up", "down"})
-          parts = {@parts, " from ", direction == "up" ? "below" | "above"};
-        elseif (direction in {"in", "out"})
-          parts = {@parts, " from ", direction == "in" ? "outside" | "inside"};
-        else
-          parts = {@parts, " from the ", direction};
-        endif
+        "The direction is this room's exit back the way the actor came, so up means from above.";
+        const places = ["up" -> "above", "down" -> "below", "upstairs" -> "upstairs",
+          "downstairs" -> "downstairs", "in" -> "inside", "inside" -> "inside",
+          "out" -> "outside", "outside" -> "outside"];
+        const place = maphaskey(places, direction:lowercase()) ? places[direction:lowercase()] | 0;
+        parts = {@parts, " from ", place ? place | "the " + direction};
       endif
       if (passage_desc)
         passage_desc = $sub:phrase(passage_desc, {'strip_period, 'initial_lowercase});
@@ -250,6 +248,18 @@ object ACTOR [
     valid(to_room) && (event = event:with_this(to_room):with_location(to_room));
     valid(from_room) && (event = event:with_iobj(from_room));
     return event;
+  endmethod
+
+  method test_arrival_direction_names_the_origin owner: ARCH_WIZARD
+    "The direction is the exit back toward the origin: arriving by up stairs means coming from below.";
+    for case in ({{"down", "below"}, {"up", "above"}, {"out", "outside"}, {"in", "inside"},
+        {"upstairs", "upstairs"}, {"lobby", "the lobby"}, {"north", "the north"}})
+      const {direction, place} = case;
+      const text = toliteral($actor:mk_arrival_event(#-1, direction));
+      $test_utils:assert_true(index(text, ".text = \" from \"") && index(text, ".text = \"" + place + "\""),
+        "arrival via " + direction + " reads from " + place);
+    endfor
+    return true;
   endmethod
 
   method pronouns owner: ARCH_WIZARD

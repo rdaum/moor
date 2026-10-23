@@ -233,6 +233,9 @@ Cowbell entries.
 
 ### Fixed
 
+- Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
+  "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
+
 - Room entry and exit no longer render live room panels or arrival descriptions for disconnected
   players. This avoids repeated room captures and task timeouts in rooms with sleeping occupants.
 
