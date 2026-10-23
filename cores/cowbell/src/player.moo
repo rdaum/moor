@@ -271,6 +271,28 @@ object PLAYER [
     return $event:mk_not_found(player, "I don't see that here."):with_audience('utility);
   endmethod
 
+  verb "@describe" (this as any) owner: ARCH_WIZARD flags: "rd"
+    "Describe yourself: @describe me as TEXT. Builders use the same command for objects and exits.";
+    "Only `me` matches this argument form on your own player; other targets reach builder features.";
+    if (this != player)
+      player:inform_current($event:mk_error(player, "You can only describe yourself."));
+      return;
+    endif
+    set_task_perms(this);
+    const text = argstr:raw_arguments()[2];
+    if (!length(text:trim()))
+      this:inform_current($event:mk_error(this, $format.code:mk("@describe me as DESCRIPTION")));
+      return;
+    endif
+    try
+      this:set_description(text);
+    except e (E_INVARG, E_TYPE, E_PERM)
+      this:inform_current($event:mk_error(this, typeof(e[2]) == TYPE_STR ? e[2] | toliteral(e)));
+      return;
+    endtry
+    this:inform_current($event:mk_info(this, "Your description is set."));
+  endverb
+
   verb "@pronouns" (any any any) owner: ARCH_WIZARD flags: "rd"
     "View your pronouns, choose a preset, or enter custom words with a preview.";
     "Usage: @pronouns [PRESET|custom]. Custom entry commits at each prompt and rechecks access on save.";

@@ -1,0 +1,29 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Every player can describe themselves; other targets still need builder features.
+@nonprogrammer
+% @describe me as A tall figure in a grey coat.
+~~Your description is set.
+% @describe me as
+~~@describe me as DESCRIPTION
+@wizard
+; return #90102.description;
+"A tall figure in a grey coat."
+; move(#90101, #90102.location); return true;
+true
+@nonprogrammer
+% @describe RUNTIME_PROGRAMMER as Someone else.
+~~You can only describe yourself
+@wizard
+; return #90101.description != "Someone else.";
+true
+; #90101.is_builder = true; #90101.authoring_features = $prog_features; return true;
+true
+@programmer
+% @create $thing named describe-probe
+~~Created
+% @describe describe-probe as A probe object.
+~~Set description of
+% @describe me as A programmer who builds.
+~~Your description is set.
