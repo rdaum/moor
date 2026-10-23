@@ -42,6 +42,8 @@ Environment:
   MOOR_DB           Database filename (default: development.db)
   MOOR_EXPORT       Checkpoint export directory (default: development-export)
   CARGO_TARGET_DIR  Cargo build directory
+  OPENROUTER_KEY    Configure Cowbell's shared LLM client and start the HTTP worker
+  OPENROUTER_API_KEY  Alternative name for OPENROUTER_KEY (OPENROUTER_KEY takes precedence)
 
 Examples:
   scripts/dev.sh --telnet
@@ -54,6 +56,8 @@ The core and its baseline are imported only for a new database.
 By default, the baseline comes from the common ancestor of HEAD and origin/main.
 Working files supply the live code, so local edits remain distinct from upstream.
 Git preparation uses local history; it does not fetch from the remote.
+With OPENROUTER_KEY or OPENROUTER_API_KEY, each launch configures Cowbell for deepseek/deepseek-v4.1-flash,
+enables Mr. Welcome and player assistance, and permits shared provider use.
 Meadow: http://localhost:3000    Web host: http://localhost:8080
 Both web servers listen on all IPv4 interfaces. From another machine, use
 http://<this-machine-IP>:3000, including this machine's tailnet IP.
@@ -112,6 +116,25 @@ if [[ ! -d $core ]]; then
     echo "Core directory not found: $core" >&2
     exit 1
 fi
+startup_config_dir=
+# Removes the key file if the launcher fails before the daemon reads it.
+trap 'if [[ -n $startup_config_dir ]]; then rm -rf -- "$startup_config_dir"; fi' EXIT
+if [[ -n ${OPENROUTER_KEY:-${OPENROUTER_API_KEY:-}} && -f $core/llm/llm_client.moo ]]; then
+    startup_config_dir=$(mktemp -d "${TMPDIR:-/tmp}/moor-dev-llm.XXXXXX")
+    (umask 077; node - "$startup_config_dir/config.json" <<'JS'
+const fs = require("node:fs");
+fs.writeFileSync(process.argv[2], JSON.stringify({llm: {
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    model: "deepseek/deepseek-v4.1-flash",
+    key: process.env.OPENROUTER_KEY || process.env.OPENROUTER_API_KEY,
+}}), {mode: 0o600});
+JS
+    )
+    curl_worker=true
+    printf 'LLM: configuring shared OpenRouter access with deepseek/deepseek-v4.1-flash\n'
+fi
+# Only the private startup file needs the key; web and worker processes do not.
+unset OPENROUTER_KEY OPENROUTER_API_KEY
 if [[ ! -x node_modules/.bin/concurrently ]]; then
     npm ci
 fi
@@ -190,6 +213,13 @@ add_command() {
     commands+=("exec $command")
 }
 add_command "$bin_dir/moor-daemon" "${daemon_args[@]}"
+if [[ -n $startup_config_dir ]]; then
+    # The launcher execs concurrently below, so its EXIT trap cannot remove the key. The daemon
+    # reads the key through a pipe, and the file is removed once the pipe has the contents.
+    printf -v startup_source '<(cat -- %q && rm -rf -- %q)' \
+        "$startup_config_dir/config.json" "$startup_config_dir"
+    commands[-1]+="--startup-config $startup_source"
+fi
 add_command "$bin_dir/moor-web-host" "${client_args[@]}" \
     --data-dir "$data_dir/web-host" --listen-address 0.0.0.0:8080 --enable-webhooks
 add_command npm run dev --workspace meadow -- --host 0.0.0.0 --strictPort

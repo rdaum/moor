@@ -32,6 +32,8 @@ class DevLauncherTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[2]
         shutil.copy(source / "scripts/dev.sh", self.root / "scripts")
         (self.root / "cores/cowbell/src").mkdir(parents=True)
+        (self.root / "cores/cowbell/src/llm").mkdir()
+        (self.root / "cores/cowbell/src/llm/llm_client.moo").touch()
         self.data = self.root / "moor-data"
         self.data.mkdir()
         (self.data / "old-database").touch()
@@ -51,12 +53,40 @@ else:
         npm.chmod(0o755)
         concurrent = self.root / "node_modules/.bin/concurrently"
         concurrent.parent.mkdir(parents=True)
-        concurrent.write_text('#!/usr/bin/env node\nconsole.log("COMMANDS=" + JSON.stringify(process.argv.slice(2)));\n')
+        concurrent.write_text('''#!/usr/bin/env node
+const fs = require("node:fs");
+const {spawnSync} = require("node:child_process");
+const commands = process.argv.slice(2).filter(argument => argument.startsWith("exec "));
+const configDir = fs.readdirSync(process.env.TMPDIR).find(name => name.startsWith("moor-dev-llm."));
+if (configDir) {
+    // Run only the daemon command, as concurrently would, against the fake daemon.
+    const path = process.env.TMPDIR + "/" + configDir + "/config.json";
+    fs.writeFileSync("startup-mode.json", JSON.stringify(fs.statSync(path).mode & 0o777));
+    const daemon = commands.find(command => command.includes("moor-daemon"));
+    const result = spawnSync("bash", ["-c", daemon], {stdio: "inherit"});
+    if (result.status !== 0) process.exit(1);
+}
+console.log("COMMANDS=" + JSON.stringify(process.argv.slice(2)));
+''')
         concurrent.chmod(0o755)
+        daemon = self.root / "target/debug/moor-daemon"
+        daemon.parent.mkdir(parents=True)
+        daemon.write_text('''#!/usr/bin/env python3
+import json, os, sys
+path = sys.argv[sys.argv.index("--startup-config") + 1]
+config = json.loads(open(path).read())
+with open("startup-capture.json", "w") as capture:
+    json.dump({"config": config, "pipe": not os.path.isfile(path),
+               "keyInherited": bool(os.environ.get("OPENROUTER_KEY") or os.environ.get("OPENROUTER_API_KEY")),
+               "configDirs": [name for name in os.listdir(os.environ["TMPDIR"]) if name.startswith("moor-dev-llm.")]},
+              capture)
+''')
+        daemon.chmod(0o755)
         self.environment = dict(os.environ)
-        for name in ("MOOR_CORE", "MOOR_DATA_DIR", "MOOR_DB", "MOOR_EXPORT"):
+        for name in ("MOOR_CORE", "MOOR_DATA_DIR", "MOOR_DB", "MOOR_EXPORT", "OPENROUTER_KEY", "OPENROUTER_API_KEY"):
             self.environment.pop(name, None)
         self.environment["PATH"] = f"{tools}:{os.environ['PATH']}"
+        self.environment["TMPDIR"] = str(self.root.parent)
 
     def launch(self, *arguments):
         return subprocess.run(
@@ -90,6 +120,38 @@ else:
         self.assertEqual(daemon[daemon.index("--git-upstream") + 1], "origin/main")
         self.assertFalse(any(Path(command[0]).name == "moor-git-worker" for command in commands))
         self.assertTrue((self.data / "old-database").exists())
+        self.assertNotIn("--startup-config", daemon)
+
+    def test_openrouter_configures_world_without_exposing_key_to_services(self):
+        key = 'fixture-"key\\with$syntax'
+        self.environment["OPENROUTER_KEY"] = key
+        commands = self.commands()
+        self.assertIn("--startup-config", self.daemon(commands))
+        captured = json.loads((self.root / "startup-capture.json").read_text())
+        self.assertEqual(captured["config"], {"llm": {
+            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+            "model": "deepseek/deepseek-v4.1-flash", "key": key,
+        }})
+        self.assertEqual(json.loads((self.root / "startup-mode.json").read_text()), 0o600)
+        self.assertTrue(captured["pipe"])
+        self.assertFalse(captured["keyInherited"])
+        # The daemon has read the whole pipe, so the key file is already gone.
+        self.assertEqual(captured["configDirs"], [])
+        self.assertNotIn(key, str(commands))
+        self.assertTrue(any(Path(command[0]).name == "moor-curl-worker" for command in commands))
+        self.assertTrue((self.data / "old-database").exists())
+
+    def test_openrouter_api_key_alias_and_precedence(self):
+        self.environment["OPENROUTER_API_KEY"] = "fixture-api-key"
+        for preferred in (None, "", "fixture-preferred-key"):
+            with self.subTest(preferred=preferred):
+                if preferred is not None:
+                    self.environment["OPENROUTER_KEY"] = preferred
+                commands = self.commands()
+                self.assertIn("--startup-config", self.daemon(commands))
+                captured = json.loads((self.root / "startup-capture.json").read_text())
+                self.assertEqual(captured["config"]["llm"]["key"], preferred or "fixture-api-key")
+                self.assertFalse(captured["keyInherited"])
 
     def test_explicit_upstream_replaces_default(self):
         daemon = self.daemon(self.commands("--git-upstream", "origin/stable"))
