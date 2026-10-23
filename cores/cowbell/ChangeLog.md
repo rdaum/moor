@@ -239,6 +239,8 @@ Cowbell entries.
 - New players see the configured `$login.new_player_welcome_message`, rendered as Djot with `{TITLE}`
   replaced. The greeting previously ignored it.
 
+- NPC speech no longer shows doubled quotes when the model wraps its whole reply in quotation marks.
+
 - Room entry and exit no longer render live room panels or arrival descriptions for disconnected
   players. This avoids repeated room captures and task timeouts in rooms with sleeping occupants.
 

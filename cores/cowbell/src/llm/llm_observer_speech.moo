@@ -29,6 +29,16 @@ object LLM_OBSERVER_SPEECH [
       index(text, marker) > 0 && return <$llm_observer_speech, .text = "">;
     endfor
     text == "SILENT" && (text = "");
+    "Speech is announced inside quotes; drop one pair the model wrapped around the whole reply.";
+    for pair in ({{"\"", "\""}, {"\u201C", "\u201D"}})
+      const {opening, closing} = pair;
+      if (length(text) >= 2 && text[1] == opening && text[$] == closing)
+        const inner = text[2..$ - 1];
+        if (!index(inner, opening) && !index(inner, closing))
+          text = inner:trim();
+        endif
+      endif
+    endfor
     length(text) <= 8192 || raise(E_QUOTA, "Observer speech exceeds 8192 characters.");
     return <$llm_observer_speech, .text = text>;
   endmethod

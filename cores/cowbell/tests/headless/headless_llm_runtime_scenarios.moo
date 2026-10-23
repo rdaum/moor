@@ -2217,6 +2217,12 @@ object #90031
       $test_utils:assert_eq($llm_observer_speech:mk("<think>private reasoning</think> Hello.").text, "Hello.", "Reasoning blocks are excluded");
       $test_utils:assert_eq($llm_observer_speech:mk("<think>unfinished").text, "", "Unfinished reasoning is silent");
       $test_utils:assert_eq($llm_observer_speech:mk("SILENT").text, "", "Explicit silence is preserved");
+      $test_utils:assert_eq($llm_observer_speech:mk("\"Le Spleen it is.\"").text, "Le Spleen it is.",
+        "A reply wrapped in quotes is not quoted twice");
+      $test_utils:assert_eq($llm_observer_speech:mk("\u201CGood evening.\u201D").text, "Good evening.",
+        "Curly wrapping quotes are removed too");
+      $test_utils:assert_eq($llm_observer_speech:mk("\"Yes,\" he said, \"go.\"").text, "\"Yes,\" he said, \"go.\"",
+        "Quotes inside the reply are kept");
       let large = "x";
       for width in [1..14]
         large = large + large;
