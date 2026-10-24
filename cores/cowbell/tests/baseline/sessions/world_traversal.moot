@@ -9,8 +9,9 @@ true
 ; return #90102.location == #90110;
 true
 @event text/plain narrative
+// The traveler sees the new room, not a line announcing their own arrival.
 @nonprogrammer
-@event text/plain narrative
+@event data:state room_snapshot
 @wizard
 ; return #90102.location == #90110;
 true

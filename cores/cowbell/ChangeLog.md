@@ -251,6 +251,9 @@ Cowbell entries.
 
 - Command listings omit hook overrides such as `maybe_handle_command` and symbol shorthands.
 
+- A traveler no longer sees their own arrival line before or after the new room; others in the room
+  still see it. `$room:announce` accepts an excluded list, and `$room:announce_all_but` exists.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 

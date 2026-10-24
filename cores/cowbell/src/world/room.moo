@@ -333,11 +333,12 @@ object ROOM [
   endmethod
 
   method announce owner: HACKER
-    {event} = args;
+    "Tell everyone here, except any objects in the optional excluded list, then propagate sound.";
+    const {event, ?excluded = {}} = args;
     "Local announcement";
     for who in (this:contents())
       suspend_if_needed();
-      `who:tell(event) ! E_VERBNF';
+      who in excluded || `who:tell(event) ! E_VERBNF';
     endfor
     "Check for acoustic propagation";
     if (typeof(event) != TYPE_FLYWEIGHT)
@@ -1027,6 +1028,13 @@ object ROOM [
     endif
     const narrative = $document_template:mk('emphasis, $format:literal_inline(msg));
     return $event:mk_distant(false, narrative):with_location(this);
+  endmethod
+
+  method announce_all_but owner: HACKER
+    "Announce to everyone here except the listed objects.";
+    const {excluded, event} = args;
+    typeof(excluded) == TYPE_LIST || raise(E_TYPE);
+    return this:announce(event, excluded);
   endmethod
 
   method announce_distant owner: ARCH_WIZARD

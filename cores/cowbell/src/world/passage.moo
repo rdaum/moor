@@ -448,7 +448,8 @@ object PASSAGE [
       const departure = $passage:movement_from(this, traveler, from_room, to_room, false):with_audience('narrative);
       const arrival = $passage:movement_from(this, traveler, from_room, to_room, true):with_audience('narrative);
       from_room:announce(departure);
-      to_room:announce(arrival);
+      "The traveler sees the new room; only the others there see the arrival line.";
+      to_room:announce_all_but({traveler}, arrival);
     endfork
     return true;
   endmethod
