@@ -96,7 +96,7 @@ object LIST_PROTO [
     return result;
   endmethod
 
-  method english_list owner: #184
+  method english_list owner: HACKER
     "Return a human-readable English list such as \"a, b, and c\" or \"a and b\".";
     "Optional arguments customize the empty-list text, conjunction, comma separator, and final comma separator.";
     const {things, ?nothingstr = "nothing", ?andstr = " and ",

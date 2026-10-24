@@ -243,6 +243,9 @@ Cowbell entries.
 
 - NPCs no longer post a reply twice when they speak through a tool and then return the same text.
 
+- `$letter` and `$list_proto:english_list` now have core owners, so `@changes` can adopt and update
+  them. They were owned by the test player and by a stray object number.
+
 - Room entry and exit no longer render live room panels or arrival descriptions for disconnected
   players. This avoids repeated room captures and task timeouts in rooms with sleeping occupants.
 
