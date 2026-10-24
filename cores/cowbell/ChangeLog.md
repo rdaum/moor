@@ -237,6 +237,8 @@ Cowbell entries.
 
 ### Fixed
 
+- A locked way reads as open to someone who carries its key, instead of "The way ... is locked."
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 

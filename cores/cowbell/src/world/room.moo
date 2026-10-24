@@ -480,7 +480,12 @@ object ROOM [
         continue;
       endif
       let state = passage.is_open ? 'open | 'closed;
-      passage.is_locked && (state = 'locked);
+      if (passage.is_locked)
+        "A viewer whose key or standing satisfies the lock can pass, so the way is open to them.";
+        const passable = passage.is_open && valid(viewer)
+          && `passage:check_unlock(viewer, room) ! ANY => false';
+        passable || (state = 'locked);
+      endif
       const caption = label + (state == 'open ? "" | " (" + tostr(state) + ")");
       const description = $passage:description_content(passage, room);
       const ambient = passage.(prefix + "ambient") && length(description) > 0;

@@ -202,6 +202,33 @@ object LOOK_SCENARIOS
     endtry
     return true;
   endmethod
+  method test_locked_way_is_open_to_a_key_holder owner: ARCH_WIZARD
+    "A locked passage reads as locked to most viewers and as open to one who carries its key.";
+    const area = create($area);
+    const room = create($room);
+    const destination = create($room);
+    const key = create($thing);
+    try
+      move(room, area);
+      move(destination, area);
+      const condition = ['kind -> 'predicate, 'name -> 'is, 'bind -> [],
+        'arguments -> ['left -> ['kind -> 'input, 'name -> 'Key], 'right -> ['kind -> 'literal, 'value -> key]]];
+      const rule = $rule:mk('unlock_rule, condition, $rule_engine:passage_scope());
+      area:create_passage(room, destination,
+        $passage:mk(room, "east", {}, "", false, destination, "west", {}, "", false)
+        :with_unlock_rule(rule):with_locked(true));
+      $test_utils:assert_eq($room:exit_options(room, #90102)[1]['state], 'locked, "no key: locked");
+      move(key, #90102);
+      $test_utils:assert_eq($room:exit_options(room, #90102)[1]['state], 'open, "carried key: open");
+    finally
+      recycle(key);
+      recycle(room);
+      recycle(destination);
+      recycle(area);
+    endtry
+    return true;
+  endmethod
+
   method test_travel_sentence_uses_captured_names_and_commands owner: ARCH_WIZARD
     "Describe named destinations while preserving the exit command and captured wording.";
     const area = create($area);
