@@ -923,20 +923,29 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
     );
     let scheduler_client = scheduler.client().unwrap();
 
-    // Background DB checkpoint thread
-    (|| -> Result<(), Report> {
-        let Some(output_path) = config.import_export.output_path.clone() else {
+    // Checkpoint settings are read now; the loop starts after the scheduler can accept requests.
+    let checkpointing = match (
+        config.import_export.output_path.clone(),
+        scheduler.get_checkpoint_interval(config.import_export.checkpoint_interval),
+    ) {
+        (None, _) => {
             info!("Checkpointing disabled - no output path configured.");
-            return Ok(());
-        };
-
-        let Some(checkpoint_interval) =
-            scheduler.get_checkpoint_interval(config.import_export.checkpoint_interval)
-        else {
+            None
+        }
+        (Some(_), None) => {
             info!("Checkpointing disabled - no interval configured.");
-            return Ok(());
-        };
+            None
+        }
+        (Some(output_path), Some(interval)) => Some((output_path, interval)),
+    };
 
+    // Start the scheduler (spawns timer + worker-response threads internally).
+    let scheduler_loop_jh = scheduler
+        .start(rpc_server.clone())
+        .map_err(|e| eyre!("Failed to start scheduler: {e}"))?;
+
+    // Background DB checkpoint thread: one checkpoint now, then one per interval.
+    if let Some((output_path, checkpoint_interval)) = checkpointing {
         let checkpoint_kill_switch = kill_switch.clone();
         let checkpoint_scheduler_client = scheduler_client.clone();
         info!(
@@ -944,7 +953,6 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
             output_path.display(),
             checkpoint_interval
         );
-
         spawn_efficient("moor-checkpoint", move || {
             loop {
                 if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
@@ -957,13 +965,7 @@ pub fn run(runtime_config: DaemonRuntimeConfig, runtime: DaemonRuntime) -> Resul
                 std::thread::sleep(checkpoint_interval);
             }
         })?;
-        Ok(())
-    })()?;
-
-    // Start the scheduler (spawns timer + worker-response threads internally).
-    let scheduler_loop_jh = scheduler
-        .start(rpc_server.clone())
-        .map_err(|e| eyre!("Failed to start scheduler: {e}"))?;
+    }
 
     let shutdown_watcher_requested = shutdown_requested.clone();
     let shutdown_watcher_kill_switch = kill_switch.clone();

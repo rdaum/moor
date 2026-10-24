@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `#0:server_started` on each startup. Startup fails if the configured hook fails or times out.
   Cowbell uses this for LLM setup from the development launcher.
 
+- The daemon writes a checkpoint at startup again when an export directory and interval are set. The
+  checkpoint loop now starts after the scheduler, so the first request no longer fails with
+  "Scheduler not responding" and leaves the world without a checkpoint for a full interval.
+
 - Term matching and query builtins accept a `case_sensitive` option. It preserves string case in
   matches, repeated bindings, and duplicate removal. Existing calls keep their current behavior.
 
