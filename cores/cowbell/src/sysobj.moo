@@ -359,6 +359,11 @@ object SYSOBJ [
           matches && (viable = {@viable, {test_pc, matches[1]}});
         endfor
       endfor
+      "Identical candidates, such as two mugs of coffee, are interchangeable; use the first.";
+      if (length(viable) > 1 && $match:interchangeable({entry[1]['dobj] for entry in (viable)})
+          && length({choice[1]['iobj] for choice in (viable)}:unique()) == 1)
+        viable = {viable[1]};
+      endif
       if (length(viable) > 1)
         player:inform_current($event:mk_error(player,
           "Which one do you mean? Use a more specific name or an object number."));

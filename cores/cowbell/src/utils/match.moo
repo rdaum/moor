@@ -88,6 +88,60 @@ object MATCH [
     return this:require_unique(name_string, this:candidates_in_scope(name_string, this:environment(context), ['context -> context]));
   endmethod
 
+  method prefer owner: ARCH_WIZARD
+    "Narrow several matches when the choice is obvious: drop the context's own room, then collapse interchangeable items.";
+    set_task_perms(caller_perms());
+    const {matches, ?context = player} = args;
+    typeof(matches) == TYPE_LIST && length(matches) > 1 || return matches;
+    let narrowed = matches;
+    const room = valid(context) ? context.location | #-1;
+    const others = {match for match in (narrowed) if (match != room)};
+    length(others) && (narrowed = others);
+    this:interchangeable(narrowed) && (narrowed = {narrowed[1]});
+    return narrowed;
+  endmethod
+
+  method test_prefer_obvious_matches owner: ARCH_WIZARD
+    "A fixture beats the room it is in, and identical items collapse to one; real ambiguity remains.";
+    const room = create($room);
+    const fixture = create($thing);
+    const viewer = create($thing);
+    const twin = create($thing);
+    const other = create($thing);
+    try
+      move(fixture, room);
+      move(viewer, room);
+      $test_utils:assert_eq(this:prefer({room, fixture}, viewer), {fixture}, "the room yields to its fixture");
+      fixture.name = "mug of coffee";
+      twin.name = "mug of coffee";
+      other.name = "mug of tea";
+      $test_utils:assert_eq(this:prefer({fixture, twin}, viewer), {fixture}, "identical items collapse to the first");
+      $test_utils:assert_eq(this:prefer({fixture, other}, viewer), {fixture, other}, "different items stay ambiguous");
+      add_verb(twin, {$arch_wizard, "rxd", "touch"}, {"this", "none", "none"});
+      $test_utils:assert_eq(this:prefer({fixture, twin}, viewer), {fixture, twin}, "an item with its own verbs stays ambiguous");
+    finally
+      for object in ({room, fixture, viewer, twin, other})
+        recycle(object);
+      endfor
+    endtry
+    return true;
+  endmethod
+
+  method interchangeable owner: ARCH_WIZARD
+    "True when every object shares one parent and name and defines no verbs of its own, as with identical mugs.";
+    "Objects with their own verbs can behave differently, so they stay ambiguous.";
+    set_task_perms(caller_perms());
+    const {objects} = args;
+    typeof(objects) == TYPE_LIST && length(objects) > 1 || return false;
+    const first = objects[1];
+    valid(first) && !length(verbs(first)) || return false;
+    for object in (objects[2..$])
+      valid(object) && parent(object) == parent(first) && object.name == first.name
+        && !length(verbs(object)) || return false;
+    endfor
+    return true;
+  endmethod
+
   method normalize_scope owner: ARCH_WIZARD
     "Return {objects, keys} for objects or {object, names...} scope entries.";
     "Preserve first occurrence order. Explicit scope names replace default name/aliases.";

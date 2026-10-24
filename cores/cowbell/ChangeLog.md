@@ -245,6 +245,10 @@ Cowbell entries.
 
 - A multi-word exit name such as `Room 208` works as a bare command.
 
+- Help for an obvious object no longer stops at "More than one object matches": a room's fixture is
+  preferred over the room, and identical items with no verbs of their own, such as two mugs of
+  coffee, are interchangeable in help and commands. Builder matching is unchanged.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 

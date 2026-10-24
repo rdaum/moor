@@ -1129,10 +1129,12 @@ object PLAYER [
           final_targets = {@final_targets, obj};
         endfor
         if (final_targets)
-          target_obj = $match:resolve_in_scope(query, final_targets);
-          if (target_obj == $ambiguous_match)
+          "Help only reads, so take the obvious match: a fixture over its room, one of identical items.";
+          const found = $match:prefer($match:candidates_in_scope(query, final_targets, ['context -> this]), this);
+          if (length(found) > 1)
             return this:inform_current($event:mk_error(this, "More than one object matches. Use a more specific name."));
           endif
+          target_obj = length(found) ? found[1] | $failed_match;
         endif
       endif
       if (valid(target_obj))
