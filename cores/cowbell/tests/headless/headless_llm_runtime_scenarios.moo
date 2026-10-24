@@ -2519,6 +2519,38 @@ object #90031
     return true;
   endmethod
 
+  method test_observer_tool_speech_is_not_repeated owner: ARCH_WIZARD
+    "A reply already delivered by a presentation tool is not announced again; a different reply is.";
+    for case in ({{"Good evening.", 1}, {"What brings you here?", 2}})
+      const {reply, spoken} = case;
+      const {observer, room, client, agent} = this:_observer_fixture($mr_welcome);
+      try
+        observer:_setup_agent(agent);
+        client.replies = {
+          ["choices" -> {["message" -> ["role" -> "assistant", "tool_calls" -> {
+            ["id" -> "say", "type" -> "function", "function" -> ["name" -> "emote",
+              "arguments" -> ["action" -> "Good evening."]]]
+          }]]}],
+          ["choices" -> {["message" -> ["role" -> "assistant", "content" -> "\"" + reply + "\""]]}]
+        };
+        set_verb_code(client, "chat", {
+          "const reply = this.replies[1];",
+          "if (length(this.replies) > 1) this.replies = listdelete(this.replies, 1); endif",
+          "return reply;"});
+        const job = this:_as_player(observer, "request_response", {"greet the room"});
+        this:_await_observer(job);
+        $test_utils:assert_eq(job.state, 'complete, "The turn completes");
+        const lines = {event for event in (room.events) if (index(toliteral(event), "Good evening.") || index(toliteral(event), reply))};
+        $test_utils:assert_eq(length(lines), spoken, "Reply " + toliteral(reply) + " reaches the room the expected number of times");
+      finally
+        recycle(observer);
+        recycle(room);
+        recycle(client);
+      endtry
+    endfor
+    return true;
+  endmethod
+
   method test_observer_shared_social_model_loop owner: ARCH_WIZARD
     "The real observer tool loop dispatches shared social and memory tools as the NPC.";
     const {observer, room, client, agent} = this:_observer_fixture($mr_welcome);

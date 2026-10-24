@@ -154,7 +154,11 @@ object LLM_OBSERVER_JOB [
     this:_stop_thinking();
     if (this.state == 'complete)
       const speech = $llm_observer_speech:mk(this.result);
-      if (speech:announce(observer, this.room))
+      "Models often say a line with a tool and then return it as the reply; the room heard it once.";
+      const presented = {$llm_observer_speech:mk(text).text for text in (this.agent.presented_text)};
+      if (length(speech.text) && speech.text in presented)
+        runtime.last_spoke_at = time();
+      elseif (speech:announce(observer, this.room))
         runtime.last_spoke_at = time();
       endif
       this:_trim_observations(true);

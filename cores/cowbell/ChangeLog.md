@@ -241,6 +241,8 @@ Cowbell entries.
 
 - NPC speech no longer shows doubled quotes when the model wraps its whole reply in quotation marks.
 
+- NPCs no longer post a reply twice when they speak through a tool and then return the same text.
+
 - Room entry and exit no longer render live room panels or arrival descriptions for disconnected
   players. This avoids repeated room captures and task timeouts in rooms with sleeping occupants.
 
