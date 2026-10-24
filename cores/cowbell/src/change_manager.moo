@@ -339,7 +339,7 @@ object CHANGE_MANAGER [
         ROOM
       },
       "schema" -> 1,
-      "trusted_owners" -> {HACKER},
+      "trusted_owners" -> {HACKER, LOGIN},
       "upstream" -> [
         "path" -> "cores/cowbell/src",
         "repository" -> "https://github.com/timbran-project/moor.git",
