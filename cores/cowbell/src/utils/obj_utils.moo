@@ -132,6 +132,41 @@ object OBJ_UTILS [
     return verb_sigs;
   endmethod
 
+  method _listable_command owner: ARCH_WIZARD
+    "Exclude hook overrides and symbol shorthands from command listings; they are not commands to type.";
+    caller == this || raise(E_PERM);
+    const {definer, verb_name} = args;
+    const first = verb_name:words()[1];
+    length(first) || return false;
+    "Shorthands such as ` and | and http:// run when typed but read as noise in a list of commands.";
+    (index("abcdefghijklmnopqrstuvwxyz@", first[1]) && !index(first, "://")) || return false;
+    "A verb that overrides an ancestor's method of the same name is a hook, such as maybe_handle_command.";
+    for ancestor in (ancestors(definer))
+      if (verb_name in `verbs(ancestor) ! ANY => {}'
+          && `verb_args(ancestor, verb_name) ! ANY => {}' == {"this", "none", "this"})
+        return false;
+      endif
+    endfor
+    return true;
+  endmethod
+
+  method test_listable_commands owner: ARCH_WIZARD
+    "Hook overrides and symbol shorthands are not listed as commands; ordinary verbs are.";
+    const room = create($room);
+    try
+      add_verb(room, {$arch_wizard, "rxd", "maybe_handle_command"}, {"none", "none", "none"});
+      add_verb(room, {$arch_wizard, "rxd", "ring"}, {"none", "none", "none"});
+      const listed = {entry["verb"] for entry in (this:collect_ambient_verbs({room}))};
+      $test_utils:assert_true("ring" in listed, "an ordinary room verb is listed");
+      $test_utils:assert_false("maybe_handle_command" in listed, "a hook override is not listed");
+      const player_listed = {item["verb"] for item in (this:collect_ambient_verbs({$social_features}))};
+      $test_utils:assert_false("|*" in player_listed || "http://* https://*" in player_listed, "symbol shorthands are not listed");
+    finally
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
   method is_targetable_verb owner: ARCH_WIZARD
     "Check if a verb targets specific objects (has dobj or iobj as 'this').";
     "A targetable verb requires you to specify an object. Ambient verbs do not.";
@@ -227,7 +262,7 @@ object OBJ_UTILS [
           endif
           {dobj, prep, iobj} = verb_sig;
           "Include ambient verbs (those that don't require 'this' as dobj/iobj)";
-          if (!this:is_targetable_verb(dobj, prep, iobj))
+          if (!this:is_targetable_verb(dobj, prep, iobj) && this:_listable_command(definer, verb_name))
             "Skip if we've already seen this verb";
             if (!maphaskey(seen, verb_name))
               seen[verb_name] = true;

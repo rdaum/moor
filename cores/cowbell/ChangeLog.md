@@ -249,6 +249,8 @@ Cowbell entries.
   preferred over the room, and identical items with no verbs of their own, such as two mugs of
   coffee, are interchangeable in help and commands. Builder matching is unchanged.
 
+- Command listings omit hook overrides such as `maybe_handle_command` and symbol shorthands.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 
