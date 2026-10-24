@@ -843,6 +843,21 @@ object ROOM [
     return $room:door_command(this, 'open, player, dobjstr, iobjstr);
   endverb
 
+  verb stand (any none none) owner: ARCH_WIZARD flags: "rxd"
+    "Stand up from the furniture the player is sitting on: `stand`, `stand up`, or `stand <seat>`.";
+    const principal = caller_perms();
+    ((principal == #-1 && caller == player) || principal == player
+      || (valid(principal) && principal.wizard)) || raise(E_PERM);
+    set_task_perms(principal == #-1 ? player | principal);
+    const seat = this:get_engagement(player);
+    const sitting = valid(seat) && isa(seat, $sittable) && player in seat.sitting;
+    if (!(dobjstr in {"", "up"}) && !(sitting && dobj == seat))
+      return player:inform_current($event:mk_error(player, "Stand up from what?"));
+    endif
+    sitting || return player:inform_current($event:mk_error(player, "You are already standing."));
+    return seat:remove_sitter(player);
+  endverb
+
   verb close (any any any) owner: ARCH_WIZARD flags: "rxd"
     "Close an exit or a nearby object. A named key must be carried.";
     const principal = caller_perms();

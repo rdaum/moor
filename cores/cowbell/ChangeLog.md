@@ -237,6 +237,9 @@ Cowbell entries.
 
 ### Fixed
 
+- `stand` and `stand up` get you off the furniture you are sitting on; before, only
+  `stand from <seat>` worked.
+
 - A locked way reads as open to someone who carries its key, instead of "The way ... is locked."
 
 - Command help no longer offers `get` and `drop` for objects that cannot be carried.

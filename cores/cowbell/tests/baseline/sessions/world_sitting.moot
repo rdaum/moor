@@ -29,6 +29,24 @@ true
 ; return #90102 in #90100.runtime_probe.sitting;
 0
 @nonprogrammer
+% sit on testcouch
+~~You sit on
+% stand
+~~You stand up from
+% stand
+~~You are already standing.
+% sit on testcouch
+~~You sit on
+% stand up
+~~You stand up from
+% sit on testcouch
+~~You sit on
+% stand testcouch
+~~You stand up from
+@wizard
+; return #90102 in #90100.runtime_probe.sitting;
+0
+@nonprogrammer
 % frown
 ~~You frown
 % clap
