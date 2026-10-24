@@ -155,7 +155,12 @@ object AREA [
     const room = player.location;
     valid(room) && isa(room, $room) || return false;
     const command = tostr(parsed['verb]) == "go" ? parsed['dobjstr] | tostr(parsed['verb]);
-    const passage = $room:find_passage(room, command);
+    let passage = $room:find_passage(room, command);
+    "A multi-word exit name such as \"Room 208\" arrives as a verb and arguments; try the whole phrase.";
+    const rest = `parsed['argstr] ! E_RANGE => ""';
+    if (typeof(passage) != TYPE_FLYWEIGHT && command != parsed['dobjstr] && typeof(rest) == TYPE_STR && length(rest))
+      passage = $room:find_passage(room, tostr(parsed['verb]) + " " + rest);
+    endif
     typeof(passage) == TYPE_FLYWEIGHT || return false;
     passage:travel_from(player, room, parsed);
     return true;

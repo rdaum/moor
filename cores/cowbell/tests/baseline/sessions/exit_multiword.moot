@@ -1,0 +1,22 @@
+// Copyright (C) 2026 The mooR Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// A multi-word exit name can be typed as a bare command, as can its single-word alias.
+@wizard
+; move(#90103, #90108); #90108:create_passage(#90103, #90110, $passage:mk(#90103, "Room 208", {"208"}, "", true, #90110, "out", {}, "", true)); return #90102.location == #90103;
+true
+@nonprogrammer
+% 208
+@wizard
+; return #90102.location == #90110;
+true
+@nonprogrammer
+% out
+@wizard
+; return #90102.location == #90103;
+true
+@nonprogrammer
+% Room 208
+@wizard
+; return #90102.location == #90110;
+true

@@ -243,6 +243,8 @@ Cowbell entries.
 
 - Room listings keep a player's chosen name as written, such as `lp`, at the start of a sentence.
 
+- A multi-word exit name such as `Room 208` works as a bare command.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 
