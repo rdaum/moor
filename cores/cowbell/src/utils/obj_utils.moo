@@ -174,8 +174,13 @@ object OBJ_UTILS [
       "Filter for targetable verbs only";
       targetable_sigs = {};
       const actions = o:inspection_commands(player);
+      "Fixed objects inherit $thing's get and drop, which only refuse; do not offer them.";
+      const fixed = !`o.portable ! E_PROPNF => true';
       for verb_info in (exam.verbs)
         {verb_name, definer, dobj, prep, iobj} = verb_info;
+        if (fixed && definer == $thing && verb_name in {"get", "drop"})
+          continue;
+        endif
         if (this:is_targetable_verb(dobj, prep, iobj))
           sig = this:command_entry(o, verb_info, player, "", actions);
           targetable_sigs = {@targetable_sigs, sig};

@@ -202,6 +202,30 @@ object LOOK_SCENARIOS
     endtry
     return true;
   endmethod
+  method test_fixed_objects_do_not_offer_get_and_drop owner: ARCH_WIZARD
+    "Command help omits $thing's get and drop for objects that cannot be carried.";
+    const fixture = create($thing);
+    try
+      fixture.name = "marble fountain";
+      const names = fn(target)
+        let listed = {};
+        for entry in ($obj_utils:collect_targetable_verbs({target}))
+          for line in (entry["verbs"])
+            listed = {@listed, toliteral(line)};
+          endfor
+        endfor
+        return listed:join(" ");
+      endfn;
+      $test_utils:assert_true(index(names(fixture), "get"), "a portable thing offers get");
+      fixture.portable = false;
+      const fixed = names(fixture);
+      $test_utils:assert_false(index(fixed, "\"get ") || index(fixed, "drop"), "a fixed thing offers neither get nor drop");
+    finally
+      recycle(fixture);
+    endtry
+    return true;
+  endmethod
+
   method test_locked_way_is_open_to_a_key_holder owner: ARCH_WIZARD
     "A locked passage reads as locked to most viewers and as open to one who carries its key.";
     const area = create($area);

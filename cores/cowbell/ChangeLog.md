@@ -239,6 +239,8 @@ Cowbell entries.
 
 - A locked way reads as open to someone who carries its key, instead of "The way ... is locked."
 
+- Command help no longer offers `get` and `drop` for objects that cannot be carried.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 
