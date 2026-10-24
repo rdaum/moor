@@ -527,6 +527,19 @@ fn invoke_server_started_hook(
     Ok(())
 }
 
+/// Read the JSON object passed to `#0:server_started` with `--startup-config`.
+/// Errors name the problem but never echo the file, which may hold secrets.
+pub fn load_startup_config(path: &Path, use_boolean_returns: bool) -> Result<Var, Report> {
+    let bytes =
+        std::fs::read(path).map_err(|_| eyre!("Unable to read startup configuration file"))?;
+    let json: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| eyre!("Startup configuration must be valid JSON"))?;
+    if !json.is_object() {
+        bail!("Startup configuration must be a JSON object");
+    }
+    Ok(moor_var::json::json_to_var(&json, use_boolean_returns))
+}
+
 /// Host for the moor runtime.
 ///   * Brings up the database
 ///   * Instantiates a scheduler

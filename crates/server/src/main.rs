@@ -93,6 +93,14 @@ struct Args {
 
     #[arg(
         long,
+        value_name = "FILE",
+        help = "JSON object passed to #0:server_started on each startup. May contain secrets; protect the file.",
+        value_hint = ValueHint::FilePath
+    )]
+    startup_config: Option<PathBuf>,
+
+    #[arg(
+        long,
         value_name = "db",
         help = "Main database filename (relative to data-dir if not absolute)",
         value_hint = ValueHint::FilePath,
@@ -437,6 +445,11 @@ async fn run() -> Result<(), Report> {
     let (local_worker_handler_sender, local_worker_handler_receiver) = flume::bounded(1);
     let ready_signal = Arc::new(Mutex::new(Some(ready_sender)));
     let local_event_bus = Arc::new(LocalEventBus::new());
+    let startup_config = args
+        .startup_config
+        .as_deref()
+        .map(|path| moor_daemon::load_startup_config(path, config.features.use_boolean_returns))
+        .transpose()?;
     let runtime_config = DaemonRuntimeConfig {
         version,
         config,
@@ -475,7 +488,7 @@ async fn run() -> Result<(), Report> {
         },
         num_io_threads: args.num_io_threads,
         workers_enabled: services_config.curl_worker.enabled || services_config.git_worker.enabled,
-        startup_config: None,
+        startup_config,
         #[cfg(feature = "trace_events")]
         trace_output_path: args
             .trace_output

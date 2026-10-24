@@ -78,10 +78,10 @@ and can be restarted independently of the daemon, allowing for flexible deployme
 See [Clustered Deployment](clustered-deployment.md) for complete details on split-process and
 multi-machine setups.
 
-The daemon also accepts `--startup-config FILE`. The file must contain a JSON object, which becomes
-the first argument to `#0:server_started` on each startup. The core defines the supported fields.
-Startup fails if the hook cannot run, fails, or exceeds 30 seconds. Without this option, the hook
-receives no arguments.
+The daemon and the combined `moor` server also accept `--startup-config FILE`. The file must contain
+a JSON object, which becomes the first argument to `#0:server_started` on each startup. The core
+defines the supported fields. Startup fails if the hook cannot run, fails, or exceeds 30 seconds.
+Without this option, the hook receives no arguments.
 
 Cowbell uses this option to configure its shared LLM client from `scripts/dev.sh`. Protect files
 that contain credentials. The daemon does not print the configuration or the configured hook's

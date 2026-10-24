@@ -22,7 +22,7 @@ use moor_common::{build, tracing};
 use moor_daemon::{
     DaemonEndpoints, DaemonKeys, DaemonPaths, DaemonRuntime, DaemonRuntimeConfig,
     VERSION_BANNER_MSG, ensure_enrollment_token, generate_keypair,
-    load_or_generate_daemon_curve_keypair, rotate_enrollment_token,
+    load_or_generate_daemon_curve_keypair, load_startup_config, rotate_enrollment_token,
 };
 use moor_runtime_api::load_keypair;
 
@@ -89,20 +89,8 @@ fn main() -> Result<(), Report> {
     let config = args.load_config()?;
     let startup_config = args
         .startup_config
-        .as_ref()
-        .map(|path| {
-            let bytes = std::fs::read(path)
-                .map_err(|_| eyre!("Unable to read startup configuration file"))?;
-            let json: serde_json::Value = serde_json::from_slice(&bytes)
-                .map_err(|_| eyre!("Startup configuration must be valid JSON"))?;
-            if !json.is_object() {
-                bail!("Startup configuration must be a JSON object");
-            }
-            Ok(moor_var::json::json_to_var(
-                &json,
-                config.features.use_boolean_returns,
-            ))
-        })
+        .as_deref()
+        .map(|path| load_startup_config(path, config.features.use_boolean_returns))
         .transpose()?;
     let kill_switch = Arc::new(AtomicBool::new(false));
     let emergency_checkpoint = Arc::new(AtomicBool::new(false));
