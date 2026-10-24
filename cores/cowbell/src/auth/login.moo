@@ -505,7 +505,7 @@ object LOGIN [
 
   method start_room owner: ARCH_WIZARD
     "Return the room where a new player first appears. Override to choose per player or by world state.";
-    {?new_player = #-1} = args;
+    const {?new_player = #-1} = args;
     return this.start_room;
   endmethod
 
