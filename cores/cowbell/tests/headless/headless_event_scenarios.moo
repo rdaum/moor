@@ -272,7 +272,8 @@ object HEADLESS_EVENT_SCENARIOS
       const {dobj_spec, prep, iobj_spec} = verb_args(target, name);
       $test_utils:assert_eq({dobj_spec, iobj_spec}, {direct, indirect}, "Command signature consumes only meaningful arguments");
       const spec = {verb_info(target, name)[3], target, dobj_spec, prep, iobj_spec};
-      const entry = $obj_utils:command_entry(target, spec, #90102, "", {});
+      "Help passes the object's own action suggestions, so check that path too.";
+      const entry = $obj_utils:command_entry(target, spec, #90102, "", target:inspection_commands(#90102));
       const descriptor = this:_descriptor(entry);
       $test_utils:assert_eq(descriptor["command"], command, "Invoker receives a complete command");
       $test_utils:assert_false(maphaskey(descriptor, "arguments"), "Invoker does not request an unused argument");

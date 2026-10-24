@@ -949,7 +949,7 @@ object ROOT [
       if (name in seen)
         continue;
       endif
-      const prep = prep_spec == "none" ? "" | prep_spec:split("/")[1];
+      const prep = prep_spec == "none" ? "" | $obj_utils:_preferred_prep(prep_spec);
       "An unconstrained preposition needs an authored command rather than a guess.";
       if (prep_spec == "any")
         continue;

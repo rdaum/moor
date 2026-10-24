@@ -134,8 +134,7 @@ object OBJ_UTILS [
 
   method _preferred_prep owner: ARCH_WIZARD
     "Spell a preposition for help with its shortest form: \"on\", not \"on top of\"; \"from\", not \"out of\".";
-    "Ties keep the first spelling. UI labels do not choose parser words.";
-    caller == this || raise(E_PERM);
+    "Ties keep the first spelling. UI labels do not choose parser words. Pure, so any caller may use it.";
     const {prep_spec} = args;
     const spellings = prep_spec:split("/");
     let best = spellings[1];
