@@ -240,6 +240,9 @@ Cowbell entries.
 - `stand` and `stand up` get you off the furniture you are sitting on; before, only
   `stand from <seat>` worked.
 
+- Command help spells prepositions in their shortest form: `sit on <seat>` and `stand from <seat>`,
+  not `sit on top of` and `stand out of`.
+
 - A locked way reads as open to someone who carries its key, instead of "The way ... is locked."
 
 - Command help no longer offers `get` and `drop` for objects that cannot be carried.

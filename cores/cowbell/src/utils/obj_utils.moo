@@ -48,7 +48,7 @@ object OBJ_UTILS [
         template = template + " {dobj}";
         fields["dobj"] = ["label" -> "Arguments", "expectedKind" -> "text", "required" -> false];
       else
-        const prep = prep_spec == "none" ? "" | prep_spec:split("/")[1];
+        const prep = prep_spec == "none" ? "" | this:_preferred_prep(prep_spec);
         for position in ({{"dobj", direct, "Object"}, {"iobj", indirect, "Object"}})
           const {slot, constraint, prompt} = position;
           slot == "iobj" && prep && (template = template + " " + prep);
@@ -130,6 +130,19 @@ object OBJ_UTILS [
       verb_sigs = {@verb_sigs, sig};
     endfor
     return verb_sigs;
+  endmethod
+
+  method _preferred_prep owner: ARCH_WIZARD
+    "Spell a preposition for help with its shortest form: \"on\", not \"on top of\"; \"from\", not \"out of\".";
+    "Ties keep the first spelling. UI labels do not choose parser words.";
+    caller == this || raise(E_PERM);
+    const {prep_spec} = args;
+    const spellings = prep_spec:split("/");
+    let best = spellings[1];
+    for spelling in (spellings)
+      length(spelling) < length(best) && (best = spelling);
+    endfor
+    return best;
   endmethod
 
   method _listable_command owner: ARCH_WIZARD

@@ -256,8 +256,8 @@ object HEADLESS_EVENT_SCENARIOS
   method test_argument_free_command_entries owner: ARCH_WIZARD
     "Actual command signatures must not invent argument fields for ignored input.";
     const cases = {
-      {$sittable, "sit", "none", "this", "sit on top of " + tostr($sittable)},
-      {$sittable, "stand", "none", "this", "stand out of " + tostr($sittable)},
+      {$sittable, "sit", "none", "this", "sit on " + tostr($sittable)},
+      {$sittable, "stand", "none", "this", "stand from " + tostr($sittable)},
       {$player, "inventory", "none", "none", "inventory"},
       {$player, "dms", "none", "none", "dms"},
       {$player, "listgag", "none", "none", "@listgag"},
