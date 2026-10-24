@@ -12,6 +12,7 @@ object LOGIN [
   property bogus_command (owner: ARCH_WIZARD, flags: "r") = "?";
   property connection_quiet_period (owner: ARCH_WIZARD, flags: "rc") = 7200;
   property default_home (owner: ARCH_WIZARD, flags: "rc") = FIRST_ROOM;
+  property start_room (owner: ARCH_WIZARD, flags: "rc") = FIRST_ROOM;
   property default_player_class (owner: ARCH_WIZARD, flags: "r") = PLAYER;
   property intercepted_actions (owner: ARCH_WIZARD, flags: "rc") = {};
   property intercepted_players (owner: ARCH_WIZARD, flags: "rc") = {};
@@ -502,6 +503,20 @@ object LOGIN [
     return true;
   endmethod
 
+  method start_room owner: ARCH_WIZARD
+    "Return the room where a new player first appears. Override to choose per player or by world state.";
+    {?new_player = #-1} = args;
+    return this.start_room;
+  endmethod
+
+  method test_start_room_is_configurable owner: ARCH_WIZARD
+    "New players start in $login.start_room through the start_room getter.";
+    "Worlds configure their own room, so check the getter against the property, not a fixed room.";
+    $test_utils:assert_eq(this:start_room(), this.start_room, "getter returns the configured room");
+    $test_utils:assert_eq(this:start_room(#90102), this.start_room, "getter accepts the new player");
+    return true;
+  endmethod
+
   method _create_player owner: LOGIN
     ":_create_player(name, password, email, oauth2_identities)";
     caller == this || caller_perms().wizard || raise(E_PERM);
@@ -539,11 +554,12 @@ object LOGIN [
         this:_server_log(tostr("_create_player: couldn't set home for ", new_player, ": ", ex));
       endtry
     endif
-    "Move the player into the first room BEFORE handing ownership to the player.";
+    "Move the player into the start room BEFORE handing ownership to the player.";
     start_room = $nothing;
     try
-      start_room = $first_room;
-    except ex (E_PROPNF)
+      start_room = this:start_room(new_player);
+    except ex (ANY)
+      this:_server_log(tostr("_create_player: start_room failed for ", new_player, ": ", ex));
       start_room = $nothing;
     endtry
     if (valid(start_room))
@@ -553,7 +569,7 @@ object LOGIN [
         this:_server_log(tostr("_create_player: couldn't move ", new_player, " to ", start_room, ": ", ex));
       endtry
     else
-      this:_server_log(tostr("_create_player: #0.first_room not valid; leaving ", new_player, " where it is"));
+      this:_server_log(tostr("_create_player: $login:start_room() gave no valid room; leaving ", new_player, " where it is"));
     endif
     "Now hand ownership to the player (self-owned)";
     setup_cap:set_owner(new_player);

@@ -22,6 +22,10 @@ Cowbell entries.
   visible `\x1b` text. A line that turns a style on is reset before it ends. Names and aliases still
   reject all control characters.
 
+- `$login:start_room(player)` chooses where a new player first appears. It returns
+  `$login.start_room`, which defaults to `$first_room`; worlds can set the property or override the
+  verb instead of editing `_create_player`.
+
 - Every player can use `@describe me as TEXT` to describe themselves. Builders keep the same command
   for objects and exits.
 
