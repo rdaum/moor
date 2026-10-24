@@ -267,9 +267,10 @@ object LOOK [
           const others = length(labels) - shown;
           labels = {@labels[1..shown], ['content -> $format:literal_inline(tostr(others, " others"))]};
         endif
-        lines = {@lines, {
-          @$document_resolver:_capitalize($look:_join(labels))[1],
-          @$format:literal_inline(ending)}};
+        "A player's chosen name is shown as written, even at the start of the sentence.";
+        const joined = $look:_join(labels);
+        const opening = is_player(actors[1]['object]) ? joined | $document_resolver:_capitalize(joined)[1];
+        lines = {@lines, {@opening, @$format:literal_inline(ending)}};
       endif
     endfor
     let event = toflyweight($event, flyslots(view['event]), {@blocks, @lines_block(lines)});

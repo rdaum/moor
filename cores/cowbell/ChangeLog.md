@@ -241,6 +241,8 @@ Cowbell entries.
 
 - Command help no longer offers `get` and `drop` for objects that cannot be carried.
 
+- Room listings keep a player's chosen name as written, such as `lp`, at the start of a sentence.
+
 - Arrival messages name the right side for vertical and in/out exits. Climbing stairs now reads
   "arrives from below", not "from above", and "from upstairs" replaces "from the upstairs".
 

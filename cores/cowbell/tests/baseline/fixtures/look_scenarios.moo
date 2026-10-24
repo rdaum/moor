@@ -202,6 +202,24 @@ object LOOK_SCENARIOS
     endtry
     return true;
   endmethod
+  method test_player_names_keep_their_case owner: ARCH_WIZARD
+    "A listing that starts with a player's name keeps the name as the player wrote it.";
+    const room = create($room);
+    const sleeper = create($player);
+    try
+      sleeper.name = "lp";
+      set_player_flag(sleeper, 1);
+      move(sleeper, room);
+      const body = $document:render($look:narrative(room:look_self():capture(#90102)):resolve(#90102), 'text_plain)['body];
+      $test_utils:assert_true(index(body, "lp is deeply asleep.", 1), "lower-case player name is kept: " + body);
+    finally
+      set_player_flag(sleeper, 0);
+      recycle(sleeper);
+      recycle(room);
+    endtry
+    return true;
+  endmethod
+
   method test_fixed_objects_do_not_offer_get_and_drop owner: ARCH_WIZARD
     "Command help omits $thing's get and drop for objects that cannot be carried.";
     const fixture = create($thing);
